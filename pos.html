@@ -82,15 +82,14 @@
   .branch-pick select:hover{border-color:var(--orange);}
 
   .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
-  .card{background:var(--card);border-radius:22px;padding:24px 26px;box-shadow:0 1px 3px rgba(0,0,0,.03);transition:all .28s cubic-bezier(.34,1.2,.64,1);}
-  .card:hover{transform:translateY(-4px);box-shadow:0 14px 34px rgba(0,0,0,.08);}
+  .card{background:var(--card);border-radius:22px;padding:24px 26px;box-shadow:0 1px 3px rgba(0,0,0,.03);transition:transform .2s ease;}
+  .card:hover{transform:translateY(-3px);}
   .card .lbl{font-size:13px;color:var(--muted);font-weight:600;display:flex;align-items:center;justify-content:space-between;}
   .card .dot{width:9px;height:9px;border-radius:50%;}
   .card .val{font-size:36px;font-weight:800;letter-spacing:-0.04em;margin-top:14px;line-height:1;}
   .card .foot{font-size:13px;color:var(--muted);margin-top:9px;font-weight:500;}
 
-  .panel{background:var(--card);border-radius:22px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,.03);margin-bottom:16px;transition:box-shadow .28s cubic-bezier(.25,.46,.45,.94),transform .28s cubic-bezier(.25,.46,.45,.94);}
-  .panel:hover{box-shadow:0 12px 32px rgba(0,0,0,.08);transform:translateY(-2px);}
+  .panel{background:var(--card);border-radius:22px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,.03);margin-bottom:16px;}
   .panel h2{font-size:22px;font-weight:800;letter-spacing:-0.025em;margin-bottom:3px;}
   .panel .psub{font-size:14px;color:var(--muted);font-weight:500;margin-bottom:20px;}
   /* Panel de acento (flujo de caja) — naranja, ya no negro */
@@ -221,17 +220,8 @@
   @keyframes popIn{from{opacity:0;transform:scale(.92) translateY(8px);}to{opacity:1;transform:scale(1) translateY(0);}}
   .fade{animation:fadeUp .4s cubic-bezier(.25,.46,.45,.94) both;}
 
-  /* ── Entradas escalonadas: todo se siente vivo ── */
-  .panel{animation:fadeUp .45s cubic-bezier(.25,.46,.45,.94) both;}
-  .cards .card{animation:fadeUp .4s cubic-bezier(.25,.46,.45,.94) both;}
-  .cards .card:nth-child(2){animation-delay:.06s}.cards .card:nth-child(3){animation-delay:.12s}.cards .card:nth-child(4){animation-delay:.18s}
-  tbody tr{animation:fadeUp .35s both;}
-  tbody tr:nth-child(1){animation-delay:.02s}tbody tr:nth-child(2){animation-delay:.05s}tbody tr:nth-child(3){animation-delay:.08s}tbody tr:nth-child(4){animation-delay:.11s}tbody tr:nth-child(5){animation-delay:.14s}tbody tr:nth-child(6){animation-delay:.17s}tbody tr:nth-child(7){animation-delay:.2s}tbody tr:nth-child(8){animation-delay:.23s}tbody tr:nth-child(9){animation-delay:.26s}tbody tr:nth-child(10){animation-delay:.29s}
-  .prod-grid .prod-card{animation:popIn .32s cubic-bezier(.34,1.3,.64,1) both;}
-  .prod-grid .prod-card:nth-child(2){animation-delay:.04s}.prod-grid .prod-card:nth-child(3){animation-delay:.08s}.prod-grid .prod-card:nth-child(4){animation-delay:.12s}.prod-grid .prod-card:nth-child(5){animation-delay:.16s}.prod-grid .prod-card:nth-child(6){animation-delay:.2s}.prod-grid .prod-card:nth-child(7){animation-delay:.24s}.prod-grid .prod-card:nth-child(8){animation-delay:.28s}
-  .cust-row{animation:fadeUp .35s both;}
-  .cust-row:nth-child(2){animation-delay:.05s}.cust-row:nth-child(3){animation-delay:.1s}.cust-row:nth-child(4){animation-delay:.15s}.cust-row:nth-child(5){animation-delay:.2s}
-  .row-line{animation:fadeUp .35s both;}
+  /* ── Entradas suaves (ligeras, sin trabar) ── */
+  .main .panel{animation:fadeUp .3s ease both;}
 
   /* avatar genérico (foto o inicial) */
   .av2{width:38px;height:38px;border-radius:50%;background:#E5E7EB;color:#6B7280;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;overflow:hidden;}
@@ -1792,10 +1782,17 @@ const Pos={
       <div><h1>Accesos</h1><div class="sub">Control de entrada · QR, huella, facial o manual</div></div>
       ${this.branchSelector()}
     </div>
-    <div class="scan-box">
-      <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Escanear acceso</div>
-      <input class="inp" id="scan-inp" placeholder="Escanea el QR del cliente (o escribe su nombre o número de cuenta) y presiona Enter..." onkeydown="if(event.key==='Enter')Pos.accessScan(this.value)">
-      <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">El lector USB escribe el código y da Enter solo. También sirve teclear el nombre o el número de cuenta. <b>Para vincular una cuenta nueva de la app ve a Clientes → ficha → Vincular app.</b></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <div class="scan-box" style="margin-bottom:0">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Entrada / Salida</div>
+        <input class="inp" id="scan-inp" placeholder="Escanea el QR o teclea nombre / Nº de cuenta + Enter" onkeydown="if(event.key==='Enter')Pos.accessScan(this.value)">
+        <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">Primer escaneo = entra · segundo escaneo = sale. Valida la membresía sola.</div>
+      </div>
+      <div class="scan-box" style="margin-bottom:0;border-color:var(--orange);background:var(--orange-soft);">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--orange-dark);margin-bottom:10px">Vincular cuenta de la app</div>
+        <input class="inp" id="link-scan-inp" placeholder="Escanea el QR o teclea el Nº de cuenta del cliente + Enter" onkeydown="if(event.key==='Enter')Pos.linkAccountScan(this.value)">
+        <div style="font-size:12px;color:var(--orange-dark);font-weight:500;margin-top:10px">Conecta el celular del cliente con su ficha del gym para que su membresía le aparezca en la app.</div>
+      </div>
     </div>
     <div id="access-result"></div>
     <div id="scan-picker"></div>
@@ -1906,6 +1903,48 @@ const Pos={
     }
     if(!cust){this.showAccessResult(false,'Cliente no encontrado','Verifica el QR o regístralo en Clientes',null);return;}
     this.doCheckin(cust.id,isUuid?'qr':'manual');
+  },
+  linkAccountScan(code){
+    code=(code||'').trim();
+    if(code.toLowerCase().startsWith(QR_PREFIX))code=code.slice(QR_PREFIX.length);
+    const inp=$('link-scan-inp');if(inp)inp.value='';
+    if(!code)return;
+    const ql=code.toLowerCase();
+    const p=this.appProfiles.find(x=>x.role==='member'&&(x.id===ql||x.id.startsWith(ql)||(x.email||'').toLowerCase()===ql));
+    if(!p){toast('No se encontró esa cuenta de la app. Verifica el Nº de cuenta o el QR.',true);return;}
+    const already=this.customers.find(c=>c.profile_id===p.id);
+    if(already){toast('Esa cuenta ya está vinculada a: '+already.full_name,true);this.openCustomer(already.id);return;}
+    // ¿ya existe una ficha (sin app) para ese cliente? deja buscarla o crear una nueva
+    openModal(`
+      <h3>Vincular cuenta de la app</h3>
+      <p class="msub">Cuenta encontrada: <b>${esc(p.full_name||p.email)}</b> · ${esc(p.email||'')}</p>
+      <div class="field"><label>¿Ya tiene ficha en el gym? Búscala para unirla</label>
+        <input class="inp" id="las-q" placeholder="Nombre o teléfono del cliente..." oninput="Pos.lasSearch('${p.id}',this.value)">
+        <div id="las-res" style="margin-top:8px;font-size:13px;color:var(--muted);font-weight:500">Si es cliente nuevo, sáltate esto y crea su ficha abajo.</div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="Pos.lasCreate('${p.id}')">Crear ficha nueva ya vinculada</button>
+    `);
+    setTimeout(()=>{const q=$('las-q');if(q)q.focus();},50);
+  },
+  lasSearch(profileId,q){
+    q=(q||'').trim().toLowerCase();const box=$('las-res');
+    if(q.length<2){box.innerHTML='Si es cliente nuevo, sáltate esto y crea su ficha abajo.';return;}
+    const res=this.customers.filter(c=>!c.profile_id&&((c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q))).slice(0,5);
+    box.innerHTML=res.length?res.map(c=>`
+      <button class="cust-row" onclick="Pos.linkApp('${c.id}','${profileId}');closeModal()">
+        ${this.custAvatar(c,34)}
+        <div class="cd"><b>${esc(c.full_name)}</b><span>${esc(c.phone||'sin teléfono')}</span></div>
+        <span class="tag tag-orange">Unir</span>
+      </button>`).join(''):'Sin fichas sin vincular con ese nombre. Crea una nueva abajo.';
+  },
+  async lasCreate(profileId){
+    const p=this.appProfiles.find(x=>x.id===profileId);if(!p)return;
+    const payload={id:uuid(),full_name:p.full_name||p.email,email:p.email||null,phone:null,profile_id:profileId,
+      branch_id:this.branch?this.branch.id:null,suspended:false,created_at:new Date().toISOString()};
+    const r=await Q.insert('customers',payload);
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    this.customers.unshift(payload);cset('customers',this.customers);
+    closeModal();toast('Cuenta vinculada ✓ — ya puedes venderle membresía');this.openCustomer(payload.id);
   },
   async autoImportProfile(p){
     // tiene app pero no ficha en el POS → se crea sola
@@ -2513,8 +2552,15 @@ const Pos={
         <div class="field"><label>Sucursal</label><select class="inp" id="se-branch">${this.branches.map(b=>`<option value="${b.id}" ${sbr&&sbr.branch_id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
       </div>
       <div class="field"><label>Foto (se ve en el POS y en la app si es coach)</label><input class="inp" type="file" id="se-photo" accept="image/*" style="padding-top:11px"></div>
+      <div id="se-coach-price" class="${p.role==='coach'?'':'hidden'}">
+        <div class="frow">
+          <div class="field"><label>Precio del coach (se ve en la app)</label><input class="inp" type="number" id="se-price" value="${(this.coachProfiles.find(x=>x.profile_id===id)||{}).monthly_price||''}" placeholder="500"></div>
+          <div class="field"><label>Por</label><select class="inp" id="se-period"><option value="mes">Mes</option><option value="semana">Semana</option></select></div>
+        </div>
+      </div>
       <button class="btn btn-primary btn-block" id="se-save" onclick="Pos.saveStaffEdit('${id}')">Guardar cambios</button>
     `);
+    const roleSel=$('se-role');if(roleSel)roleSel.onchange=()=>{$('se-coach-price').classList.toggle('hidden',roleSel.value!=='coach');};
   },
   async saveStaffEdit(id){
     if(!navigator.onLine){toast('Necesitas internet para editar personal.',true);return;}
@@ -2535,15 +2581,22 @@ const Pos={
       await sb.from('staff_branches').delete().eq('staff_id',id);
       await sb.from('staff_branches').insert({staff_id:id,branch_id:$('se-branch').value});
     }catch(e){}
-    // si es coach, refleja el nombre/foto en el directorio de la app
+    // si es coach, refleja el nombre/foto/precio en el directorio de la app
     if(patch.role==='coach'){
       try{
         const {data:cp}=await sb.from('coach_profiles').select('certifications').eq('profile_id',id).maybeSingle();
-        const certs=((cp&&cp.certifications)||[]).filter(x=>typeof x!=='string'||(x.indexOf('__name:')!==0&&x.indexOf('__avatar:')!==0));
+        const certs=((cp&&cp.certifications)||[]).filter(x=>typeof x!=='string'||(x.indexOf('__name:')!==0&&x.indexOf('__avatar:')!==0&&x.indexOf('__period:')!==0));
         certs.push('__name:'+patch.full_name);
         if(patch.avatar_url)certs.push('__avatar:'+patch.avatar_url);
-        if(cp)await sb.from('coach_profiles').update({certifications:certs}).eq('profile_id',id);
-        else await sb.from('coach_profiles').insert({profile_id:id,certifications:certs});
+        const per=$('se-period')?$('se-period').value:'mes';
+        certs.push('__period:'+per);
+        const price=$('se-price')?Number($('se-price').value)||null:null;
+        const cpPatch={certifications:certs};if(price!=null)cpPatch.monthly_price=price;
+        if(cp)await sb.from('coach_profiles').update(cpPatch).eq('profile_id',id);
+        else await sb.from('coach_profiles').insert(Object.assign({profile_id:id},cpPatch));
+        const local=this.coachProfiles.find(x=>x.profile_id===id);
+        if(local){if(price!=null)local.monthly_price=price;}else if(price!=null)this.coachProfiles.push({profile_id:id,monthly_price:price});
+        cset('coachProfiles',this.coachProfiles);
       }catch(e){}
     }
     const p=this.appProfiles.find(x=>x.id===id);if(p)Object.assign(p,patch);

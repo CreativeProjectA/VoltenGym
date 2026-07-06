@@ -1736,11 +1736,11 @@
 
             <!-- ══ ANUNCIO DEL GYM (publicado desde el POS) ══ -->
             <div class="vg-s4" style="{{ gymAnnStyle }}">
-              <div style="background:#F5F5F5;border-radius:20px;padding:20px 22px;">
+              <div style="background:linear-gradient(135deg,#FFF4EC 0%,#FFE9D6 100%);border:1px solid #FFE0C2;border-radius:20px;padding:20px 22px;">
                 <div style="{{ gymAnnImgStyle }}"></div>
-                <p style="font-size:9px;font-weight:600;color:#AAAAAA;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:8px;">Volten Gym anuncia</p>
-                <p style="font-size:16px;font-weight:800;color:#0A0A0A;line-height:1.35;letter-spacing:-0.02em;">{{ gymAnnTitle }}</p>
-                <p style="font-size:13px;font-weight:500;color:#666666;line-height:1.5;margin-top:6px;">{{ gymAnnBody }}</p>
+                <p style="font-size:9px;font-weight:700;color:#F59E5B;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:8px;">Volten Gym anuncia</p>
+                <p style="font-size:16px;font-weight:800;color:#B45309;line-height:1.35;letter-spacing:-0.02em;">{{ gymAnnTitle }}</p>
+                <p style="font-size:13px;font-weight:500;color:#B4763B;line-height:1.5;margin-top:6px;">{{ gymAnnBody }}</p>
               </div>
             </div>
 
@@ -2990,7 +2990,12 @@ class Component extends DCLogic {
         real: true,
         name: nameTag ? nameTag.slice(7) : 'Entrenador',
         avatar: avatarTag && avatarTag.length > 9 ? avatarTag.slice(9) : null,
-        price: cp.monthly_price ? ('$' + cp.monthly_price + '/mes') : 'Precio a convenir',
+        price: (() => {
+          if (!cp.monthly_price) return 'Precio a convenir';
+          const pt = certs.find(c => typeof c === 'string' && c.indexOf('__period:') === 0);
+          const per = pt ? pt.slice(9) : 'mes';
+          return '$' + cp.monthly_price + '/' + per;
+        })(),
         bio: cp.bio || 'Entrenador certificado',
         hours: cp.available_hours || '',
       };
@@ -3568,6 +3573,7 @@ class Component extends DCLogic {
     const c = (this.state.coaches || []).find(x => x.id === cid);
     if (c) this.sendPosRequest('coach', c.id, c.name, parseFloat(String(c.price || '').replace(/[^0-9.]/g, '')) || null);
     this.setState({ assignedCoach: c ? { id: c.id, name: c.name, bio: c.bio || 'Tu entrenador asignado' } : null, coachPickerOpen: false });
+    if (c) alert('Solicitud enviada. Tu entrenador ' + c.name + ' queda pendiente de pago — pasa a recepción a pagarlo (' + (c.price || 'precio en recepcion') + ') y queda activo.');
   }
 
   async coachAssignProgram() {
@@ -4188,7 +4194,7 @@ class Component extends DCLogic {
       this.setState({ authLoading: false, authError: error.message });
       return;
     }
-    if (data.session) { this._appliedSessionUserId = data.session.user.id; this.fetchCoaches(); }
+    if (data.session) { this._appliedSessionUserId = data.session.user.id; this.fetchCoaches(); this.fetchBranches(); }
     // A brand-new account continues into the onboarding questionnaire
     // (goal / level / training days) instead of jumping to the home screen.
     this.setState(s => ({
@@ -4740,8 +4746,20 @@ class Component extends DCLogic {
   }
 
   async requestPlan(p) {
-    await this.sendPosRequest('plan', p.id, p.name, p.price);
-    this.setState({ planReqSent: 'Solicitud enviada. Pasa a recepción a pagarla y tu membresía queda activa al momento.' });
+    if (this._reqBusy) return;
+    this._reqBusy = true;
+    try {
+      await waitForSupabase();
+      const { data: dup } = await getSupabase().from('pos_requests')
+        .select('id').eq('member_id', this.state.session.user.id).eq('type', 'plan').eq('status', 'pendiente').limit(1);
+      if (dup && dup.length) {
+        this.setState({ planReqSent: 'Ya tienes una solicitud pendiente. Pásala a pagar en recepción antes de pedir otra.' });
+        return;
+      }
+      await this.sendPosRequest('plan', p.id, p.name, p.price);
+      this.setState({ planReqSent: 'Solicitud enviada: ' + p.name + '. Pásala a pagar en recepción y tu membresía queda activa.', planReqOpen: false });
+      alert('Solicitud de ' + p.name + ' enviada. Pasa a recepción a pagarla.');
+    } finally { this._reqBusy = false; }
   }
 
   toggleFav(id) {
