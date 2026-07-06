@@ -1,0 +1,2623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Volten Gym — Punto de Venta</title>
+<link rel="manifest" href="manifest-pos.json">
+<link rel="icon" type="image/png" href="voltengym.png">
+<link rel="apple-touch-icon" href="voltengym.png">
+<meta name="theme-color" content="#F97316">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --orange:#F97316; --orange-soft:#FFF4EC; --orange-dark:#EA580C;
+    --ink:#111111; --muted:#6B7280; --line:#ECECEC;
+    --bg:#FAFAFA; --card:#FFFFFF; --dark:#161616; --gray:#F5F5F5;
+    --green:#22C55E; --red:#EF4444; --amber:#F59E0B;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',-apple-system,'SF Pro Display','Segoe UI',sans-serif;}
+  body{background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+  button{cursor:pointer;font-family:inherit;border:none;background:none;transition:all .22s cubic-bezier(.34,1.2,.64,1);}
+  input,select,textarea{font-family:inherit;outline:none;}
+  .hidden{display:none!important;}
+  ::-webkit-scrollbar{width:9px;height:9px;} ::-webkit-scrollbar-thumb{background:#E2E2E2;border-radius:5px;} ::-webkit-scrollbar-thumb:hover{background:#D0D0D0;}
+
+  .btn{height:48px;padding:0 24px;border-radius:100px;font-size:15px;font-weight:600;letter-spacing:-0.01em;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;}
+  .btn:active{transform:scale(.95);}
+  .btn-primary{background:var(--orange);color:#FFF;} .btn-primary:hover{background:var(--orange-dark);transform:translateY(-2px);box-shadow:0 10px 24px rgba(249,115,22,.3);}
+  .btn-dark{background:var(--ink);color:#FFF;} .btn-dark:hover{background:#000;transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.18);}
+  .btn-ghost{background:#FFF;color:var(--ink);border:1.5px solid var(--line);} .btn-ghost:hover{border-color:var(--orange);color:var(--orange-dark);background:var(--orange-soft);transform:translateY(-1px);}
+  .btn-danger{background:#FEE2E2;color:#DC2626;} .btn-danger:hover{background:#FECACA;transform:translateY(-1px);}
+  .btn-sm{height:38px;padding:0 16px;font-size:13px;border-radius:100px;}
+  .btn-xs{height:30px;padding:0 12px;font-size:12px;border-radius:100px;font-weight:600;}
+  .btn-block{width:100%;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important;}
+
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.06em;}
+  .inp{width:100%;height:50px;padding:0 16px;border-radius:14px;border:1.5px solid var(--line);font-size:15px;font-weight:500;background:#FFF;transition:border .2s,box-shadow .2s;}
+  .inp:focus{border-color:var(--orange);box-shadow:0 0 0 4px rgba(249,115,22,.08);}
+  select.inp{cursor:pointer;}
+  textarea.inp{height:auto;padding:13px 16px;line-height:1.6;resize:vertical;}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+
+  /* LOGIN */
+  #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:100;}
+  .login-card{background:var(--card);border-radius:28px;padding:44px;width:430px;box-shadow:0 24px 70px rgba(0,0,0,.07);}
+  .login-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:28px;}
+  .login-logo svg{width:32px;height:32px;} .login-logo span{font-size:17px;font-weight:800;letter-spacing:0.08em;}
+  .login-card h1{font-size:30px;font-weight:800;letter-spacing:-0.03em;margin-bottom:6px;text-align:center;}
+  .login-card .lead{color:var(--muted);font-size:15px;font-weight:500;margin-bottom:26px;text-align:center;}
+  .login-err{color:var(--red);font-size:13px;font-weight:600;margin-bottom:12px;text-align:center;min-height:18px;}
+
+  /* SHELL */
+  #shell{display:none;grid-template-columns:250px 1fr;height:100vh;}
+  .sidebar{background:var(--card);border-right:1px solid var(--line);padding:26px 16px;display:flex;flex-direction:column;overflow-y:auto;}
+  .side-logo{display:flex;align-items:center;gap:11px;padding:0 10px 24px;}
+  .side-logo svg{width:30px;height:30px;} .side-logo b{font-size:16px;font-weight:800;letter-spacing:0.07em;}
+  .nav-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font-size:14px;font-weight:600;color:var(--muted);margin-bottom:3px;width:100%;text-align:left;}
+  .nav-item:hover{background:var(--orange-soft);color:var(--orange-dark);transform:translateX(2px);}
+  .nav-item:active{transform:scale(.97);}
+  .nav-item.active{background:var(--orange);color:#FFF;box-shadow:0 6px 16px rgba(249,115,22,.25);}
+  .nav-item svg{width:19px;height:19px;flex-shrink:0;stroke-width:2;}
+  .nav-sep{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:#C8C8C8;padding:18px 14px 8px;}
+  .side-foot{margin-top:auto;padding-top:16px;}
+  .shift-chip{background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:13px 15px;margin-bottom:10px;}
+  .shift-chip .t{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);}
+  .shift-chip .v{font-size:19px;font-weight:800;letter-spacing:-0.02em;margin-top:3px;}
+  .side-user{padding:12px 14px;border-radius:16px;background:var(--bg);display:flex;align-items:center;gap:11px;}
+  .side-user .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#F97316,#EA580C);display:flex;align-items:center;justify-content:center;color:#FFF;font-weight:800;font-size:15px;flex-shrink:0;overflow:hidden;}
+  .side-user .av img{width:100%;height:100%;object-fit:cover;}
+  .side-user .nm{font-size:13px;font-weight:700;} .side-user .rl{font-size:11px;color:var(--muted);text-transform:capitalize;margin-top:1px;}
+
+  .main{overflow-y:auto;padding:36px 44px;}
+  .topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:30px;gap:20px;flex-wrap:wrap;}
+  .topbar h1{font-size:38px;font-weight:800;letter-spacing:-0.035em;line-height:1.05;}
+  .topbar .sub{color:var(--muted);font-size:15px;font-weight:500;margin-top:6px;}
+  .branch-pick select{height:44px;padding:0 16px;border-radius:12px;border:1.5px solid var(--line);font-size:13px;font-weight:600;background:#FFF;cursor:pointer;transition:border .2s;}
+  .branch-pick select:hover{border-color:var(--orange);}
+
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+  .card{background:var(--card);border-radius:22px;padding:24px 26px;box-shadow:0 1px 3px rgba(0,0,0,.03);transition:all .28s cubic-bezier(.34,1.2,.64,1);}
+  .card:hover{transform:translateY(-4px);box-shadow:0 14px 34px rgba(0,0,0,.08);}
+  .card .lbl{font-size:13px;color:var(--muted);font-weight:600;display:flex;align-items:center;justify-content:space-between;}
+  .card .dot{width:9px;height:9px;border-radius:50%;}
+  .card .val{font-size:36px;font-weight:800;letter-spacing:-0.04em;margin-top:14px;line-height:1;}
+  .card .foot{font-size:13px;color:var(--muted);margin-top:9px;font-weight:500;}
+
+  .panel{background:var(--card);border-radius:22px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,.03);margin-bottom:16px;transition:box-shadow .28s cubic-bezier(.25,.46,.45,.94),transform .28s cubic-bezier(.25,.46,.45,.94);}
+  .panel:hover{box-shadow:0 12px 32px rgba(0,0,0,.08);transform:translateY(-2px);}
+  .panel h2{font-size:22px;font-weight:800;letter-spacing:-0.025em;margin-bottom:3px;}
+  .panel .psub{font-size:14px;color:var(--muted);font-weight:500;margin-bottom:20px;}
+  /* Panel de acento (flujo de caja) — naranja, ya no negro */
+  .dark-panel{background:linear-gradient(135deg,#F97316 0%,#EA580C 100%);color:#FFF;box-shadow:0 14px 34px rgba(249,115,22,.28);}
+  .dark-panel h2{color:#FFF;}
+  .row-line{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);transition:background .2s;}
+  .row-line:last-child{border-bottom:none;}
+  .row-line .k{color:var(--muted);font-size:14px;font-weight:500;} .row-line .v{font-weight:700;font-size:15px;}
+  .dark-panel .row-line{border-color:rgba(255,255,255,.18);} .dark-panel .k{color:rgba(255,255,255,.8);} .dark-panel .v{color:#FFF;}
+
+  /* Tablas — encabezado gris suave (ya no negro) */
+  table{width:100%;border-collapse:collapse;}
+  thead tr{background:var(--gray);}
+  th{text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);padding:13px 14px;}
+  th:first-child{border-radius:12px 0 0 12px;} th:last-child{border-radius:0 12px 12px 0;}
+  td{padding:14px;font-size:14px;font-weight:500;border-bottom:1px solid #F4F4F4;}
+  tr:last-child td{border-bottom:none;}
+  tbody tr{transition:background .18s;}
+  tbody tr:hover td{background:#FAFAFA;}
+  .tag{display:inline-block;padding:5px 12px;border-radius:100px;font-size:12px;font-weight:600;white-space:nowrap;}
+  .tag-green{background:#DCFCE7;color:#16A34A;} .tag-orange{background:var(--orange-soft);color:var(--orange);}
+  .tag-red{background:#FEE2E2;color:#DC2626;} .tag-gray{background:#F3F4F6;color:#6B7280;}
+  .tag-dark{background:var(--ink);color:#FFF;}
+
+  .stub{text-align:center;padding:60px 20px;color:var(--muted);}
+  .stub .st{font-size:17px;font-weight:700;color:#374151;margin-bottom:8px;}
+  .stub p{max-width:440px;margin:0 auto;line-height:1.65;font-weight:500;}
+
+  /* GATE turno */
+  #gate{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--bg);z-index:90;}
+  .gate-card{background:#F4F4F5;border-radius:30px;padding:44px 42px;width:460px;}
+  .gate-card h1{font-size:30px;font-weight:800;letter-spacing:-0.03em;margin-bottom:6px;}
+  .gate-card .who{color:var(--muted);font-size:16px;font-weight:500;margin-bottom:30px;}
+  .gate-card .who b{color:var(--ink);font-weight:700;}
+  .lab-up{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:#9CA3AF;margin-bottom:10px;display:block;}
+  .money-inp{display:flex;align-items:center;background:#FFF;border-radius:16px;height:58px;padding:0 20px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.03);transition:box-shadow .2s;}
+  .money-inp:focus-within{box-shadow:0 0 0 4px rgba(249,115,22,.12);}
+  .money-inp .pre{color:#9CA3AF;font-weight:700;font-size:18px;margin-right:10px;}
+  .money-inp input{flex:1;border:none;font-size:22px;font-weight:700;color:var(--ink);background:transparent;min-width:0;}
+  .money-inp .suf{color:#9CA3AF;font-weight:700;font-size:13px;letter-spacing:0.05em;}
+  .gate-card .btn-primary{height:56px;font-size:16px;margin-top:6px;}
+  .gate-date{text-align:center;margin-top:18px;font-size:13px;color:var(--muted);font-weight:500;}
+
+  /* STEPPER (como Lavapower) */
+  .stepper{display:flex;gap:6px;background:#FFF;border:1px solid var(--line);border-radius:100px;padding:6px;align-items:center;}
+  .step-pill{display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:100px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;transition:all .3s cubic-bezier(.34,1.2,.64,1);}
+  .step-pill .n{width:20px;height:20px;border-radius:50%;background:#EFEFEF;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;transition:all .3s;}
+  .step-pill.on{background:var(--orange);color:#FFF;box-shadow:0 4px 12px rgba(249,115,22,.3);}
+  .step-pill.on .n{background:rgba(255,255,255,.25);color:#FFF;}
+  .step-pill.done .n{background:var(--orange-soft);color:var(--orange-dark);}
+
+  /* Venta */
+  .sale-grid{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start;}
+  .pick-tabs{display:flex;gap:8px;margin-bottom:18px;}
+  .pick-tab{padding:10px 20px;border-radius:100px;font-size:13px;font-weight:600;background:var(--gray);color:var(--muted);}
+  .pick-tab:hover{background:#EDEDED;transform:translateY(-1px);}
+  .pick-tab.on{background:var(--orange);color:#FFF;box-shadow:0 4px 12px rgba(249,115,22,.25);}
+  .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+  .prod-card{background:var(--gray);border-radius:16px;padding:16px;text-align:left;border:2px solid transparent;transition:all .22s cubic-bezier(.34,1.2,.64,1);}
+  .prod-card:hover{border-color:var(--orange);background:#FFF;transform:translateY(-3px);box-shadow:0 10px 24px rgba(0,0,0,.07);}
+  .prod-card:active{transform:scale(.96);}
+  .prod-card .pn{font-size:13.5px;font-weight:600;line-height:1.3;margin-bottom:6px;}
+  .prod-card .pp{font-size:16px;font-weight:800;color:var(--orange);}
+  .prod-card .ps{font-size:11px;color:var(--muted);font-weight:600;margin-top:4px;}
+  .cart-item{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);animation:fadeUp .3s both;}
+  .cart-item .cn{flex:1;font-size:13.5px;font-weight:600;line-height:1.3;}
+  .cart-item .cq{display:flex;align-items:center;gap:8px;}
+  .cart-item .cq button{width:26px;height:26px;border-radius:50%;background:var(--gray);font-size:15px;font-weight:800;color:var(--ink);}
+  .cart-item .cq button:hover{background:var(--orange);color:#FFF;transform:scale(1.12);}
+  .cart-item .cp{font-size:14px;font-weight:800;min-width:70px;text-align:right;}
+  .method-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
+  .method-card{background:var(--gray);border-radius:16px;padding:16px 12px;text-align:center;border:2px solid transparent;font-size:13.5px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);transition:all .25s cubic-bezier(.34,1.4,.64,1);}
+  .method-card svg{width:22px;height:22px;stroke-width:1.8;}
+  .method-card:hover{transform:translateY(-3px);border-color:#FFD9BE;background:#FFF;box-shadow:0 8px 20px rgba(0,0,0,.06);}
+  .method-card:active{transform:scale(.95);}
+  .method-card.on{border-color:var(--orange);background:var(--orange-soft);color:var(--orange-dark);transform:scale(1.04);box-shadow:0 8px 22px rgba(249,115,22,.18);}
+
+  /* Búsqueda cliente */
+  .cust-row{display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:14px;width:100%;text-align:left;border:2px solid transparent;background:var(--gray);margin-bottom:8px;transition:all .22s cubic-bezier(.34,1.2,.64,1);}
+  .cust-row:hover{border-color:var(--orange);background:#FFF;transform:translateX(4px);box-shadow:0 6px 18px rgba(0,0,0,.05);}
+  .cust-row:active{transform:scale(.98);}
+  .cust-row .av2{width:38px;height:38px;border-radius:50%;background:#E5E7EB;color:#6B7280;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;overflow:hidden;}
+  .cust-row .cd{flex:1;} .cust-row .cd b{font-size:14px;display:block;} .cust-row .cd span{font-size:12px;color:var(--muted);font-weight:500;}
+
+  /* MODAL */
+  #modal-root{position:fixed;inset:0;background:rgba(17,17,17,.4);z-index:200;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 20px;backdrop-filter:blur(3px);}
+  .modal{background:#FFF;border-radius:24px;padding:32px;width:560px;max-width:100%;animation:popIn .35s cubic-bezier(.34,1.3,.64,1) both;}
+  .modal.wide{width:760px;}
+  .modal h3{font-size:22px;font-weight:800;letter-spacing:-0.02em;margin-bottom:4px;}
+  .modal .msub{font-size:14px;color:var(--muted);font-weight:500;margin-bottom:22px;}
+  .modal-x{float:right;width:34px;height:34px;border-radius:50%;background:var(--gray);font-size:16px;font-weight:700;color:var(--muted);}
+  .modal-x:hover{background:var(--orange-soft);color:var(--orange-dark);transform:rotate(90deg);}
+
+  /* TOAST */
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:#FFF;padding:14px 26px;border-radius:100px;font-size:14px;font-weight:600;z-index:300;opacity:0;transition:all .35s cubic-bezier(.34,1.3,.64,1);box-shadow:0 12px 30px rgba(0,0,0,.25);max-width:90vw;}
+  #toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+  #toast.err{background:#DC2626;}
+
+  /* Acceso — panel gris suave (ya no negro) */
+  .scan-box{background:var(--gray);border:1px solid var(--line);border-radius:22px;padding:28px;color:var(--ink);margin-bottom:16px;}
+  .scan-box .inp{background:#FFF;border-color:transparent;color:var(--ink);height:58px;font-size:17px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  .scan-box .inp::placeholder{color:#B9BDC5;}
+  .scan-box .inp:focus{border-color:var(--orange);}
+  #access-result{border-radius:22px;padding:34px;text-align:center;margin-bottom:16px;display:none;animation:popIn .4s cubic-bezier(.34,1.4,.64,1) both;}
+  #access-result.ok{background:#DCFCE7;} #access-result.deny{background:#FEE2E2;}
+  #access-result .big{font-size:30px;font-weight:800;letter-spacing:-0.03em;}
+  #access-result.ok .big{color:#15803D;} #access-result.deny .big{color:#DC2626;}
+  #access-result .who2{font-size:17px;font-weight:700;margin-top:8px;color:var(--ink);}
+  #access-result .why{font-size:14px;font-weight:600;margin-top:5px;color:var(--muted);}
+
+  .offline-badge{position:fixed;bottom:18px;left:18px;background:#FEF3C7;color:#92400E;font-size:12px;font-weight:700;padding:9px 15px;border-radius:100px;z-index:150;display:none;box-shadow:0 4px 14px rgba(0,0,0,.08);}
+
+  .range-pills{display:flex;gap:6px;background:#FFF;border:1px solid var(--line);border-radius:100px;padding:5px;}
+  .range-pill{padding:8px 18px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:.05em;color:var(--muted);}
+  .range-pill:hover{background:var(--orange-soft);color:var(--orange-dark);}
+  .range-pill.on{background:var(--orange);color:#FFF;box-shadow:0 4px 10px rgba(249,115,22,.25);}
+
+  .toggle{position:relative;width:46px;height:26px;border-radius:100px;background:#E5E7EB;transition:background .2s;flex-shrink:0;}
+  .toggle.on{background:var(--orange);}
+  .toggle::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#FFF;transition:left .22s cubic-bezier(.34,1.4,.64,1);box-shadow:0 1px 3px rgba(0,0,0,.2);}
+  .toggle.on::after{left:23px;}
+
+  .search-wrap{position:relative;flex:1;max-width:420px;}
+  .search-wrap .inp{padding-left:42px;}
+  .search-wrap svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:17px;height:17px;stroke:#9CA3AF;}
+
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes popIn{from{opacity:0;transform:scale(.92) translateY(8px);}to{opacity:1;transform:scale(1) translateY(0);}}
+  .fade{animation:fadeUp .4s cubic-bezier(.25,.46,.45,.94) both;}
+
+  /* ── Entradas escalonadas: todo se siente vivo ── */
+  .panel{animation:fadeUp .45s cubic-bezier(.25,.46,.45,.94) both;}
+  .cards .card{animation:fadeUp .4s cubic-bezier(.25,.46,.45,.94) both;}
+  .cards .card:nth-child(2){animation-delay:.06s}.cards .card:nth-child(3){animation-delay:.12s}.cards .card:nth-child(4){animation-delay:.18s}
+  tbody tr{animation:fadeUp .35s both;}
+  tbody tr:nth-child(1){animation-delay:.02s}tbody tr:nth-child(2){animation-delay:.05s}tbody tr:nth-child(3){animation-delay:.08s}tbody tr:nth-child(4){animation-delay:.11s}tbody tr:nth-child(5){animation-delay:.14s}tbody tr:nth-child(6){animation-delay:.17s}tbody tr:nth-child(7){animation-delay:.2s}tbody tr:nth-child(8){animation-delay:.23s}tbody tr:nth-child(9){animation-delay:.26s}tbody tr:nth-child(10){animation-delay:.29s}
+  .prod-grid .prod-card{animation:popIn .32s cubic-bezier(.34,1.3,.64,1) both;}
+  .prod-grid .prod-card:nth-child(2){animation-delay:.04s}.prod-grid .prod-card:nth-child(3){animation-delay:.08s}.prod-grid .prod-card:nth-child(4){animation-delay:.12s}.prod-grid .prod-card:nth-child(5){animation-delay:.16s}.prod-grid .prod-card:nth-child(6){animation-delay:.2s}.prod-grid .prod-card:nth-child(7){animation-delay:.24s}.prod-grid .prod-card:nth-child(8){animation-delay:.28s}
+  .cust-row{animation:fadeUp .35s both;}
+  .cust-row:nth-child(2){animation-delay:.05s}.cust-row:nth-child(3){animation-delay:.1s}.cust-row:nth-child(4){animation-delay:.15s}.cust-row:nth-child(5){animation-delay:.2s}
+  .row-line{animation:fadeUp .35s both;}
+
+  /* avatar genérico (foto o inicial) */
+  .av2{width:38px;height:38px;border-radius:50%;background:#E5E7EB;color:#6B7280;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;overflow:hidden;}
+  .av2 img{width:100%;height:100%;object-fit:cover;}
+  @media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr);} .sale-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="login-card fade">
+    <div class="login-logo"><svg viewBox="0 0 28 28" fill="none"><path d="M16 2L7 15h8l-3 11L22 13h-8z" fill="#F97316"></path></svg><span>VOLTEN GYM</span></div>
+    <h1>Punto de venta</h1>
+    <p class="lead">Acceso para personal del gimnasio.</p>
+    <div class="login-err" id="login-err"></div>
+    <div class="field"><label>Usuario</label><input class="inp" id="li-user" placeholder="tu usuario o correo" autocomplete="username"></div>
+    <div class="field"><label>Contraseña</label><input class="inp" type="password" id="li-pass" placeholder="••••••••" autocomplete="current-password"></div>
+    <button class="btn btn-primary btn-block" id="li-btn">Entrar</button>
+    <p style="text-align:center;margin-top:18px;font-size:13px;color:var(--muted);font-weight:500;">¿Eres cliente? <a href="app.html" style="color:var(--orange);font-weight:700;text-decoration:none;">Ir a la app</a></p>
+  </div>
+</div>
+
+<!-- GATE: INICIAR TURNO -->
+<div id="gate">
+  <div style="display:flex;flex-direction:column;align-items:center" class="fade">
+    <div class="login-logo" style="margin-bottom:22px"><svg viewBox="0 0 28 28" fill="none"><path d="M16 2L7 15h8l-3 11L22 13h-8z" fill="#F97316"></path></svg><span>VOLTEN GYM</span></div>
+    <div class="gate-card">
+      <h1>Iniciar turno</h1>
+      <div class="who" id="gate-hello">Bienvenido, <b>—</b></div>
+      <label class="lab-up">Fondo inicial</label>
+      <div class="money-inp"><span class="pre">$</span><input type="number" id="open-cash" value="500"><span class="suf">MXN</span></div>
+      <label class="lab-up">Tipo de cambio USD → MXN</label>
+      <div class="money-inp"><span class="pre">$</span><input type="number" id="open-fx" value="17.5"><span class="suf">MXN</span></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.openShift()">Abrir caja e iniciar turno →</button>
+      <div class="gate-date" id="gate-date"></div>
+      <button class="btn btn-ghost btn-block btn-sm" style="margin-top:14px" onclick="Pos.logout()">Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHELL -->
+<div id="shell">
+  <aside class="sidebar">
+    <div class="side-logo"><svg viewBox="0 0 28 28" fill="none"><path d="M16 2L7 15h8l-3 11L22 13h-8z" fill="#F97316"></path></svg><b>VOLTEN</b></div>
+    <button class="nav-item active" data-nav="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>Inicio</button>
+    <button class="nav-item" data-nav="sale"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>Nueva venta</button>
+    <button class="nav-item" data-nav="access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Accesos</button>
+    <div class="nav-sep">Gestión</div>
+    <button class="nav-item" data-nav="customers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Clientes</button>
+    <button class="nav-item" data-nav="memberships"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Membresías</button>
+    <button class="nav-item" data-nav="inventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>Inventario</button>
+    <button class="nav-item" data-nav="promos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Promociones</button>
+    <div class="nav-sep" id="sep-analisis">Análisis</div>
+    <button class="nav-item" data-nav="reports" id="nav-reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Reportes</button>
+    <button class="nav-item" data-nav="staff" id="nav-staff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87"/></svg>Personal</button>
+    <div class="side-foot">
+      <div class="shift-chip" id="shift-chip">
+        <div class="t">Efectivo en caja</div>
+        <div class="v" id="chip-cash">$0.00</div>
+        <button class="btn btn-ghost btn-sm btn-block" style="margin-top:10px" onclick="Pos.closeShiftModal()">Cerrar turno</button>
+      </div>
+      <div class="side-user">
+        <div class="av" id="su-av">A</div>
+        <div style="flex:1;"><div class="nm" id="su-name">—</div><div class="rl" id="su-role">—</div></div>
+        <button onclick="Pos.logout()" title="Cerrar sesión"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+      </div>
+    </div>
+  </aside>
+  <main class="main" id="view"></main>
+</div>
+
+<div class="offline-badge" id="offline">● Sin conexión — guardando local</div>
+<div id="modal-root"><div class="modal" id="modal-box"></div></div>
+<div id="toast"></div>
+
+<script>
+/* ═══════════════ NÚCLEO ═══════════════ */
+const SUPABASE_URL='https://mopyslyhjtnmvlksusjr.supabase.co';
+const SUPABASE_KEY='sb_publishable_FAg_UJOAOLwMJCcMBhdj1w_cX37utvu';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+// cliente secundario: crear cuentas de personal sin tumbar la sesión del admin
+const sb2=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+
+const $=(id)=>document.getElementById(id);
+const money=(n)=>'$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const uuid=()=>crypto.randomUUID();
+const dISO=(d)=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
+const todayISO=()=>dISO(new Date());
+const fdate=(d)=>d?new Date(d.length===10?d+'T12:00:00':d).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}):'—';
+const ftime=(d)=>d?new Date(d).toLocaleTimeString('es-MX',{hour:'numeric',minute:'2-digit'}):'—';
+const daysLeft=(end)=>Math.ceil((new Date(end+'T23:59:59')-new Date())/864e5);
+const DOMAINS=['','@volten.pos','@volten.app'];
+const PAY_LABEL={cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia'};
+const PAY_ICON={
+  cash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></svg>',
+  card:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>',
+  transfer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>'
+};
+const METHOD_LABEL={qr:'QR',fingerprint:'Huella',face:'Facial',manual:'Manual',barcode:'Código'};
+const ROLE_LABEL={admin:'Admin',encargado:'Encargado',cajera:'Cajera',coach:'Coach',limpieza:'Limpieza',contador:'Contador',member:'Miembro'};
+const QR_PREFIX='volten-gym:member:';
+
+function toast(msg,err){const t=$('toast');t.textContent=msg;t.className=err?'err show':'show';clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),3200);}
+function openModal(html,wide){$('modal-box').className='modal'+(wide?' wide':'');$('modal-box').innerHTML='<button class="modal-x" onclick="closeModal()">✕</button>'+html;$('modal-root').style.display='flex';}
+function closeModal(){$('modal-root').style.display='none';}
+$('modal-root')&&($('modal-root').onclick=(e)=>{if(e.target.id==='modal-root')closeModal();});
+
+function csvExport(name,headers,rows){
+  const q=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const body=[headers.map(q).join(',')].concat(rows.map(r=>r.map(q).join(','))).join('\r\n');
+  const blob=new Blob(['﻿'+body],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name+'_'+todayISO()+'.csv';a.click();
+}
+function waLink(phone,text){
+  const p=String(phone||'').replace(/\D/g,'');
+  const full=p.length===10?'52'+p:p;
+  return 'https://wa.me/'+full+'?text='+encodeURIComponent(text);
+}
+const isNetErr=(e)=>e&&/fetch|network|failed|load/i.test(String(e.message||e));
+
+/* ── Cache local (para leer sin internet) ── */
+const cset=(k,v)=>{try{localStorage.setItem('vgpos_'+k,JSON.stringify(v));}catch(e){}};
+const cget=(k)=>{try{return JSON.parse(localStorage.getItem('vgpos_'+k));}catch(e){return null;}};
+
+/* ── Cola offline: escrituras pendientes ── */
+const Q={
+  key:'vgpos_queue',
+  list(){try{return JSON.parse(localStorage.getItem(this.key))||[];}catch(e){return[];}},
+  save(l){localStorage.setItem(this.key,JSON.stringify(l));this.badge();},
+  push(op){const l=this.list();l.push(op);this.save(l);},
+  badge(){
+    const n=this.list().length,b=$('offline');
+    if(!navigator.onLine){b.style.display='block';b.textContent='● Sin conexión'+(n?' — '+n+' operación(es) por sincronizar':' — guardando local');}
+    else if(n){b.style.display='block';b.textContent='⟳ Sincronizando '+n+' operación(es)...';}
+    else b.style.display='none';
+  },
+  async insert(table,payload){
+    if(navigator.onLine){
+      try{
+        const {error}=await sb.from(table).insert(payload);
+        if(!error)return{ok:true};
+        if(!isNetErr(error))return{error};
+      }catch(e){if(!isNetErr(e))return{error:e};}
+    }
+    this.push({t:'insert',table,payload});
+    return{queued:true};
+  },
+  async update(table,match,patch){
+    if(navigator.onLine){
+      try{
+        let q=sb.from(table).update(patch);
+        for(const k in match)q=match[k]===null?q.is(k,null):q.eq(k,match[k]);
+        const {error}=await q;
+        if(!error)return{ok:true};
+        if(!isNetErr(error))return{error};
+      }catch(e){if(!isNetErr(e))return{error:e};}
+    }
+    this.push({t:'update',table,match,patch});
+    return{queued:true};
+  },
+  // ajuste de stock: se re-aplica leyendo el valor actual al sincronizar
+  async stockDelta(branch_id,product_id,delta,reason,staff_id){
+    const moveId=uuid();
+    if(navigator.onLine){
+      try{
+        const ok=await applyStockDelta(branch_id,product_id,delta,reason,staff_id,moveId);
+        if(ok)return{ok:true};
+      }catch(e){}
+    }
+    this.push({t:'stock',branch_id,product_id,delta,reason,staff_id,moveId});
+    return{queued:true};
+  },
+  async flush(){
+    if(!navigator.onLine)return;
+    let l=this.list();
+    while(l.length){
+      const op=l[0];
+      try{
+        if(op.t==='insert'){
+          const {error}=await sb.from(op.table).insert(op.payload);
+          if(error&&isNetErr(error))break;
+          if(error)console.warn('Op descartada',op,error.message);
+        }else if(op.t==='update'){
+          let q=sb.from(op.table).update(op.patch);
+          for(const k in op.match)q=op.match[k]===null?q.is(k,null):q.eq(k,op.match[k]);
+          const {error}=await q;
+          if(error&&isNetErr(error))break;
+          if(error)console.warn('Op descartada',op,error.message);
+        }else if(op.t==='stock'){
+          const ok=await applyStockDelta(op.branch_id,op.product_id,op.delta,op.reason,op.staff_id,op.moveId);
+          if(!ok)break;
+        }
+      }catch(e){break;}
+      l.shift();this.save(l);
+    }
+    this.badge();
+  }
+};
+async function applyStockDelta(branch_id,product_id,delta,reason,staff_id,moveId){
+  const {data:cur,error:e1}=await sb.from('stock').select('qty,min_qty').eq('branch_id',branch_id).eq('product_id',product_id).maybeSingle();
+  if(e1&&isNetErr(e1))return false;
+  const newQty=Number((cur&&cur.qty)||0)+delta;
+  const {error:e2}=await sb.from('stock').upsert({branch_id,product_id,qty:newQty,min_qty:(cur&&cur.min_qty)||0});
+  if(e2&&isNetErr(e2))return false;
+  await sb.from('stock_moves').insert({id:moveId,branch_id,product_id,delta,reason,staff_id});
+  return true;
+}
+window.addEventListener('online',()=>{Q.badge();Q.flush();});
+window.addEventListener('offline',()=>Q.badge());
+// Service worker: el POS carga aunque no haya internet (los datos los sincroniza la cola)
+if('serviceWorker' in navigator&&location.protocol.indexOf('http')===0)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+
+/* ═══════════════ POS ═══════════════ */
+const Pos={
+  user:null, role:null, profileName:'', branch:null, branches:[], nav:'dashboard', shift:null,
+  plans:[], products:[], stock:[], customers:[], subs:[], promos:[], appProfiles:[], staffList:[], families:[], coachProfiles:[], requests:[],
+  sale:null, custQuery:'', reportRange:'today', promoTab:'promos',
+
+  async init(){
+    Q.badge();
+    const {data}=await sb.auth.getSession();
+    if(data.session){await this.afterLogin(data.session);}
+    $('li-btn').onclick=()=>this.login();
+    $('li-pass').addEventListener('keydown',e=>{if(e.key==='Enter')this.login();});
+    document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>this.go(b.dataset.nav));
+  },
+
+  async login(){
+    const u=$('li-user').value.trim(),pass=$('li-pass').value;
+    $('login-err').textContent='';
+    if(!u||!pass){$('login-err').textContent='Escribe tu usuario y contraseña.';return;}
+    $('li-btn').textContent='Entrando...';
+    let session=null;
+    for(const d of DOMAINS){
+      if(u.includes('@')&&d)continue;
+      const email=u.includes('@')?u:(u+d);
+      if(!email.includes('@'))continue;
+      const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
+      if(!error){session=data.session;break;}
+    }
+    $('li-btn').textContent='Entrar';
+    if(!session){$('login-err').textContent='Usuario o contraseña incorrectos.';return;}
+    await this.afterLogin(session);
+  },
+
+  async afterLogin(session){
+    this.user=session.user;
+    const {data:prof}=await sb.from('profiles').select('role,full_name,avatar_url').eq('id',this.user.id).single();
+    this.role=(prof&&prof.role)||'';
+    if(!['admin','encargado','cajera','contador'].includes(this.role)){
+      $('login-err').textContent='Esta cuenta no tiene acceso al POS.';
+      await sb.auth.signOut();return;
+    }
+    this.profileName=(prof&&prof.full_name)||this.user.email.split('@')[0];
+    $('su-name').textContent=this.profileName;
+    $('su-role').textContent=ROLE_LABEL[this.role]||this.role;
+    if(prof&&prof.avatar_url)$('su-av').innerHTML='<img src="'+esc(prof.avatar_url)+'" alt="">';
+    else $('su-av').textContent=(this.profileName[0]||'A').toUpperCase();
+    // permisos de navegación
+    if(this.role!=='admin')$('nav-staff').classList.add('hidden');
+    // Análisis/Reportes: SOLO admin y contador (cajeras y encargados ven inicio y gestión)
+    if(!['admin','contador'].includes(this.role)){$('nav-reports').classList.add('hidden');$('sep-analisis').classList.add('hidden');}
+    if(this.role==='contador'){
+      // el contador SOLO ve reportes (cuenta para los contadores del dueño)
+      document.querySelectorAll('.nav-item').forEach(b=>{if(b.dataset.nav!=='reports')b.classList.add('hidden');});
+      document.querySelectorAll('.nav-sep').forEach(s=>s.classList.add('hidden'));
+      $('shift-chip').classList.add('hidden');
+      this.nav='reports';
+    }
+    await this.loadCore();
+    // sucursal fija para no-admin (staff_branches), admin elige
+    if(this.role!=='admin'){
+      const {data:sbr}=await sb.from('staff_branches').select('branch_id').eq('staff_id',this.user.id).limit(1);
+      const mine=sbr&&sbr[0]&&this.branches.find(b=>b.id===sbr[0].branch_id);
+      this.branch=mine||this.branches[0]||null;
+    }else{
+      const saved=cget('branch_sel');
+      this.branch=this.branches.find(b=>b.id===saved)||this.branches[0]||null;
+    }
+    $('login').style.display='none';
+    await this.checkShiftGate();
+  },
+
+  async loadCore(){
+    const load=async(key,q)=>{
+      try{const {data,error}=await q;if(!error&&data){cset(key,data);return data;}}catch(e){}
+      return cget(key)||[];
+    };
+    this.branches=await load('branches',sb.from('branches').select('*').order('name'));
+    this.plans=await load('plans',sb.from('plans').select('*').order('duration_days'));
+    this.products=await load('products',sb.from('products').select('*').order('name'));
+    this.stock=await load('stock',sb.from('stock').select('*'));
+    this.customers=await load('customers',sb.from('customers').select('*').order('full_name'));
+    this.subs=await load('subs',sb.from('subscriptions').select('*').order('end_date',{ascending:false}));
+    this.promos=await load('promos',sb.from('promotions').select('*').order('created_at',{ascending:false}));
+    this.appProfiles=await load('appProfiles',sb.from('profiles').select('id,full_name,email,role,avatar_url,created_at'));
+    this.families=await load('families',sb.from('families').select('*'));
+    this.coachProfiles=await load('coachProfiles',sb.from('coach_profiles').select('profile_id,monthly_price'));
+    this.requests=await load('requests',sb.from('pos_requests').select('*').eq('status','pendiente').order('created_at',{ascending:false}));
+  },
+  // planes visibles en ESTA sucursal (branch_id null = aplica en ambas)
+  plansForBranch(){
+    const b=this.branch?this.branch.id:null;
+    return this.plans.filter(p=>p.active!==false&&(!p.branch_id||p.branch_id===b));
+  },
+
+  /* ── Turno ── */
+  async checkShiftGate(){
+    if(this.role==='contador'){
+      $('gate').style.display='none';$('shell').style.display='grid';
+      this.go('reports');return;
+    }
+    const bId=this.branch?this.branch.id:null;
+    let shift=null;
+    try{
+      let q=sb.from('cash_shifts').select('*').eq('status','open').order('opened_at',{ascending:false}).limit(1);
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;shift=(data&&data[0])||null;
+      cset('shift_'+bId,shift);
+    }catch(e){shift=cget('shift_'+bId);}
+    this.shift=shift;
+    if(!this.shift){
+      $('shell').style.display='none';$('gate').style.display='flex';
+      $('gate-hello').innerHTML='Bienvenido, <b>'+esc(this.profileName)+'</b>';
+      $('gate-date').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'})+' · '+ftime(new Date());
+    }else{
+      $('gate').style.display='none';$('shell').style.display='grid';
+      this.go(this.nav||'dashboard');this.refreshChip();
+    }
+  },
+  async openShift(){
+    const cash=Number($('open-cash').value)||0,fx=Number($('open-fx').value)||0;
+    const bId=this.branch?this.branch.id:null;
+    // id generado aquí para que las ventas puedan referenciar el turno aunque no haya internet
+    const payload={id:uuid(),branch_id:bId,staff_id:this.user.id,opening_cash:cash,fx_rate:fx,status:'open',opened_at:new Date().toISOString()};
+    if(navigator.onLine){
+      const {error}=await sb.from('cash_shifts').insert(payload);
+      if(error&&!isNetErr(error)){toast('No se pudo abrir el turno: '+error.message,true);return;}
+      if(error)Q.push({t:'insert',table:'cash_shifts',payload});
+    }else{
+      Q.push({t:'insert',table:'cash_shifts',payload});
+      toast('Turno abierto SIN internet — se sincroniza solo al reconectar.');
+    }
+    this.shift=payload;cset('shift_'+bId,payload);
+    cset('shift_sales',[]);cset('shift_movs',[]);
+    $('gate').style.display='none';$('shell').style.display='grid';
+    this.go('dashboard');this.refreshChip();
+  },
+
+  async shiftTotals(){
+    let sales=[];let movs=[];
+    try{
+      const {data:sv}=await sb.from('sales').select('id,total,payment_method,created_at,customer_id').eq('shift_id',this.shift.id).order('created_at',{ascending:false});
+      sales=sv||[];cset('shift_sales',sales);
+    }catch(e){sales=cget('shift_sales')||[];}
+    try{
+      const {data:mv}=await sb.from('cash_movements').select('*').eq('shift_id',this.shift.id).order('created_at',{ascending:false});
+      movs=mv||[];cset('shift_movs',movs);
+    }catch(e){movs=cget('shift_movs')||[];}
+    const by=(m)=>sales.filter(x=>x.payment_method===m).reduce((s,x)=>s+Number(x.total||0),0);
+    const movIn=movs.filter(m=>m.type==='in').reduce((s,x)=>s+Number(x.amount),0);
+    const movOut=movs.filter(m=>m.type==='out').reduce((s,x)=>s+Number(x.amount),0);
+    const cash=by('cash'),card=by('card'),transfer=by('transfer');
+    return{sales,movs,cash,card,transfer,movIn,movOut,
+      total:cash+card+transfer,
+      expected:Number(this.shift.opening_cash)+cash+movIn-movOut};
+  },
+
+  async refreshChip(){
+    if(!this.shift){$('chip-cash').textContent='$0.00';return;}
+    const t=await this.shiftTotals();
+    $('chip-cash').textContent=money(t.expected);
+  },
+
+  async closeShiftModal(){
+    if(!this.shift)return;
+    if(navigator.onLine&&Q.list().length){toast('Sincronizando pendientes... intenta de nuevo en unos segundos.',true);Q.flush();return;}
+    const t=await this.shiftTotals();
+    openModal(`
+      <h3>Cerrar turno</h3>
+      <p class="msub">Arqueo de caja · ${esc(this.branch?this.branch.name:'')}</p>
+      ${navigator.onLine?'':'<div style="background:#FEF3C7;color:#92400E;border-radius:12px;padding:10px 14px;font-size:13px;font-weight:600;margin-bottom:14px;">Sin internet — el corte usa los datos locales y se sincroniza solo al reconectar.</div>'}
+      <div class="row-line"><span class="k">Fondo inicial</span><span class="v">${money(this.shift.opening_cash)}</span></div>
+      <div class="row-line"><span class="k">Ventas en efectivo</span><span class="v">${money(t.cash)}</span></div>
+      <div class="row-line"><span class="k">Efectivo metido</span><span class="v">+${money(t.movIn)}</span></div>
+      <div class="row-line"><span class="k">Efectivo retirado</span><span class="v">−${money(t.movOut)}</span></div>
+      <div class="row-line"><span class="k"><b>Efectivo esperado</b></span><span class="v" style="color:var(--orange)">${money(t.expected)}</span></div>
+      <div class="row-line"><span class="k">Tarjeta</span><span class="v">${money(t.card)}</span></div>
+      <div class="row-line"><span class="k">Transferencia</span><span class="v">${money(t.transfer)}</span></div>
+      <div class="row-line"><span class="k">Órdenes del turno</span><span class="v">${t.sales.length}</span></div>
+      <div class="field" style="margin-top:18px"><label>Efectivo contado (lo que hay físicamente)</label>
+        <input class="inp" type="number" id="cs-counted" placeholder="0.00" oninput="Pos.diffLive(${t.expected})"></div>
+      <div id="cs-diff" style="font-size:14px;font-weight:700;margin-bottom:16px;min-height:20px;"></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.doCloseShift(${t.expected})">Cerrar turno y hacer corte</button>
+    `);
+    setTimeout(()=>$('cs-counted')&&$('cs-counted').focus(),50);
+  },
+  diffLive(expected){
+    const c=Number($('cs-counted').value);
+    if(!$('cs-counted').value){$('cs-diff').textContent='';return;}
+    const d=c-expected;
+    $('cs-diff').innerHTML=d===0?'<span style="color:#16A34A">Caja cuadrada ✓</span>':
+      (d>0?'<span style="color:#16A34A">Sobran '+money(d)+'</span>':'<span style="color:#DC2626">Faltan '+money(-d)+'</span>');
+  },
+  async doCloseShift(expected){
+    const counted=Number($('cs-counted').value)||0;
+    const t=await this.shiftTotals();
+    const r=await Q.update('cash_shifts',{id:this.shift.id},{status:'closed',closed_at:new Date().toISOString(),expected_cash:expected,counted_cash:counted});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    cset('shift_'+(this.branch?this.branch.id:null),null);
+    const resumen='CORTE DE CAJA — VOLTEN GYM\n'
+      +(this.branch?this.branch.name+'\n':'')
+      +new Date().toLocaleString('es-MX')+'\nCajero: '+this.profileName
+      +'\n────────────────'
+      +'\nÓrdenes: '+t.sales.length
+      +'\nEfectivo: '+money(t.cash)+'\nTarjeta: '+money(t.card)+'\nTransferencia: '+money(t.transfer)
+      +'\nTotal ventas: '+money(t.total)
+      +'\n────────────────'
+      +'\nFondo: '+money(this.shift.opening_cash)
+      +'\nEsperado en caja: '+money(expected)
+      +'\nContado: '+money(counted)
+      +'\nDiferencia: '+money(counted-expected);
+    this._corte=resumen;
+    openModal(`
+      <h3>Turno cerrado ✓</h3>
+      <p class="msub">Resumen del corte</p>
+      <pre style="background:var(--gray);border-radius:16px;padding:18px;font-size:13px;font-weight:600;line-height:1.7;white-space:pre-wrap;font-family:inherit;">${esc(resumen)}</pre>
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button class="btn btn-ghost" style="flex:1" onclick="Pos.copyCorte()">Copiar corte</button>
+        <button class="btn btn-primary" style="flex:1" onclick="closeModal();Pos.shift=null;Pos.checkShiftGate();">Terminar</button>
+      </div>
+    `);
+  },
+
+  renderRequests(){
+    const rp=$('d-requests');if(!rp)return;
+    rp.innerHTML=this.requests.length?this.requests.map(r=>`
+      <div class="row-line">
+        <div><div style="font-weight:700;font-size:14px">${esc(this.profName(r.member_id))}</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:500">${r.type==='plan'?'Membresía':'Coach'}: ${esc(r.ref_name||'')}${r.price?' · '+money(r.price):''}</div></div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.cobrarRequest('${r.id}')">Cobrar</button>
+          <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.descartarRequest('${r.id}')">Descartar</button>
+        </div>
+      </div>`).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:6px 0">Sin solicitudes pendientes. Los clientes pueden pedir su membresía o coach desde la app y pagar aquí.</div>';
+  },
+  async ensureCustomerForProfile(profileId){
+    let c=this.customers.find(x=>x.profile_id===profileId);
+    if(c)return c;
+    const p=this.appProfiles.find(x=>x.id===profileId);
+    const payload={id:uuid(),full_name:(p&&(p.full_name||p.email))||'Cliente app',email:(p&&p.email)||null,phone:null,
+      profile_id:profileId,branch_id:this.branch?this.branch.id:null,suspended:false,created_at:new Date().toISOString()};
+    const r=await Q.insert('customers',payload);
+    if(r.error){toast('Error: '+r.error.message,true);return null;}
+    this.customers.unshift(payload);cset('customers',this.customers);
+    return payload;
+  },
+  async cobrarRequest(id){
+    const r=this.requests.find(x=>x.id===id);if(!r)return;
+    const c=await this.ensureCustomerForProfile(r.member_id);if(!c)return;
+    this._reqId=id;
+    if(r.type==='plan'){this.startSale(c.id,r.ref_id);}
+    else{
+      this.startSale(c.id);
+      this.sale.cart.push({kind:'coach',id:r.ref_id,name:'Coach — '+(r.ref_name||''),price:Number(r.price)||0,qty:1});
+      this.sale.step=2;this.go('sale');
+    }
+  },
+  async descartarRequest(id){
+    const r=await Q.update('pos_requests',{id},{status:'cancelada'});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    this.requests=this.requests.filter(x=>x.id!==id);cset('requests',this.requests);
+    this.renderRequests();
+  },
+
+  cashMoveModal(){
+    if(!this.shift)return;
+    openModal(`
+      <h3>Movimiento de efectivo</h3>
+      <p class="msub">Meter o retirar dinero de la caja (no es una venta)</p>
+      <div class="method-cards" style="grid-template-columns:1fr 1fr;">
+        <button class="method-card on" id="mv-in" onclick="Pos.mvDir='in';$('mv-in').classList.add('on');$('mv-out').classList.remove('on')">＋ Meter</button>
+        <button class="method-card" id="mv-out" onclick="Pos.mvDir='out';$('mv-out').classList.add('on');$('mv-in').classList.remove('on')">－ Retirar</button>
+      </div>
+      <div class="field"><label>Monto</label><input class="inp" type="number" id="mv-amt" placeholder="0.00"></div>
+      <div class="field"><label>Motivo</label><input class="inp" id="mv-reason" placeholder="ej. cambio, pago a proveedor..."></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.saveCashMove()">Registrar movimiento</button>
+    `);
+    this.mvDir='in';
+  },
+  async saveCashMove(){
+    const amt=Number($('mv-amt').value);
+    if(!amt||amt<=0){toast('Escribe el monto.',true);return;}
+    const payload={id:uuid(),shift_id:this.shift.id,type:this.mvDir,amount:amt,reason:$('mv-reason').value.trim(),created_at:new Date().toISOString()};
+    const r=await Q.insert('cash_movements',payload);
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    const mc=cget('shift_movs')||[];mc.unshift(payload);cset('shift_movs',mc);
+    closeModal();toast(r.queued?'Guardado local — se sincroniza al volver internet':'Movimiento registrado ✓');
+    this.refreshChip();if(this.nav==='dashboard')this.go('dashboard');
+  },
+
+  async logout(){
+    if(this.shift){toast('Cierra el turno antes de salir.',true);return;}
+    await sb.auth.signOut();location.reload();
+  },
+
+  go(nav){
+    this.nav=nav;
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.nav===nav));
+    const r=this['view_'+nav];const el=$('view');
+    el.innerHTML=r?r.call(this):'';
+    el.classList.remove('fade');void el.offsetWidth;el.classList.add('fade');
+    el.scrollTop=0;
+    if(this['after_'+nav])this['after_'+nav].call(this);
+  },
+
+  branchSelector(){
+    if(!['admin','contador'].includes(this.role)||this.branches.length<=1)
+      return this.branch?`<span class="tag tag-gray" style="height:44px;display:inline-flex;align-items:center;padding:0 18px;">${esc(this.branch.name)}</span>`:'';
+    return `<div class="branch-pick"><select onchange="Pos.setBranch(this.value)">${this.branches.map(b=>`<option value="${b.id}" ${this.branch&&this.branch.id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`;
+  },
+  setBranch(id){this.branch=this.branches.find(b=>b.id===id);cset('branch_sel',id);this.checkShiftGate();},
+  today(){return new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});},
+  greeting(){const h=new Date().getHours();return h<12?'Buenos días':(h<19?'Buenas tardes':'Buenas noches');},
+
+  /* ── helpers de datos ── */
+  subsOf(c){ // todas las subscripciones de un cliente (por ficha o por cuenta app)
+    return this.subs.filter(s=>(c.id&&s.customer_id===c.id)||(c.profile_id&&s.member_id===c.profile_id));
+  },
+  bestSub(c){
+    const list=this.subsOf(c).filter(s=>s.status!=='canceled');
+    if(!list.length)return null;
+    return list.reduce((a,b)=>a.end_date>b.end_date?a:b);
+  },
+  membershipTag(c){
+    const s=this.bestSub(c);
+    if(!s)return'<span class="tag tag-gray">Sin membresía</span>';
+    const d=daysLeft(s.end_date);
+    if(d<0)return'<span class="tag tag-red">Vencida '+fdate(s.end_date)+'</span>';
+    if(d<=7)return'<span class="tag tag-orange">Vence en '+d+' día'+(d===1?'':'s')+'</span>';
+    return'<span class="tag tag-green">Activa · hasta '+fdate(s.end_date)+'</span>';
+  },
+  planName(id){const p=this.plans.find(x=>x.id===id);return p?p.name:'—';},
+  custName(id){const c=this.customers.find(x=>x.id===id);return c?c.full_name:'—';},
+  custAvatar(c,size){
+    const p=c.profile_id?this.appProfiles.find(x=>x.id===c.profile_id):null;
+    const url=c.photo_url||(p&&p.avatar_url)||null;
+    const s=size||38;
+    return `<div class="av2" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.37)}px;">${url?`<img src="${esc(url)}" alt="">`:esc((c.full_name||'?')[0].toUpperCase())}</div>`;
+  },
+  profName(id){const p=this.appProfiles.find(x=>x.id===id);return p?(p.full_name||p.email):'—';},
+  stockOf(pid){const s=this.stock.find(x=>x.product_id===pid&&this.branch&&x.branch_id===this.branch.id);return s?Number(s.qty):0;},
+  minOf(pid){const s=this.stock.find(x=>x.product_id===pid&&this.branch&&x.branch_id===this.branch.id);return s?Number(s.min_qty||0):0;},
+  activePromos(){
+    const t=todayISO();
+    return this.promos.filter(p=>p.active&&(!p.starts_at||p.starts_at<=t)&&(!p.ends_at||p.ends_at>=t));
+  },
+
+  /* ═══════ DASHBOARD ═══════ */
+  view_dashboard(){
+    return `
+    <div class="topbar">
+      <div><h1>${this.greeting()},<br>${esc(this.profileName.split(' ')[0])}.</h1><div class="sub">Todo listo para comenzar la jornada · ${this.today()}</div></div>
+      <div style="display:flex;gap:12px;align-items:center">${this.branchSelector()}<button class="btn btn-primary" onclick="Pos.startSale()">+ Nueva venta</button></div>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="lbl">Ventas hoy <span class="dot" style="background:var(--orange)"></span></div><div class="val" id="d-sales">—</div><div class="foot" id="d-sales-f">órdenes cobradas</div></div>
+      <div class="card"><div class="lbl">Adentro ahora <span class="dot" style="background:var(--green)"></span></div><div class="val" id="d-inside">—</div><div class="foot">clientes entrenando</div></div>
+      <div class="card"><div class="lbl">Por vencer <span class="dot" style="background:var(--amber)"></span></div><div class="val" id="d-expiring">—</div><div class="foot">membresías en 7 días</div></div>
+      <div class="card"><div class="lbl">Ingresos turno <span class="dot" style="background:var(--ink)"></span></div><div class="val" id="d-income">—</div><div class="foot">efectivo + tarjeta + transf.</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start;">
+      <div>
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px"><div><h2>Actividad de hoy</h2><div class="psub" style="margin-bottom:0">Seguimiento del gimnasio en tiempo real</div></div><a onclick="Pos.go('access')" style="font-size:14px;font-weight:700;color:var(--orange);cursor:pointer">Ver accesos ›</a></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px" id="d-act-grid"></div>
+        </div>
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px"><h2>Últimas ventas</h2><a onclick="Pos.go('reports')" style="font-size:14px;font-weight:700;color:var(--orange);cursor:pointer">${this.role==='cajera'?'':'Ver reportes ›'}</a></div>
+          <div id="d-last-sales"><div class="stub" style="padding:26px"><p>Sin ventas todavía.</p></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="panel dark-panel">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.14em;color:rgba(255,255,255,.5);text-transform:uppercase">Flujo de caja · turno</div>
+          <div style="font-size:42px;font-weight:800;letter-spacing:-0.04em;margin:10px 0 4px" id="d-flow-total">—</div>
+          <div style="font-size:13px;color:rgba(255,255,255,.4);margin-bottom:20px" id="d-flow-count">— órdenes cobradas</div>
+          <div class="row-line"><span class="k">Efectivo</span><span class="v" id="d-flow-cash">$0</span></div>
+          <div class="row-line"><span class="k">Tarjeta</span><span class="v" id="d-flow-card">$0</span></div>
+          <div class="row-line"><span class="k">Transferencia</span><span class="v" id="d-flow-trans">$0</span></div>
+          <button class="btn btn-block" style="margin-top:18px;background:rgba(255,255,255,.12);color:#FFF" onclick="Pos.cashMoveModal()">Meter / retirar efectivo</button>
+        </div>
+        <div class="panel">
+          <h2 style="font-size:18px">Solicitudes de la app</h2>
+          <div class="psub">Membresías y coaches pedidos desde el teléfono — se cobran aquí</div>
+          <div id="d-requests"><div style="color:var(--muted);font-size:13px;font-weight:500;padding:6px 0">Cargando...</div></div>
+        </div>
+        <div class="panel">
+          <h2 style="font-size:18px">Por vencer pronto</h2>
+          <div class="psub">Clientes para recordarles renovar</div>
+          <div id="d-expiring-list"></div>
+        </div>
+      </div>
+    </div>`;
+  },
+  async after_dashboard(){
+    const t=await this.shiftTotals();
+    $('d-sales').textContent=t.sales.length;
+    $('d-income').textContent=money(t.total);
+    $('d-flow-total').textContent=money(t.total);
+    $('d-flow-count').textContent=t.sales.length+' órdenes cobradas';
+    $('d-flow-cash').textContent=money(t.cash);
+    $('d-flow-card').textContent=money(t.card);
+    $('d-flow-trans').textContent=money(t.transfer);
+    $('chip-cash').textContent=money(t.expected);
+    // accesos de hoy
+    const bId=this.branch?this.branch.id:null;
+    let CI=[];
+    try{
+      let q=sb.from('checkins').select('*').gte('created_at',todayISO()+'T00:00:00');
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;CI=data||[];cset('today_ci',CI);
+    }catch(e){CI=cget('today_ci')||[];}
+    const inside=CI.filter(c=>c.granted&&!c.checked_out_at);
+    $('d-inside').textContent=inside.length;
+    // membresías vendidas hoy
+    const subsToday=this.subs.filter(s=>s.start_date===todayISO());
+    const cells=[['Entradas hoy',CI.filter(c=>c.granted).length,'var(--green)'],['Adentro ahora',inside.length,'var(--orange)'],['Rechazados',CI.filter(c=>!c.granted).length,'var(--red)'],['Membresías hoy',subsToday.length,'var(--ink)']];
+    $('d-act-grid').innerHTML=cells.map(([lbl,n,c])=>`
+      <div style="background:var(--bg);border-radius:18px;padding:20px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span class="dot" style="background:${c};width:9px;height:9px;border-radius:50%;display:inline-block"></span><span style="font-size:13px;font-weight:600;color:#374151">${lbl}</span></div>
+        <div style="font-size:32px;font-weight:800;letter-spacing:-0.04em">${n}</div>
+      </div>`).join('');
+    // últimas ventas
+    if(t.sales.length){
+      $('d-last-sales').innerHTML='<table><thead><tr><th>Cliente</th><th>Total</th><th>Pago</th><th>Hora</th></tr></thead><tbody>'+
+        t.sales.slice(0,6).map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td style="color:#16A34A;font-weight:800">${money(s.total)}</td><td><span class="tag tag-gray">${PAY_LABEL[s.payment_method]||s.payment_method||'—'}</span></td><td>${ftime(s.created_at)}</td></tr>`).join('')+'</tbody></table>';
+    }
+    // por vencer
+    const t7=new Date(Date.now()+7*864e5);
+    const expiring=this.customers.map(c=>({c,s:this.bestSub(c)}))
+      .filter(x=>x.s&&daysLeft(x.s.end_date)>=0&&new Date(x.s.end_date)<=t7)
+      .sort((a,b)=>a.s.end_date<b.s.end_date?-1:1).slice(0,6);
+    $('d-expiring').textContent=expiring.length;
+    $('d-expiring-list').innerHTML=expiring.length?expiring.map(x=>`
+      <div class="row-line"><div><div style="font-weight:700;font-size:14px">${esc(x.c.full_name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">vence ${fdate(x.s.end_date)}</div></div>
+      ${x.c.phone?`<a class="btn btn-xs" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(x.c.phone,'Hola '+x.c.full_name.split(' ')[0]+' 💪 Te recordamos que tu membresía de Volten Gym vence el '+fdate(x.s.end_date)+'. ¡Renueva a tiempo para no perder tu racha!')}">WhatsApp</a>`:''}</div>`).join('')
+      :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Nadie por vencer esta semana.</div>';
+    // solicitudes hechas desde la app del cliente
+    try{
+      const {data:rq}=await sb.from('pos_requests').select('*').eq('status','pendiente').order('created_at',{ascending:false});
+      if(rq){this.requests=rq;cset('requests',rq);}
+    }catch(e){}
+    this.renderRequests();
+  },
+
+
+  copyCorte(){navigator.clipboard.writeText(this._corte||'');toast('Corte copiado — pégalo en WhatsApp o correo');},
+
+  /* ═══════ NUEVA VENTA (wizard) ═══════ */
+  startSale(customerId,planId){
+    this.sale={step:1,customer:null,quick:false,cart:[],promoId:'',method:null,received:'',tab:'plans',q:''};
+    if(customerId){
+      const c=this.customers.find(x=>x.id===customerId);
+      if(c){this.sale.customer=c;this.sale.step=2;}
+    }
+    if(planId){
+      const p=this.plans.find(x=>x.id===planId);
+      if(p)this.sale.cart.push({kind:'plan',id:p.id,name:'Membresía '+p.name,price:Number(p.price),qty:1});
+    }
+    this.go('sale');
+  },
+  view_sale(){
+    if(!this.sale)this.sale={step:1,customer:null,quick:false,cart:[],promoId:'',method:null,received:'',tab:'plans',q:''};
+    const s=this.sale;
+    const steps=[[1,'Cliente'],[2,'Artículos'],[3,'Pago'],[4,'Listo']];
+    const stepper='<div class="stepper">'+steps.map(([n,l])=>`<div class="step-pill ${s.step===n?'on':(s.step>n?'done':'')}"><span class="n">${s.step>n?'✓':n}</span>${l}</div>`).join('')+'</div>';
+    return `
+    <div class="topbar">
+      <div><h1>Nueva venta</h1><div class="sub">Membresías y productos · ${esc(this.branch?this.branch.name:'')}</div></div>
+      ${stepper}
+    </div>
+    <div id="sale-body">${this['saleStep'+s.step]()}</div>`;
+  },
+  after_sale(){const i=$('sale-cust-q');if(i)i.focus();},
+
+  saleStep1(){
+    return `
+    <div class="panel">
+      <h2>Paso 1 · ¿Para quién es la venta?</h2>
+      <div class="psub">Busca al cliente, créalo, o haz una venta rápida de mostrador.</div>
+      <div style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
+        <div class="search-wrap"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="inp" id="sale-cust-q" placeholder="Nombre, teléfono o correo..." oninput="Pos.sale.q=this.value;Pos.renderSaleCust()"></div>
+        <button class="btn btn-ghost" onclick="Pos.newCustomerModal(true)">+ Nuevo cliente</button>
+        <button class="btn btn-ghost" onclick="Pos.sale.quick=true;Pos.sale.customer=null;Pos.sale.tab='products';Pos.sale.step=2;Pos.go('sale')">Venta rápida sin cliente →</button>
+      </div>
+      <div id="sale-cust-list">${this.saleCustRows()}</div>
+    </div>`;
+  },
+  saleCustRows(){
+    const q=(this.sale.q||'').toLowerCase();
+    let list=this.customers;
+    if(q)list=list.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q));
+    list=list.slice(0,8);
+    if(!list.length)return '<div class="stub" style="padding:30px"><p>'+(this.customers.length?'Sin resultados.':'Aún no hay clientes registrados. Crea el primero con "+ Nuevo cliente".')+'</p></div>';
+    return list.map(c=>`
+      <button class="cust-row" onclick="Pos.pickSaleCustomer('${c.id}')">
+        ${this.custAvatar(c)}
+        <div class="cd"><b>${esc(c.full_name)}</b><span>${esc(c.phone||'sin teléfono')}${c.profile_id?' · app vinculada ✓':''}</span></div>
+        ${this.membershipTag(c)}
+      </button>`).join('');
+  },
+  renderSaleCust(){$('sale-cust-list').innerHTML=this.saleCustRows();},
+  pickSaleCustomer(id){
+    this.sale.customer=this.customers.find(c=>c.id===id)||null;
+    this.sale.quick=false;this.sale.step=2;this.go('sale');
+  },
+
+  saleStep2(){
+    const s=this.sale;
+    if(s.quick)s.tab='products'; // venta rápida = solo productos (las membresías siempre llevan cliente)
+    const who=s.quick?'Venta rápida (sin cliente)':(s.customer?esc(s.customer.full_name):'—');
+    const plansHtml=this.plansForBranch().map(p=>`
+      <button class="prod-card" onclick="Pos.addToCart('plan','${p.id}')">
+        <div class="pn">Membresía ${esc(p.name)}</div>
+        <div class="pp">${money(p.price)}</div>
+        <div class="ps">${p.duration_days} día${p.duration_days===1?'':'s'}${p.is_family?' · familiar':''}</div>
+      </button>`).join('')||'<div class="stub"><p>No hay planes en esta sucursal. El admin los crea en Membresías.</p></div>';
+    const coachesHtml=this.appProfiles.filter(p=>p.role==='coach').map(p=>{
+      const cp=this.coachProfiles.find(x=>x.profile_id===p.id);
+      const price=cp&&cp.monthly_price?Number(cp.monthly_price):0;
+      return `<button class="prod-card" onclick="Pos.addCoachToCart('${p.id}')">
+        <div class="pn">Coach — ${esc(p.full_name||'')}</div>
+        <div class="pp">${price?money(price):'—'}</div>
+        <div class="ps">${price?'mensualidad':'sin precio definido'}</div>
+      </button>`;
+    }).join('')||'<div class="stub"><p>Sin coaches dados de alta.</p></div>';
+    const q=(s.q||'').toLowerCase();
+    // solo productos con stock en esta sucursal (sin stock no se venden)
+    let prods=this.products.filter(p=>p.type!=='membership'&&p.active!==false&&this.stockOf(p.id)>0);
+    if(q)prods=prods.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q));
+    const prodsHtml=prods.map(p=>{
+      const st=this.stockOf(p.id);
+      return `<button class="prod-card" onclick="Pos.addToCart('product','${p.id}')">
+        <div class="pn">${esc(p.name)}</div>
+        <div class="pp">${money(p.price)}</div>
+        <div class="ps">Stock: ${st}</div>
+      </button>`;
+    }).join('')||'<div class="stub"><p>Sin productos con stock'+(q?' con esa búsqueda':' en esta sucursal — dales entrada en Inventario')+'.</p></div>';
+    return `
+    <div class="sale-grid">
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div><h2>Paso 2 · Artículos</h2><div class="psub" style="margin-bottom:0">Cliente: <b style="color:var(--ink)">${who}</b> <a onclick="Pos.sale.step=1;Pos.go('sale')" style="color:var(--orange);font-weight:700;cursor:pointer;font-size:13px;margin-left:8px">cambiar</a></div></div>
+        </div>
+        <div class="pick-tabs">
+          ${s.quick?'':`<button class="pick-tab ${s.tab==='plans'?'on':''}" onclick="Pos.sale.tab='plans';Pos.go('sale')">Membresías</button>`}
+          <button class="pick-tab ${s.tab==='products'?'on':''}" onclick="Pos.sale.tab='products';Pos.go('sale')">Productos</button>
+          ${s.quick?'':`<button class="pick-tab ${s.tab==='coaches'?'on':''}" onclick="Pos.sale.tab='coaches';Pos.go('sale')">Coaches</button>`}
+          ${s.quick?'<span style="font-size:12.5px;color:var(--muted);font-weight:500;align-self:center;">Para membresías o coach elige primero al cliente</span>':''}
+        </div>
+        ${s.tab==='products'?`<div class="search-wrap" style="margin-bottom:14px;max-width:100%"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input class="inp" placeholder="Buscar producto o escanear código..." value="${esc(s.q||'')}" oninput="Pos.sale.q=this.value;Pos.go('sale')"></div>`:''}
+        <div class="prod-grid">${s.tab==='plans'?plansHtml:(s.tab==='coaches'?coachesHtml:prodsHtml)}</div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:18px" onclick="Pos.sale.step=1;Pos.go('sale')">← Volver al cliente</button>
+      </div>
+      ${this.cartPanel(true)}
+    </div>`;
+  },
+  cartPanel(withNext){
+    const s=this.sale;const t=this.saleTotals();
+    return `
+    <div class="panel" style="position:sticky;top:0;">
+      <h2 style="font-size:18px">Carrito</h2>
+      <div class="psub">${s.cart.length} artículo${s.cart.length===1?'':'s'}</div>
+      ${s.cart.length?s.cart.map((it,i)=>`
+        <div class="cart-item">
+          <div class="cn">${esc(it.name)}<div style="font-size:11px;color:var(--muted);font-weight:600">${money(it.price)} c/u</div></div>
+          <div class="cq"><button onclick="Pos.cartQty(${i},-1)">−</button><b>${it.qty}</b><button onclick="Pos.cartQty(${i},1)">＋</button></div>
+          <div class="cp">${money(it.price*it.qty)}</div>
+        </div>`).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:14px 0">Toca un artículo para agregarlo.</div>'}
+      <div class="row-line" style="margin-top:8px"><span class="k">Subtotal</span><span class="v">${money(t.subtotal)}</span></div>
+      ${t.discount?`<div class="row-line"><span class="k">Descuento (${esc(t.promoName)})</span><span class="v" style="color:#16A34A">−${money(t.discount)}</span></div>`:''}
+      <div class="row-line"><span class="k" style="font-weight:800;color:var(--ink)">Total</span><span class="v" style="font-size:22px;color:var(--orange)">${money(t.total)}</span></div>
+      ${withNext?`<button class="btn btn-primary btn-block" style="margin-top:14px" ${s.cart.length?'':'disabled'} onclick="Pos.toPay()">Continuar al pago →</button>`:''}
+    </div>`;
+  },
+  addToCart(kind,id){
+    const s=this.sale;
+    if(kind==='plan'){
+      if(s.quick||!s.customer){toast('Para vender membresía primero elige al cliente.',true);return;}
+      const p=this.plans.find(x=>x.id===id);if(!p)return;
+      const ex=s.cart.find(x=>x.kind==='plan'&&x.id===id);
+      if(ex)ex.qty++;else s.cart.push({kind:'plan',id,name:'Membresía '+p.name,price:Number(p.price),qty:1});
+    }else{
+      const p=this.products.find(x=>x.id===id);if(!p)return;
+      const ex=s.cart.find(x=>x.kind==='product'&&x.id===id);
+      const inCart=ex?ex.qty:0;
+      if(this.stockOf(id)-inCart<=0)toast('Ojo: sin stock en esta sucursal (se venderá en negativo).',true);
+      if(ex)ex.qty++;else s.cart.push({kind:'product',id,name:p.name,price:Number(p.price),qty:1});
+    }
+    this.go('sale');
+  },
+  addCoachToCart(id){
+    const s=this.sale;
+    if(s.quick||!s.customer){toast('Para cobrar un coach primero elige al cliente.',true);return;}
+    const p=this.appProfiles.find(x=>x.id===id);
+    const cp=this.coachProfiles.find(x=>x.profile_id===id);
+    const price=cp&&cp.monthly_price?Number(cp.monthly_price):0;
+    if(!price){toast('Este coach no tiene precio mensual definido todavía.',true);return;}
+    if(!s.cart.find(x=>x.kind==='coach'&&x.id===id))s.cart.push({kind:'coach',id,name:'Coach — '+((p&&p.full_name)||''),price,qty:1});
+    this.go('sale');
+  },
+  async ensureCoachProduct(it,put){
+    const sku='coach_'+it.id;
+    let p=this.products.find(x=>x.sku===sku);
+    if(p)return p.id;
+    const payload={id:uuid(),name:it.name,type:'store_item',price:it.price,sku,active:false};
+    await put('products',payload);
+    this.products.push(payload);cset('products',this.products);
+    return payload.id;
+  },
+  cartQty(i,d){
+    const it=this.sale.cart[i];if(!it)return;
+    it.qty+=d;if(it.qty<=0)this.sale.cart.splice(i,1);
+    this.go('sale');
+  },
+  toPay(){if(!this.sale.cart.length)return;this.sale.step=3;this.go('sale');},
+
+  saleTotals(){
+    const s=this.sale;
+    const subtotal=s.cart.reduce((a,x)=>a+x.price*x.qty,0);
+    let discount=0,promoName='';
+    if(s.promoId){
+      const p=this.promos.find(x=>x.id===s.promoId);
+      if(p){
+        promoName=p.name;
+        const elig=s.cart.filter(x=>p.applies_to==='all'||!p.applies_to||(p.applies_to==='plans'&&x.kind==='plan')||(p.applies_to==='products'&&x.kind==='product'))
+          .reduce((a,x)=>a+x.price*x.qty,0);
+        discount=p.discount_type==='percent'?elig*Number(p.discount_value)/100:Math.min(Number(p.discount_value),elig);
+      }
+    }
+    return{subtotal,discount,total:Math.max(0,subtotal-discount),promoName};
+  },
+
+  saleStep3(){
+    const s=this.sale;const t=this.saleTotals();
+    const promos=this.activePromos();
+    const fx=this.shift?Number(this.shift.fx_rate)||0:0;
+    const received=Number(s.received)||0;
+    const change=received?received-t.total:0;
+    // acumulación de días: mostrarla ANTES de cobrar para que no confunda
+    let accHtml='';
+    const planDays=s.cart.filter(x=>x.kind==='plan').reduce((a,x)=>{const p=this.plans.find(y=>y.id===x.id);return a+(p?Number(p.duration_days)*x.qty:0);},0);
+    if(planDays&&s.customer){
+      const cur=this.bestSub(s.customer);
+      const hasCur=cur&&daysLeft(cur.end_date)>=0;
+      const base=hasCur?new Date(cur.end_date+'T12:00:00'):new Date();
+      const newEnd=new Date(base.getTime()+planDays*864e5);
+      const famPlan=s.cart.some(x=>{if(x.kind!=='plan')return false;const p=this.plans.find(y=>y.id===x.id);return p&&p.is_family;});
+      const famN=famPlan&&s.customer.family_id?this.customers.filter(x=>x.family_id===s.customer.family_id).length:0;
+      accHtml=`<div style="background:var(--orange-soft);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:13.5px;font-weight:600;color:var(--orange-dark);line-height:1.5;">
+        ${hasCur?`Este cliente aún tiene vigencia hasta el <b>${fdate(cur.end_date)}</b>. Los días NO se pierden, se suman: comprará <b>${planDays} día${planDays===1?'':'s'}</b> y su nueva vigencia será hasta el <b>${fdate(dISO(newEnd))}</b>.`
+        :`Su membresía quedará vigente <b>${planDays} día${planDays===1?'':'s'}</b>: hasta el <b>${fdate(dISO(newEnd))}</b>.`}
+        ${famN?`<br>Plan familiar: cubre a los <b>${famN} miembros</b> de su familia con un solo pago.`:''}
+      </div>`;
+    }
+    return `
+    <div class="sale-grid">
+      <div class="panel">
+        <h2>Paso 3 · Cobro</h2>
+        <div class="psub">Cliente: <b style="color:var(--ink)">${s.quick?'Venta rápida':(s.customer?esc(s.customer.full_name):'—')}</b></div>
+        ${accHtml}
+        ${promos.length?`<div class="field"><label>Promoción</label>
+          <select class="inp" onchange="Pos.sale.promoId=this.value;Pos.go('sale')">
+            <option value="">Sin promoción</option>
+            ${promos.map(p=>`<option value="${p.id}" ${s.promoId===p.id?'selected':''}>${esc(p.name)} (${p.discount_type==='percent'?p.discount_value+'%':money(p.discount_value)} desc.)</option>`).join('')}
+          </select></div>`:''}
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.06em">¿Con qué paga?</label>
+        <div class="method-cards">
+          <button class="method-card ${s.method==='cash'?'on':''}" onclick="Pos.sale.method='cash';Pos.go('sale')">${PAY_ICON.cash}Efectivo</button>
+          <button class="method-card ${s.method==='card'?'on':''}" onclick="Pos.sale.method='card';Pos.go('sale')">${PAY_ICON.card}Tarjeta</button>
+          <button class="method-card ${s.method==='transfer'?'on':''}" onclick="Pos.sale.method='transfer';Pos.go('sale')">${PAY_ICON.transfer}Transferencia</button>
+        </div>
+        ${s.method==='cash'?`
+          <div class="frow">
+            <div class="field"><label>Recibido (MXN)</label><input class="inp" type="number" id="pay-received" value="${esc(s.received)}" oninput="Pos.sale.received=this.value;Pos.payLive()" placeholder="0.00"></div>
+            <div class="field"><label>Cambio</label><div class="inp" id="pay-change" style="display:flex;align-items:center;font-weight:800;${change<0?'color:var(--red)':'color:#16A34A'}">${received?money(change):'—'}</div></div>
+          </div>
+          ${fx?`<div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:14px">Si paga en dólares: total ≈ <b>USD ${(t.total/fx).toFixed(2)}</b> (TC ${fx})</div>`:''}
+        `:''}
+        <button class="btn btn-primary btn-block" style="height:56px;font-size:16px;margin-top:8px" ${s.method?'':'disabled'} onclick="Pos.checkout()" id="btn-cobrar">Cobrar ${money(t.total)}</button>
+        <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" onclick="Pos.sale.step=2;Pos.go('sale')">← Volver a artículos</button>
+      </div>
+      ${this.cartPanel(false)}
+    </div>`;
+  },
+  payLive(){
+    const t=this.saleTotals();const r=Number(this.sale.received)||0;const el=$('pay-change');
+    if(!el)return;const ch=r-t.total;
+    el.textContent=r?money(ch):'—';el.style.color=ch<0?'var(--red)':'#16A34A';
+  },
+
+  async checkout(){
+    const s=this.sale;const t=this.saleTotals();
+    if(!s.method||!s.cart.length)return;
+    $('btn-cobrar').disabled=true;$('btn-cobrar').textContent='Cobrando...';
+    const c=s.customer;const bId=this.branch?this.branch.id:null;
+    const saleId=uuid();const nowIso=new Date().toISOString();
+    let qd=false; // si una operación se encola, las que dependen de ella también
+    const put=async(table,payload)=>{
+      if(qd){Q.push({t:'insert',table,payload});return{queued:true};}
+      const r=await Q.insert(table,payload);
+      if(r.queued)qd=true;
+      return r;
+    };
+    // 1) venta
+    const salePayload={id:saleId,branch_id:bId,shift_id:this.shift.id,customer_id:c?c.id:null,
+      member_id:(c&&c.profile_id)||null,staff_id:this.user.id,sold_by:this.user.id,
+      payment_method:s.method,total:t.total,promo_id:s.promoId||null,created_at:nowIso};
+    let r=await this.insertSale(salePayload);
+    if(r.error){toast('No se pudo cobrar: '+r.error.message,true);$('btn-cobrar').disabled=false;$('btn-cobrar').textContent='Cobrar '+money(t.total);return;}
+    if(r.queued)qd=true;
+    // 2) partidas + efectos
+    for(const it of s.cart){
+      let productId=it.id;
+      if(it.kind==='plan'){
+        const plan=this.plans.find(x=>x.id===it.id);
+        productId=await this.ensureMembershipProduct(plan,put);
+        const rs=await this.sellMembership(c,plan,it.qty,it.price,s.method,put);
+        if(rs&&rs.error){toast('Venta cobrada pero la membresía falló: '+rs.error.message+' — ¿ya corriste pos_migration2.sql?',true);}
+      }else if(it.kind==='coach'){
+        productId=await this.ensureCoachProduct(it,put);
+      }
+      await put('sale_items',{id:uuid(),sale_id:saleId,product_id:productId,quantity:it.qty,unit_price:it.price});
+      if(it.kind==='product'){
+        if(qd)Q.push({t:'stock',branch_id:bId,product_id:it.id,delta:-it.qty,reason:'venta',staff_id:this.user.id,moveId:uuid()});
+        else await Q.stockDelta(bId,it.id,-it.qty,'venta',this.user.id);
+        const st=this.stock.find(x=>x.product_id===it.id&&x.branch_id===bId);
+        if(st)st.qty=Number(st.qty)-it.qty;else this.stock.push({branch_id:bId,product_id:it.id,qty:-it.qty,min_qty:0});
+        cset('stock',this.stock);
+      }
+    }
+    // 3) datos para el ticket
+    const bs=c?this.bestSub(c):null;
+    this.lastSale={folio:saleId.slice(0,8).toUpperCase(),date:new Date().toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}),
+      branch:this.branch?this.branch.name:'',items:s.cart.map(x=>({name:x.name,qty:x.qty,price:x.price})),
+      discount:t.discount,total:t.total,method:s.method,received:Number(s.received)||0,
+      customer:c?c.full_name:'',staff:this.profileName,
+      membershipEnd:(bs&&s.cart.some(x=>x.kind==='plan'))?fdate(bs.end_date):null};
+    // 4) si venía de una solicitud de la app, marcarla como cobrada
+    if(this._reqId){
+      Q.update('pos_requests',{id:this._reqId},{status:'cobrada'});
+      this.requests=this.requests.filter(x=>x.id!==this._reqId);cset('requests',this.requests);
+      this._reqId=null;
+    }
+    // 5) actualizar cache de ventas del turno
+    const sc=cget('shift_sales')||[];sc.unshift(salePayload);cset('shift_sales',sc);
+    s.queued=qd;s.step=4;this.go('sale');this.refreshChip();
+    Q.badge();
+  },
+  printTicket(){
+    const t=this.lastSale;if(!t)return;
+    const rows=t.items.map(i=>'<div class="row"><span>'+i.qty+' x '+esc(i.name)+'</span><span>'+money(i.price*i.qty)+'</span></div>').join('');
+    const w=window.open('','ticket','width=400,height=640');
+    if(!w){toast('Permite las ventanas emergentes para imprimir.',true);return;}
+    w.document.write('<html><head><title>Ticket '+t.folio+'</title><style>'
+      +'body{font-family:Courier New,monospace;font-size:12px;width:280px;margin:0 auto;padding:14px 0;color:#000}'
+      +'.c{text-align:center}.b{font-weight:bold}.line{border-top:1px dashed #000;margin:8px 0}'
+      +'.row{display:flex;justify-content:space-between;gap:8px}'
+      +'</style></head><body>'
+      +'<img src="voltengym.png" style="width:54px;height:auto;display:block;margin:0 auto 6px;" alt="">'
+      +'<div class="c b" style="font-size:17px">VOLTEN GYM</div>'
+      +'<div class="c">'+esc(t.branch)+'</div>'
+      +'<div class="c">'+esc(t.date)+' · Folio '+t.folio+'</div>'
+      +'<div class="line"></div>'+rows+'<div class="line"></div>'
+      +(t.discount?'<div class="row"><span>Descuento</span><span>-'+money(t.discount)+'</span></div>':'')
+      +'<div class="row b" style="font-size:14px"><span>TOTAL</span><span>'+money(t.total)+'</span></div>'
+      +'<div class="row"><span>Pago</span><span>'+(PAY_LABEL[t.method]||'')+'</span></div>'
+      +(t.method==='cash'&&t.received?'<div class="row"><span>Recibido</span><span>'+money(t.received)+'</span></div><div class="row"><span>Cambio</span><span>'+money(t.received-t.total)+'</span></div>':'')
+      +'<div class="line"></div>'
+      +(t.customer?'<div>Cliente: '+esc(t.customer)+'</div>':'')
+      +(t.membershipEnd?'<div class="b">Membresia vigente hasta: '+esc(t.membershipEnd)+'</div>':'')
+      +'<div>Atendio: '+esc(t.staff)+'</div>'
+      +'<div class="line"></div>'
+      +'<div class="c">Gracias por entrenar con nosotros</div>'
+      +'</body></html>');
+    w.document.close();w.focus();
+    setTimeout(()=>{try{w.print();}catch(e){}},350);
+  },
+  async insertSale(payload){
+    if(navigator.onLine){
+      try{
+        let {error}=await sb.from('sales').insert(payload);
+        if(error&&/register_id/i.test(error.message||'')){
+          const regId=await this.legacyRegister();
+          if(regId){const r2=await sb.from('sales').insert(Object.assign({},payload,{register_id:regId}));error=r2.error;}
+        }
+        if(!error)return{ok:true};
+        if(!isNetErr(error))return{error};
+      }catch(e){if(!isNetErr(e))return{error:e};}
+    }
+    Q.push({t:'insert',table:'sales',payload});
+    return{queued:true};
+  },
+  async legacyRegister(){
+    const k='legacyreg_'+this.shift.id;const c=cget(k);if(c)return c;
+    const {data,error}=await sb.from('cash_registers').insert({opened_by:this.user.id,opening_amount:this.shift.opening_cash||0,notes:'auto-POS'}).select().single();
+    if(error||!data)return null;
+    cset(k,data.id);return data.id;
+  },
+  async ensureMembershipProduct(plan,put){
+    let p=this.products.find(x=>x.plan_id===plan.id);
+    if(p)return p.id;
+    const payload={id:uuid(),name:'Membresía '+plan.name,type:'membership',price:Number(plan.price),plan_id:plan.id,active:true};
+    await put('products',payload);
+    this.products.push(payload);cset('products',this.products);
+    return payload.id;
+  },
+  async sellMembership(customer,plan,qty,priceEach,method,put){
+    if(!customer)return{error:{message:'sin cliente'}};
+    // Plan FAMILIAR: la vigencia se aplica a TODOS los miembros de la familia, paga solo este cliente
+    let targets=[customer];
+    if(plan.is_family&&customer.family_id){
+      const fam=this.customers.filter(x=>x.family_id===customer.family_id);
+      if(fam.length)targets=fam;
+      if(plan.max_members&&fam.length>Number(plan.max_members))
+        toast('Ojo: la familia tiene '+fam.length+' miembros y este plan cubre máximo '+plan.max_members+'.',true);
+    }
+    let firstErr=null;
+    for(const m of targets){
+      const cur=this.bestSub(m);
+      let base=new Date();
+      if(cur&&daysLeft(cur.end_date)>=0)base=new Date(cur.end_date+'T12:00:00'); // acumula: arranca donde termina la actual
+      const end=new Date(base.getTime()+Number(plan.duration_days)*qty*864e5);
+      const sub={id:uuid(),member_id:m.profile_id||null,customer_id:m.id,plan_id:plan.id,
+        status:'active',start_date:todayISO(),end_date:dISO(end),
+        branch_id:this.branch?this.branch.id:null,sold_by:this.user.id,shift_id:this.shift.id,
+        price_paid:m.id===customer.id?priceEach*qty:0,payment_method:method,family_id:m.family_id||null};
+      const r=await put('subscriptions',sub);
+      if(r.error){firstErr=r;continue;}
+      this.subs.unshift(sub);
+      if(m.id===customer.id)await put('payments',{id:uuid(),subscription_id:sub.id,amount:priceEach*qty,method:method,recorded_by:this.user.id});
+    }
+    cset('subs',this.subs);
+    return firstErr||{ok:true};
+  },
+
+  saleStep4(){
+    const s=this.sale;const t=this.saleTotals();
+    const c=s.customer;const sub=c?this.bestSub(c):null;
+    return `
+    <div class="panel" style="text-align:center;padding:56px 30px;">
+      <div style="width:74px;height:74px;border-radius:50%;background:#DCFCE7;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:34px;">✓</div>
+      <h2 style="font-size:30px;">Venta cobrada</h2>
+      <div class="psub" style="margin-bottom:6px">${money(t.total)} · ${PAY_LABEL[s.method]||''}${c?' · '+esc(c.full_name):''}</div>
+      ${sub&&s.cart.some(x=>x.kind==='plan')?`<div style="font-size:15px;font-weight:700;color:var(--orange);margin-bottom:6px">Membresía vigente hasta el ${fdate(sub.end_date)} (le quedan ${daysLeft(sub.end_date)} días en total)</div>`:''}
+      ${s.queued?'<div class="tag tag-orange" style="margin-top:8px">Guardada localmente — se sincroniza al volver el internet</div>':''}
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:26px;">
+        <button class="btn btn-ghost" onclick="Pos.printTicket()"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Imprimir ticket</button>
+        <button class="btn btn-primary" onclick="Pos.startSale()">+ Otra venta</button>
+        <button class="btn btn-ghost" onclick="Pos.sale=null;Pos.go('dashboard')">Ir al inicio</button>
+      </div>
+    </div>`;
+  },
+
+  /* ═══════ CLIENTES ═══════ */
+  view_customers(){
+    return `
+    <div class="topbar">
+      <div><h1>Clientes</h1><div class="sub">Fichas, vinculación con la app y membresías</div></div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        ${this.branchSelector()}
+        <button class="btn btn-primary" onclick="Pos.newCustomerModal()">+ Nuevo cliente</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div style="display:flex;gap:12px;margin-bottom:18px;">
+        <div class="search-wrap"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="inp" placeholder="Buscar por nombre, teléfono o correo..." value="${esc(this.custQuery)}" oninput="Pos.custQuery=this.value;Pos.renderCustTable()"></div>
+      </div>
+      <div id="cust-table">${this.custTable()}</div>
+    </div>`;
+  },
+  custTable(){
+    const q=this.custQuery.toLowerCase();
+    let list=this.customers;
+    if(q)list=list.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q));
+    if(!list.length)return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
+    return `<table><thead><tr><th>Cliente</th><th>Teléfono</th><th>App</th><th>Membresía</th><th>Alta</th><th></th></tr></thead><tbody>${
+      list.slice(0,60).map(c=>`<tr>
+        <td style="cursor:pointer" onclick="Pos.openCustomer('${c.id}')"><div style="display:flex;align-items:center;gap:10px;">${this.custAvatar(c,32)}<b>${esc(c.full_name)}</b>${c.suspended?' <span class="tag tag-red">Suspendido</span>':''}</div></td>
+        <td>${esc(c.phone||'—')}</td>
+        <td>${c.profile_id?'<span class="tag tag-green">Vinculada</span>':'<span class="tag tag-gray">—</span>'}</td>
+        <td>${this.membershipTag(c)}</td>
+        <td style="color:var(--muted)">${fdate(c.created_at)}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.openCustomer('${c.id}')">Ver ficha</button>
+          <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.startSale('${c.id}')">Vender</button>
+        </td></tr>`).join('')}</tbody></table>`;
+  },
+  renderCustTable(){$('cust-table').innerHTML=this.custTable();},
+  async after_customers(){
+    try{
+      const {data}=await sb.from('customers').select('*').order('full_name');
+      if(data){this.customers=data;cset('customers',data);this.renderCustTable();}
+      const {data:su}=await sb.from('subscriptions').select('*').order('end_date',{ascending:false});
+      if(su){this.subs=su;cset('subs',su);this.renderCustTable();}
+    }catch(e){}
+  },
+
+  newCustomerModal(fromSale){
+    this._newCustLink=null;
+    openModal(`
+      <h3>Nuevo cliente</h3>
+      <p class="msub">Ficha del cliente en el gimnasio</p>
+      <div class="field"><label>Nombre completo *</label><input class="inp" id="nc-name" placeholder="Nombre y apellido"></div>
+      <div class="frow">
+        <div class="field"><label>Teléfono / WhatsApp</label><input class="inp" id="nc-phone" placeholder="656..."></div>
+        <div class="field"><label>Correo</label><input class="inp" id="nc-email" placeholder="opcional"></div>
+      </div>
+      <div class="field"><label>¿Ya tiene cuenta en la app? (buscar y vincular)</label>
+        <input class="inp" id="nc-app-q" placeholder="Buscar por nombre o correo de la app..." oninput="Pos.ncSearchApp(this.value)">
+        <div id="nc-app-res" style="margin-top:8px"></div>
+      </div>
+      <div class="field"><label>Notas</label><input class="inp" id="nc-notes" placeholder="opcional"></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.saveNewCustomer(${fromSale?'true':'false'})">Guardar cliente</button>
+    `);
+    setTimeout(()=>$('nc-name').focus(),50);
+  },
+  ncSearchApp(q){
+    q=(q||'').toLowerCase().trim();
+    if(q.startsWith(QR_PREFIX))q=q.slice(QR_PREFIX.length); // QR escaneado de la app
+    const box=$('nc-app-res');
+    if(!q){box.innerHTML='';this._newCustLink=null;return;}
+    const linked=new Set(this.customers.map(c=>c.profile_id).filter(Boolean));
+    const res=this.appProfiles.filter(p=>p.role==='member'&&!linked.has(p.id)&&((p.full_name||'').toLowerCase().includes(q)||(p.email||'').toLowerCase().includes(q)||p.id.startsWith(q))).slice(0,5);
+    box.innerHTML=res.length?res.map(p=>`
+      <button class="cust-row" style="${this._newCustLink===p.id?'border-color:var(--orange);background:#FFF;':''}" onclick="Pos.ncPickApp('${p.id}')">
+        <div class="av2">${esc((p.full_name||p.email||'?')[0].toUpperCase())}</div>
+        <div class="cd"><b>${esc(p.full_name||'(sin nombre)')}</b><span>${esc(p.email||'')}</span></div>
+        ${this._newCustLink===p.id?'<span class="tag tag-orange">Seleccionado</span>':''}
+      </button>`).join(''):'<div style="font-size:13px;color:var(--muted);font-weight:500">Sin coincidencias en la app.</div>';
+  },
+  ncPickApp(pid){
+    this._newCustLink=this._newCustLink===pid?null:pid;
+    this.ncSearchApp($('nc-app-q').value);
+    if(this._newCustLink){
+      const p=this.appProfiles.find(x=>x.id===pid);
+      if(p&&!$('nc-name').value)$('nc-name').value=p.full_name||'';
+      if(p&&!$('nc-email').value)$('nc-email').value=p.email||'';
+    }
+  },
+  async saveNewCustomer(fromSale){
+    const name=$('nc-name').value.trim();
+    if(!name){toast('El nombre es obligatorio.',true);return;}
+    const payload={id:uuid(),full_name:name,phone:$('nc-phone').value.trim()||null,email:$('nc-email').value.trim()||null,
+      notes:$('nc-notes').value.trim()||null,profile_id:this._newCustLink||null,
+      branch_id:this.branch?this.branch.id:null,suspended:false,created_at:new Date().toISOString()};
+    const r=await Q.insert('customers',payload);
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    this.customers.unshift(payload);cset('customers',this.customers);
+    closeModal();toast(r.queued?'Cliente guardado local — sincroniza al volver internet':'Cliente creado ✓');
+    if(fromSale){this.sale.customer=payload;this.sale.quick=false;this.sale.step=2;this.go('sale');}
+    else if(this.nav==='customers')this.renderCustTable();
+  },
+
+  async openCustomer(id){
+    const c=this.customers.find(x=>x.id===id);if(!c)return;
+    const subs=this.subsOf(c).slice(0,6);
+    const appProf=c.profile_id?this.appProfiles.find(p=>p.id===c.profile_id):null;
+    openModal(`
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
+        ${(()=>{const p=c.profile_id?this.appProfiles.find(x=>x.id===c.profile_id):null;const url=c.photo_url||(p&&p.avatar_url);
+          return url?`<div class="av2" style="width:54px;height:54px;border-radius:18px;"><img src="${esc(url)}" alt=""></div>`
+          :`<div class="av2" style="width:54px;height:54px;font-size:20px;border-radius:18px;background:linear-gradient(135deg,#F97316,#EA580C);color:#FFF">${esc((c.full_name||'?')[0].toUpperCase())}</div>`;})()}
+        <div style="flex:1"><h3 style="margin-bottom:2px">${esc(c.full_name)}</h3>
+        <div style="font-size:13px;color:var(--muted);font-weight:600">${esc(c.phone||'sin teléfono')} · ${esc(c.email||'sin correo')}</div></div>
+        ${this.membershipTag(c)}
+      </div>
+      <div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-primary" onclick="closeModal();Pos.startSale('${c.id}')">Vender membresía</button>
+        ${c.phone?`<a class="btn btn-sm" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(c.phone,'Hola '+(c.full_name||'').split(' ')[0]+' 💪 Te saludamos de Volten Gym.')}">WhatsApp</a>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="Pos.editCustomerModal('${c.id}')">Editar datos</button>
+        <button class="btn btn-sm ${c.suspended?'btn-dark':'btn-danger'}" onclick="Pos.toggleSuspend('${c.id}')">${c.suspended?'Reactivar acceso':'Suspender acceso'}</button>
+      </div>
+      <div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Cuenta de la app</div>
+        ${appProf?`
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="font-size:14px;font-weight:700">${esc(appProf.full_name||'')} <span style="color:var(--muted);font-weight:500">· ${esc(appProf.email||'')}</span> <span class="tag tag-green">Vinculada</span></div>
+            <button class="btn-xs btn btn-ghost" onclick="Pos.unlinkApp('${c.id}')">Desvincular</button>
+          </div>`
+        :`
+          <input class="inp" id="link-q" placeholder="Escanea el QR del cliente aquí, o busca por nombre/correo..." oninput="Pos.linkSearch('${c.id}',this.value)" onkeydown="if(event.key==='Enter')Pos.linkSearch('${c.id}',this.value,true)">
+          <div id="link-res" style="margin-top:8px;font-size:13px;color:var(--muted);font-weight:500">El cliente abre su app → Perfil → "Mi código QR" y lo escaneas con el lector USB, o búscalo por correo.</div>
+        `}
+      </div>
+      ${this.familyBlock(c)}
+      <div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">Accesos del cliente</div>
+        <div class="row-line"><span class="k">Código QR / Nº de cuenta</span><span class="v" style="font-family:monospace;letter-spacing:.05em">${esc((c.profile_id||c.id).slice(0,8).toUpperCase())}</span></div>
+        <div class="row-line"><span class="k">Huella dactilar</span>${c.fingerprint_id?'<span class="tag tag-green">Registrada</span>':`<button class="btn-xs btn btn-ghost" onclick="Pos.enrollBio('${c.id}','huella')">Registrar</button>`}</div>
+        <div class="row-line"><span class="k">Reconocimiento facial</span>${c.face_id?'<span class="tag tag-green">Registrado</span>':`<button class="btn-xs btn btn-ghost" onclick="Pos.enrollBio('${c.id}','rostro')">Registrar</button>`}</div>
+      </div>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Historial de membresías</div>
+      ${subs.length?`<table><thead><tr><th>Plan</th><th>Vigencia</th><th>Pagó</th><th>Estado</th></tr></thead><tbody>${
+        subs.map(s=>`<tr><td style="font-weight:700">${esc(this.planName(s.plan_id))}</td><td>${fdate(s.start_date)} → ${fdate(s.end_date)}</td><td>${s.price_paid!=null?money(s.price_paid):'—'}</td><td>${daysLeft(s.end_date)>=0&&s.status!=='canceled'?'<span class="tag tag-green">Vigente</span>':'<span class="tag tag-gray">Vencida</span>'}</td></tr>`).join('')
+      }</tbody></table>`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin membresías todavía.</div>'}
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 8px">Últimas visitas</div>
+      <div id="cust-visits" style="font-size:13px;color:var(--muted);font-weight:500">Cargando...</div>
+    `,true);
+    // visitas async
+    try{
+      const {data}=await sb.from('checkins').select('created_at,method,granted,checked_out_at').or('customer_id.eq.'+c.id+(c.profile_id?',member_id.eq.'+c.profile_id:'')).order('created_at',{ascending:false}).limit(8);
+      const el=$('cust-visits');
+      if(el)el.innerHTML=(data&&data.length)?'<table><thead><tr><th>Fecha</th><th>Método</th><th>Entrada</th><th>Salida</th><th></th></tr></thead><tbody>'+data.map(v=>`<tr><td>${fdate(v.created_at)}</td><td>${METHOD_LABEL[v.method]||v.method}</td><td>${ftime(v.created_at)}</td><td>${v.checked_out_at?ftime(v.checked_out_at):'—'}</td><td>${v.granted?'<span class="tag tag-green">OK</span>':'<span class="tag tag-red">Rechazado</span>'}</td></tr>`).join('')+'</tbody></table>':'Sin visitas registradas.';
+    }catch(e){const el=$('cust-visits');if(el)el.textContent='Sin conexión — no se pudo cargar el historial.';}
+  },
+  linkSearch(custId,q,enter){
+    q=(q||'').trim();
+    if(q.toLowerCase().startsWith(QR_PREFIX))q=q.slice(QR_PREFIX.length); // QR de la app
+    const box=$('link-res');
+    if(q.length<3){box.innerHTML='Escribe al menos 3 letras, el número de cuenta, o escanea el QR.';return;}
+    const ql=q.toLowerCase();
+    const linked=new Set(this.customers.map(c=>c.profile_id).filter(Boolean));
+    const res=this.appProfiles.filter(p=>p.role==='member'&&!linked.has(p.id)&&(p.id===ql||p.id.startsWith(ql)||(p.full_name||'').toLowerCase().includes(ql)||(p.email||'').toLowerCase().includes(ql))).slice(0,5);
+    // QR escaneado o número de cuenta exacto → vincular directo
+    if(enter&&res.length===1){this.linkApp(custId,res[0].id);return;}
+    box.innerHTML=res.length?res.map(p=>`
+      <button class="cust-row" onclick="Pos.linkApp('${custId}','${p.id}')">
+        <div class="av2">${esc((p.full_name||p.email||'?')[0].toUpperCase())}</div>
+        <div class="cd"><b>${esc(p.full_name||'(sin nombre)')}</b><span>${esc(p.email||'')}</span></div>
+        <span class="tag tag-orange">Vincular</span>
+      </button>`).join(''):'Sin coincidencias. Verifica el correo, el número de cuenta o el QR.';
+  },
+  async linkApp(custId,profileId){
+    const c=this.customers.find(x=>x.id===custId);if(!c)return;
+    const r=await Q.update('customers',{id:custId},{profile_id:profileId});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    c.profile_id=profileId;cset('customers',this.customers);
+    // pasar sus membresías de ficha a la cuenta app (para que las vea en su teléfono)
+    try{await sb.from('subscriptions').update({member_id:profileId}).eq('customer_id',custId).is('member_id',null);}catch(e){}
+    this.subs.forEach(s=>{if(s.customer_id===custId&&!s.member_id)s.member_id=profileId;});cset('subs',this.subs);
+    toast('Cuenta de la app vinculada ✓ — su membresía ya aparece en su teléfono');
+    this.openCustomer(custId);
+  },
+  async unlinkApp(custId){
+    const c=this.customers.find(x=>x.id===custId);if(!c)return;
+    const r=await Q.update('customers',{id:custId},{profile_id:null});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    c.profile_id=null;cset('customers',this.customers);
+    toast('Cuenta desvinculada');this.openCustomer(custId);
+  },
+  enrollBio(custId,tipo){
+    openModal(`
+      <h3>Registrar ${tipo==='huella'?'huella dactilar':'rostro'}</h3>
+      <p class="msub">Así funcionará cuando el equipo esté instalado</p>
+      <div style="background:var(--gray);border-radius:16px;padding:18px;font-size:14px;font-weight:500;line-height:1.7;color:#374151;">
+        1. Picas este botón y el lector ${tipo==='huella'?'de huella':'facial'} entra en modo registro.<br>
+        2. El cliente ${tipo==='huella'?'pone su dedo 2–3 veces':'mira a la cámara un momento'}.<br>
+        3. El ID biométrico queda guardado en su ficha — desde ese momento entra y sale solo con ${tipo==='huella'?'el dedo':'la cara'}, y el sistema valida su membresía al instante.
+      </div>
+      <div style="background:#FEF3C7;color:#92400E;border-radius:12px;padding:12px 14px;font-size:13px;font-weight:600;margin-top:14px;">
+        El lector físico aún no está conectado. En cuanto tengan la marca y modelo del equipo, se hace el puente y este botón queda funcionando (la base de datos ya está lista).
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:16px" onclick="closeModal()">Entendido</button>
+    `);
+  },
+
+  /* ── Familias: un pagador cubre a varios miembros ── */
+  familyBlock(c){
+    const fam=c.family_id?this.families.find(f=>f.id===c.family_id):null;
+    const members=fam?this.customers.filter(x=>x.family_id===fam.id):[];
+    return `<div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Familia</div>
+        ${fam?`<button class="btn-xs btn btn-ghost" onclick="Pos.famAddMemberModal('${fam.id}','${c.id}')">+ Agregar miembro</button>`:''}
+      </div>
+      ${fam?`
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px">${esc(fam.name||'Familia')} · ${members.length} miembro${members.length===1?'':'s'}</div>
+        ${members.map(m=>`<div class="row-line" style="padding:8px 0">
+          <span style="font-size:13.5px;font-weight:600">${esc(m.full_name)}${fam.payer_customer_id===m.id?' <span class="tag tag-orange">Titular · paga</span>':''}</span>
+          <button class="btn-xs btn btn-danger" onclick="Pos.famRemove('${m.id}','${c.id}')">Quitar</button>
+        </div>`).join('')}
+        <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:8px">Al cobrarle un plan <b>familiar</b> a cualquier miembro, la vigencia se aplica a toda la familia — paga solo uno.</div>
+      `:`
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <span style="font-size:13px;color:var(--muted);font-weight:500;flex:1">Sin familia. Crea una para que un solo pago cubra a varios (ej. papá paga por esposa e hijos).</span>
+          <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.createFamily('${c.id}')">Crear familia</button>
+          ${this.families.length?`<button class="btn-xs btn btn-ghost" onclick="Pos.joinFamilyModal('${c.id}')">Unir a existente</button>`:''}
+        </div>
+      `}
+    </div>`;
+  },
+  createFamily(custId){
+    const c=this.customers.find(x=>x.id===custId);if(!c)return;
+    const apellido=(c.full_name||'').trim().split(' ').slice(-1)[0]||'';
+    openModal(`
+      <h3>Crear familia</h3><p class="msub">${esc(c.full_name)} queda como titular (quien paga)</p>
+      <div class="field"><label>Nombre de la familia</label><input class="inp" id="fam-name" value="Familia ${esc(apellido)}"></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.saveFamily('${custId}')">Crear familia</button>
+    `);
+  },
+  async saveFamily(custId){
+    const name=$('fam-name').value.trim()||'Familia';
+    const payload={id:uuid(),name,payer_customer_id:custId,discount_pct:0,created_at:new Date().toISOString()};
+    const r=await Q.insert('families',payload);
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    this.families.push(payload);cset('families',this.families);
+    await Q.update('customers',{id:custId},{family_id:payload.id});
+    const c=this.customers.find(x=>x.id===custId);if(c)c.family_id=payload.id;
+    cset('customers',this.customers);
+    toast('Familia creada ✓ — agrega a los demás miembros');this.openCustomer(custId);
+  },
+  joinFamilyModal(custId){
+    openModal(`
+      <h3>Unir a familia existente</h3><p class="msub">El cliente compartirá el plan familiar</p>
+      <div class="field"><label>Familia</label><select class="inp" id="fam-pick">${this.families.map(f=>`<option value="${f.id}">${esc(f.name||'Familia')}</option>`).join('')}</select></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.joinFamily('${custId}')">Unir a la familia</button>
+    `);
+  },
+  async joinFamily(custId){
+    const famId=$('fam-pick').value;if(!famId)return;
+    const r=await Q.update('customers',{id:custId},{family_id:famId});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    const c=this.customers.find(x=>x.id===custId);if(c)c.family_id=famId;
+    cset('customers',this.customers);toast('Unido a la familia ✓');this.openCustomer(custId);
+  },
+  famAddMemberModal(famId,fromCustId){
+    const avail=this.customers.filter(x=>!x.family_id);
+    if(!avail.length){toast('No hay clientes sin familia — primero crea la ficha del nuevo miembro en Clientes.',true);return;}
+    openModal(`
+      <h3>Agregar miembro a la familia</h3><p class="msub">Solo aparecen clientes sin familia</p>
+      <div class="field"><label>Cliente</label><select class="inp" id="fam-member">${avail.map(x=>`<option value="${x.id}">${esc(x.full_name)}</option>`).join('')}</select></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.famAddMember('${famId}','${fromCustId}')">Agregar</button>
+    `);
+  },
+  async famAddMember(famId,fromCustId){
+    const id=$('fam-member').value;if(!id)return;
+    const r=await Q.update('customers',{id},{family_id:famId});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    const c=this.customers.find(x=>x.id===id);if(c)c.family_id=famId;
+    cset('customers',this.customers);toast('Miembro agregado ✓');this.openCustomer(fromCustId);
+  },
+  async famRemove(custId,fromCustId){
+    const r=await Q.update('customers',{id:custId},{family_id:null});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    const c=this.customers.find(x=>x.id===custId);if(c)c.family_id=null;
+    cset('customers',this.customers);toast('Quitado de la familia');this.openCustomer(fromCustId);
+  },
+
+  editCustomerModal(id){
+    const c=this.customers.find(x=>x.id===id);if(!c)return;
+    openModal(`
+      <h3>Editar cliente</h3><p class="msub">${esc(c.full_name)}</p>
+      <div class="field"><label>Nombre completo</label><input class="inp" id="ec-name" value="${esc(c.full_name)}"></div>
+      <div class="frow">
+        <div class="field"><label>Teléfono</label><input class="inp" id="ec-phone" value="${esc(c.phone||'')}"></div>
+        <div class="field"><label>Correo</label><input class="inp" id="ec-email" value="${esc(c.email||'')}"></div>
+      </div>
+      <div class="field"><label>Notas</label><textarea class="inp" id="ec-notes" rows="2">${esc(c.notes||'')}</textarea></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.saveCustomerEdit('${c.id}')">Guardar cambios</button>
+    `);
+  },
+  async saveCustomerEdit(id){
+    const c=this.customers.find(x=>x.id===id);if(!c)return;
+    const patch={full_name:$('ec-name').value.trim()||c.full_name,phone:$('ec-phone').value.trim()||null,email:$('ec-email').value.trim()||null,notes:$('ec-notes').value.trim()||null};
+    const r=await Q.update('customers',{id},patch);
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    Object.assign(c,patch);cset('customers',this.customers);
+    toast('Cliente actualizado ✓');this.openCustomer(id);
+    if(this.nav==='customers')this.renderCustTable();
+  },
+  async toggleSuspend(id){
+    const c=this.customers.find(x=>x.id===id);if(!c)return;
+    const r=await Q.update('customers',{id},{suspended:!c.suspended});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    c.suspended=!c.suspended;cset('customers',this.customers);
+    toast(c.suspended?'Acceso suspendido — la puerta lo rechazará':'Acceso reactivado ✓');
+    this.openCustomer(id);if(this.nav==='customers')this.renderCustTable();
+  },
+
+  /* ═══════ MEMBRESÍAS ═══════ */
+  view_memberships(){
+    const withSub=this.customers.map(c=>({c,s:this.bestSub(c)})).filter(x=>x.s);
+    const act=withSub.filter(x=>daysLeft(x.s.end_date)>7).length;
+    const exp7=withSub.filter(x=>{const d=daysLeft(x.s.end_date);return d>=0&&d<=7;});
+    const dead=withSub.filter(x=>{const d=daysLeft(x.s.end_date);return d<0&&d>=-30;});
+    return `
+    <div class="topbar">
+      <div><h1>Membresías</h1><div class="sub">Planes, vigencias y renovaciones</div></div>
+      <div style="display:flex;gap:12px;align-items:center;">${this.branchSelector()}
+      <button class="btn btn-ghost" onclick="Pos.campaignModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>Campaña WhatsApp</button>
+      ${this.role==='admin'?'<button class="btn btn-ghost" onclick="Pos.planModal()">+ Nuevo plan</button>':''}
+      <button class="btn btn-primary" onclick="Pos.startSale()">Vender membresía</button></div>
+    </div>
+    <div class="cards" style="grid-template-columns:repeat(3,1fr);">
+      <div class="card"><div class="lbl">Activas <span class="dot" style="background:var(--green)"></span></div><div class="val">${act}</div><div class="foot">con más de 7 días</div></div>
+      <div class="card"><div class="lbl">Por vencer <span class="dot" style="background:var(--amber)"></span></div><div class="val">${exp7.length}</div><div class="foot">en los próximos 7 días</div></div>
+      <div class="card"><div class="lbl">Vencidas <span class="dot" style="background:var(--red)"></span></div><div class="val">${dead.length}</div><div class="foot">últimos 30 días — recuperarlos</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+      <div class="panel">
+        <h2>Por vencer</h2><div class="psub">Mándales WhatsApp antes de que venzan</div>
+        ${exp7.length?exp7.sort((a,b)=>a.s.end_date<b.s.end_date?-1:1).map(x=>`
+          <div class="row-line">
+            <div><div style="font-weight:700">${esc(x.c.full_name)}</div><div style="font-size:12px;color:var(--muted)">${esc(this.planName(x.s.plan_id))} · vence ${fdate(x.s.end_date)} (${daysLeft(x.s.end_date)} días)</div></div>
+            <div style="display:flex;gap:6px;">
+              ${x.c.phone?`<a class="btn-xs btn" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(x.c.phone,'Hola '+(x.c.full_name||'').split(' ')[0]+' 💪 Tu membresía de Volten Gym vence el '+fdate(x.s.end_date)+'. Renueva a tiempo y sigue con todo. ¡Te esperamos!')}">WhatsApp</a>`:''}
+              <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.startSale('${x.c.id}','${x.s.plan_id}')">Renovar</button>
+            </div>
+          </div>`).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:10px 0">Nadie por vencer esta semana.</div>'}
+        <h2 style="margin-top:24px">Vencidas recientes</h2><div class="psub">Clientes para recuperar</div>
+        ${dead.length?dead.sort((a,b)=>a.s.end_date>b.s.end_date?-1:1).slice(0,10).map(x=>`
+          <div class="row-line">
+            <div><div style="font-weight:700">${esc(x.c.full_name)}</div><div style="font-size:12px;color:var(--muted)">venció ${fdate(x.s.end_date)}</div></div>
+            <div style="display:flex;gap:6px;">
+              ${x.c.phone?`<a class="btn-xs btn" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(x.c.phone,'Hola '+(x.c.full_name||'').split(' ')[0]+', te extrañamos en Volten Gym 🧡 Tu membresía venció el '+fdate(x.s.end_date)+'. Vuelve esta semana y retoma tu progreso.')}">WhatsApp</a>`:''}
+              <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.startSale('${x.c.id}','${x.s.plan_id}')">Reactivar</button>
+            </div>
+          </div>`).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:10px 0">Sin vencidas recientes.</div>'}
+        <h2 style="margin-top:24px">Inactivos</h2><div class="psub">Con membresía vigente pero 2+ semanas sin venir — recupéralos</div>
+        <div id="inact-list" style="color:var(--muted);font-size:13px;font-weight:500;padding:4px 0">Cargando...</div>
+      </div>
+      <div class="panel">
+        <h2>Catálogo de planes</h2><div class="psub">${this.role==='admin'?'Toca un plan para editar precio o duración':'Solo el admin edita precios'}</div>
+        <table><thead><tr><th>Plan</th><th>Días</th><th>Precio</th><th>Estado</th></tr></thead><tbody>
+        ${this.plans.map(p=>`<tr ${this.role==='admin'?`style="cursor:pointer" onclick="Pos.planModal('${p.id}')"`:''}>
+          <td style="font-weight:700">${esc(p.name)}${p.is_family?' <span class="tag tag-gray">familiar</span>':''}${p.branch_id?' <span class="tag tag-orange">'+esc((this.branches.find(b=>b.id===p.branch_id)||{}).name||'')+'</span>':''}</td>
+          <td>${p.duration_days}</td>
+          <td style="font-weight:800;color:var(--orange)">${money(p.price)}</td>
+          <td>${p.active!==false?'<span class="tag tag-green">Activo</span>':'<span class="tag tag-gray">Inactivo</span>'}</td>
+        </tr>`).join('')}</tbody></table>
+      </div>
+    </div>`;
+  },
+  async after_memberships(){
+    try{
+      const since=new Date(Date.now()-14*864e5).toISOString();
+      const {data}=await sb.from('checkins').select('customer_id,member_id').gte('created_at',since).eq('granted',true);
+      const seen=new Set();
+      (data||[]).forEach(x=>{if(x.customer_id)seen.add(x.customer_id);if(x.member_id)seen.add(x.member_id);});
+      const inact=this.customers.filter(c=>{
+        const s=this.bestSub(c);
+        return s&&daysLeft(s.end_date)>=0&&!seen.has(c.id)&&!(c.profile_id&&seen.has(c.profile_id));
+      });
+      const el=$('inact-list');if(!el)return;
+      el.innerHTML=inact.length?inact.slice(0,10).map(c=>`
+        <div class="row-line">
+          <div><div style="font-weight:700;color:var(--ink)">${esc(c.full_name)}</div><div style="font-size:12px;color:var(--muted)">sin visitas en 2+ semanas</div></div>
+          ${c.phone?`<a class="btn-xs btn" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(c.phone,'Hola '+(c.full_name||'').split(' ')[0]+', te extrañamos en Volten Gym. Tu membresía sigue activa — vuelve esta semana y retoma tu progreso. ¡Te esperamos!')}">WhatsApp</a>`:''}
+        </div>`).join(''):'Todos tus clientes activos han venido recientemente.';
+    }catch(e){const el=$('inact-list');if(el)el.textContent='Sin conexión — no se pudo calcular.';}
+  },
+  /* ── Fidelización: campañas de WhatsApp con plantilla ── */
+  campaignModal(){
+    openModal(`
+      <h3>Campaña de WhatsApp</h3><p class="msub">Recupera y fideliza clientes — mensaje personalizado uno a uno</p>
+      <div class="field"><label>¿A quién le mandamos?</label><select class="inp" id="cp-aud" onchange="Pos.campTemplate()">
+        <option value="porvencer">Por vencer (próximos 7 días)</option>
+        <option value="vencidos">Vencidos (últimos 30 días)</option>
+        <option value="inactivos">Inactivos (2+ semanas sin venir)</option>
+        <option value="activos">Todos con membresía activa</option>
+        <option value="todos">Todos los clientes</option>
+      </select></div>
+      <div class="field"><label>Mensaje — {nombre} y {fecha} se rellenan solos</label><textarea class="inp" id="cp-msg" rows="3"></textarea></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.buildCampaign()">Generar lista de envío</button>
+      <div id="cp-list" style="margin-top:16px;"></div>
+    `,true);
+    this.campTemplate();
+  },
+  campTemplate(){
+    const T={
+      porvencer:'Hola {nombre} 💪 Tu membresía de Volten Gym vence el {fecha}. Renueva a tiempo y no pierdas tu ritmo. ¡Te esperamos!',
+      vencidos:'Hola {nombre}, te extrañamos en Volten Gym 🧡 Tu membresía venció el {fecha}. Vuelve esta semana y retoma tu progreso.',
+      inactivos:'Hola {nombre}, hace 2 semanas que no te vemos por Volten Gym. Tu membresía sigue activa — ¡vuelve hoy y sigue con todo!',
+      activos:'Hola {nombre} 💪 Gracias por entrenar en Volten Gym. Este mes tenemos promociones nuevas, pregunta en recepción.',
+      todos:'Hola {nombre}, saludos de Volten Gym 🧡 Tenemos promociones nuevas — ven a visitarnos.'
+    };
+    $('cp-msg').value=T[$('cp-aud').value]||T.todos;
+  },
+  async buildCampaign(){
+    const aud=$('cp-aud').value,msg=$('cp-msg').value;
+    const box=$('cp-list');box.innerHTML='Preparando...';
+    const withSub=this.customers.map(c=>({c,s:this.bestSub(c)}));
+    let list=[];
+    if(aud==='porvencer')list=withSub.filter(x=>x.s&&daysLeft(x.s.end_date)>=0&&daysLeft(x.s.end_date)<=7);
+    else if(aud==='vencidos')list=withSub.filter(x=>x.s&&daysLeft(x.s.end_date)<0&&daysLeft(x.s.end_date)>=-30);
+    else if(aud==='activos')list=withSub.filter(x=>x.s&&daysLeft(x.s.end_date)>=0);
+    else if(aud==='todos')list=withSub;
+    else{
+      try{
+        const since=new Date(Date.now()-14*864e5).toISOString();
+        const {data}=await sb.from('checkins').select('customer_id,member_id').gte('created_at',since).eq('granted',true);
+        const seen=new Set();(data||[]).forEach(x=>{if(x.customer_id)seen.add(x.customer_id);if(x.member_id)seen.add(x.member_id);});
+        list=withSub.filter(x=>x.s&&daysLeft(x.s.end_date)>=0&&!seen.has(x.c.id)&&!(x.c.profile_id&&seen.has(x.c.profile_id)));
+      }catch(e){box.innerHTML='Sin conexión — este grupo necesita internet.';return;}
+    }
+    list=list.filter(x=>x.c.phone);
+    if(!list.length){box.innerHTML='<div style="color:var(--muted);font-size:13px;font-weight:500">No hay clientes con teléfono en ese grupo.</div>';return;}
+    box.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:10px">'+list.length+' cliente(s). Pica cada botón: se abre WhatsApp con el mensaje listo, tú solo le das enviar.</div>'
+      +list.map((x,i)=>{
+        const text=msg.replace(/\{nombre\}/g,(x.c.full_name||'').split(' ')[0]).replace(/\{fecha\}/g,x.s?fdate(x.s.end_date):'');
+        return `<div class="row-line"><div style="font-weight:700">${i+1}. ${esc(x.c.full_name)}<div style="font-size:12px;color:var(--muted);font-weight:500">${x.s?('vigencia: '+fdate(x.s.end_date)):'sin membresía'}</div></div>
+        <a class="btn-xs btn" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(x.c.phone,text)}" onclick="this.style.opacity=.45;this.textContent='Enviado ✓'">Enviar WhatsApp</a></div>`;
+      }).join('');
+  },
+
+  planModal(id){
+    if(this.role!=='admin')return;
+    const p=id?this.plans.find(x=>x.id===id):null;
+    openModal(`
+      <h3>${p?'Editar plan':'Nuevo plan'}</h3><p class="msub">Los cambios aplican para las próximas ventas</p>
+      <div class="field"><label>Nombre</label><input class="inp" id="pl-name" value="${p?esc(p.name):''}" placeholder="ej. Mensual"></div>
+      <div class="frow">
+        <div class="field"><label>Duración (días)</label><input class="inp" type="number" id="pl-days" value="${p?p.duration_days:30}"></div>
+        <div class="field"><label>Precio (MXN)</label><input class="inp" type="number" id="pl-price" value="${p?p.price:''}"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>¿Es plan familiar?</label><select class="inp" id="pl-family"><option value="no" ${p&&p.is_family?'':'selected'}>No</option><option value="si" ${p&&p.is_family?'selected':''}>Sí</option></select></div>
+        <div class="field"><label>Máx. miembros (familiar)</label><input class="inp" type="number" id="pl-max" value="${p&&p.max_members?p.max_members:4}"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Activo</label><select class="inp" id="pl-active"><option value="si" ${!p||p.active!==false?'selected':''}>Sí</option><option value="no" ${p&&p.active===false?'selected':''}>No</option></select></div>
+        <div class="field"><label>Sucursal donde aplica</label><select class="inp" id="pl-branch">
+          <option value="">Ambas sucursales</option>
+          ${this.branches.map(b=>`<option value="${b.id}" ${p&&p.branch_id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}
+        </select></div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="Pos.savePlan('${p?p.id:''}')">Guardar plan</button>
+      <p style="font-size:12px;color:var(--muted);font-weight:500;margin-top:12px;text-align:center">Si un precio cambia entre sucursales: crea el plan dos veces, uno por sucursal.</p>
+    `);
+  },
+  async savePlan(id){
+    const payload={name:$('pl-name').value.trim(),duration_days:Number($('pl-days').value)||1,price:Number($('pl-price').value)||0,
+      is_family:$('pl-family').value==='si',max_members:Number($('pl-max').value)||1,active:$('pl-active').value==='si',
+      branch_id:$('pl-branch').value||null};
+    if(!payload.name){toast('Ponle nombre al plan.',true);return;}
+    const save=async(pl)=>id?Q.update('plans',{id},pl):(pl.id=pl.id||uuid(),Q.insert('plans',pl));
+    let r=await save(payload);
+    if(r.error&&/branch_id/i.test(r.error.message||'')){delete payload.branch_id;r=await save(payload);toast('Para precios por sucursal corre pos_migration4.sql.',true);}
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    if(id)Object.assign(this.plans.find(x=>x.id===id)||{},payload);
+    else this.plans.push(payload);
+    cset('plans',this.plans);closeModal();toast('Plan guardado ✓');this.go('memberships');
+  },
+
+
+  /* ═══════ ACCESOS ═══════ */
+  accFrom:todayISO(), accTo:todayISO(), accHist:[], accInside:[],
+  view_access(){
+    return `
+    <div class="topbar">
+      <div><h1>Accesos</h1><div class="sub">Control de entrada · QR, huella, facial o manual</div></div>
+      ${this.branchSelector()}
+    </div>
+    <div class="scan-box">
+      <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Escanear acceso</div>
+      <input class="inp" id="scan-inp" placeholder="Escanea el QR del cliente (o escribe su nombre o número de cuenta) y presiona Enter..." onkeydown="if(event.key==='Enter')Pos.accessScan(this.value)">
+      <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">El lector USB escribe el código y da Enter solo. También sirve teclear el nombre o el número de cuenta. <b>Para vincular una cuenta nueva de la app ve a Clientes → ficha → Vincular app.</b></div>
+    </div>
+    <div id="access-result"></div>
+    <div id="scan-picker"></div>
+    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:16px;align-items:start;">
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><h2>Adentro ahora</h2><span class="tag tag-green" id="inside-count">0</span></div>
+        <div class="psub">Entraron y no han salido</div>
+        <div id="inside-list">Cargando...</div>
+      </div>
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+          <h2 style="margin-bottom:0">Historial</h2>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <div class="range-pills">
+              <button class="range-pill" onclick="Pos.accPreset(1)">HOY</button>
+              <button class="range-pill" onclick="Pos.accPreset(7)">7 DÍAS</button>
+              <button class="range-pill" onclick="Pos.accPreset(30)">30 DÍAS</button>
+            </div>
+            <input class="inp" type="date" style="height:40px;width:150px" id="acc-from" value="${this.accFrom}">
+            <span style="color:var(--muted);font-weight:700">→</span>
+            <input class="inp" type="date" style="height:40px;width:150px" id="acc-to" value="${this.accTo}">
+            <button class="btn btn-sm btn-primary" onclick="Pos.accFrom=$('acc-from').value;Pos.accTo=$('acc-to').value;Pos.loadAccess()">Buscar</button>
+            <button class="btn btn-sm btn-ghost" onclick="Pos.exportAccess()">Exportar</button>
+          </div>
+        </div>
+        <div id="acc-hist">Cargando...</div>
+      </div>
+    </div>`;
+  },
+  async after_access(){const i=$('scan-inp');if(i)i.focus();await this.loadAccess();},
+  accPreset(days){
+    const to=new Date();const from=new Date(Date.now()-(days-1)*864e5);
+    this.accFrom=dISO(from);this.accTo=dISO(to);
+    const f=$('acc-from'),t=$('acc-to');if(f)f.value=this.accFrom;if(t)t.value=this.accTo;
+    this.loadAccess();
+  },
+  async loadAccess(){
+    const bId=this.branch?this.branch.id:null;
+    try{
+      let q=sb.from('checkins').select('*').gte('created_at',this.accFrom+'T00:00:00').lte('created_at',this.accTo+'T23:59:59').order('created_at',{ascending:false}).limit(300);
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;this.accHist=data||[];cset('acc_hist',this.accHist);
+    }catch(e){this.accHist=cget('acc_hist')||[];}
+    try{
+      let q2=sb.from('checkins').select('*').gte('created_at',todayISO()+'T00:00:00').eq('granted',true).is('checked_out_at',null).order('created_at',{ascending:false});
+      if(bId)q2=q2.eq('branch_id',bId);
+      const {data:d2}=await q2;this.accInside=d2||[];
+    }catch(e){this.accInside=[];}
+    this.renderAccess();
+  },
+  accName(ci){
+    if(ci.customer_id){const c=this.customers.find(x=>x.id===ci.customer_id);if(c)return c.full_name;}
+    if(ci.member_id)return this.profName(ci.member_id);
+    return '—';
+  },
+  renderAccess(){
+    const ic=$('inside-count');if(!ic)return;
+    ic.textContent=this.accInside.length;
+    $('inside-list').innerHTML=this.accInside.length?this.accInside.map(ci=>`
+      <div class="row-line">
+        <div><div style="font-weight:700">${esc(this.accName(ci))}</div><div style="font-size:12px;color:var(--muted)">entró ${ftime(ci.created_at)} · ${METHOD_LABEL[ci.method]||ci.method}</div></div>
+        <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.checkOut('${ci.id}')">Marcar salida</button>
+      </div>`).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:10px 0">Nadie adentro ahora.</div>';
+    $('acc-hist').innerHTML=this.accHist.length?`<table><thead><tr><th>Cliente</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Método</th><th>Acceso</th></tr></thead><tbody>${
+      this.accHist.map(ci=>`<tr><td style="font-weight:700">${esc(this.accName(ci))}</td><td>${fdate(ci.created_at)}</td><td>${ftime(ci.created_at)}</td><td>${ci.checked_out_at?ftime(ci.checked_out_at):'—'}</td><td>${METHOD_LABEL[ci.method]||ci.method}</td><td>${ci.granted?'<span class="tag tag-green">Permitido</span>':'<span class="tag tag-red">Rechazado</span>'}</td></tr>`).join('')
+    }</tbody></table>`:'<div class="stub" style="padding:26px"><p>Sin accesos en este rango de fechas.</p></div>';
+  },
+  exportAccess(){
+    csvExport('accesos_volten',['Cliente','Fecha','Entrada','Salida','Método','Acceso'],
+      this.accHist.map(ci=>[this.accName(ci),fdate(ci.created_at),ftime(ci.created_at),ci.checked_out_at?ftime(ci.checked_out_at):'',METHOD_LABEL[ci.method]||ci.method,ci.granted?'Permitido':'Rechazado']));
+  },
+  accessScan(code){
+    code=(code||'').trim();
+    if(code.toLowerCase().startsWith(QR_PREFIX))code=code.slice(QR_PREFIX.length); // QR de la app: volten-gym:member:<id>
+    if(!code)return;
+    $('scan-inp').value='';
+    // número de cuenta corto (8+ caracteres del inicio del ID)
+    if(/^[0-9a-f]{8,32}$/i.test(code)&&code.length<32){
+      const ql=code.toLowerCase();
+      const hit=this.customers.find(c=>(c.profile_id&&c.profile_id.startsWith(ql))||c.id.startsWith(ql))
+        ||null;
+      if(hit){this.doCheckin(hit.id,'qr');return;}
+      const p=this.appProfiles.find(x=>x.id.startsWith(ql)&&x.role==='member');
+      if(p){this.autoImportProfile(p);return;}
+      this.showAccessResult(false,'Cliente no encontrado','Número de cuenta sin coincidencias',null);return;
+    }
+    const isUuid=/^[0-9a-f-]{32,36}$/i.test(code);
+    let cust=null;
+    if(isUuid){
+      cust=this.customers.find(c=>c.id===code||c.profile_id===code)||null;
+      if(!cust){
+        const p=this.appProfiles.find(x=>x.id===code);
+        if(p){this.autoImportProfile(p);return;}
+      }
+    }else{
+      const q=code.toLowerCase();
+      const matches=this.customers.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q));
+      if(matches.length===1)cust=matches[0];
+      else if(matches.length>1){
+        $('scan-picker').innerHTML='<div class="panel">'+matches.slice(0,5).map(c=>`
+          <button class="cust-row" onclick="Pos.doCheckin('${c.id}','manual');$('scan-picker').innerHTML=''">
+            <div class="av2">${esc((c.full_name||'?')[0].toUpperCase())}</div>
+            <div class="cd"><b>${esc(c.full_name)}</b><span>${esc(c.phone||'')}</span></div>
+            ${this.membershipTag(c)}
+          </button>`).join('')+'</div>';
+        return;
+      }
+    }
+    if(!cust){this.showAccessResult(false,'Cliente no encontrado','Verifica el QR o regístralo en Clientes',null);return;}
+    this.doCheckin(cust.id,isUuid?'qr':'manual');
+  },
+  async autoImportProfile(p){
+    // tiene app pero no ficha en el POS → se crea sola
+    const payload={id:uuid(),full_name:p.full_name||p.email,email:p.email||null,phone:null,profile_id:p.id,
+      branch_id:this.branch?this.branch.id:null,suspended:false,created_at:new Date().toISOString()};
+    const r=await Q.insert('customers',payload);
+    if(!r.error){this.customers.unshift(payload);cset('customers',this.customers);}
+    this.doCheckin(payload.id,'qr');
+  },
+  async doCheckin(custId,method){
+    const c=this.customers.find(x=>x.id===custId);if(!c)return;
+    // si YA está adentro, el mismo escaneo (QR/huella) registra su SALIDA
+    const open=this.accInside.find(x=>x.customer_id===c.id||(c.profile_id&&x.member_id===c.profile_id));
+    if(open){
+      await this.checkOut(open.id);
+      this.showAccessResult(true,'SALIDA REGISTRADA','Hasta luego, que descanses',c.full_name);
+      const i=$('scan-inp');if(i)i.focus();
+      return;
+    }
+    let granted=true,why='';
+    const s=this.bestSub(c);
+    if(c.suspended){granted=false;why='Acceso suspendido por administración';}
+    else if(!s){granted=false;why='Sin membresía — véndele una en Nueva venta';}
+    else if(daysLeft(s.end_date)<0){granted=false;why='Membresía vencida el '+fdate(s.end_date);}
+    else why='Membresía al corriente · le quedan '+daysLeft(s.end_date)+' día'+(daysLeft(s.end_date)===1?'':'s')+' ('+fdate(s.end_date)+')';
+    const now=new Date().toISOString();
+    const payload={id:uuid(),member_id:c.profile_id||null,customer_id:c.id,branch_id:this.branch?this.branch.id:null,
+      method,verified_by:this.user.id,granted,created_at:now,checked_in_at:now};
+    let r=await Q.insert('checkins',payload);
+    if(r.error&&/method/i.test(r.error.message||'')){payload.method='qr';r=await Q.insert('checkins',payload);}
+    if(r.error&&/member_id/i.test(r.error.message||'')){toast('Falta correr pos_migration2.sql en Supabase para clientes sin app.',true);}
+    else if(r.error){toast('Error al registrar: '+r.error.message,true);}
+    this.showAccessResult(granted,granted?'ACCESO PERMITIDO':'ACCESO DENEGADO',why,c.full_name);
+    if(granted&&!r.error){this.accInside.unshift(payload);this.accHist.unshift(payload);}
+    else if(!r.error)this.accHist.unshift(payload);
+    this.renderAccess();
+    const i=$('scan-inp');if(i)i.focus();
+  },
+  showAccessResult(ok,big,why,name){
+    const el=$('access-result');if(!el)return;
+    el.className=ok?'ok':'deny';el.style.display='block';
+    el.innerHTML='<div class="big">'+(ok?'✓ ':'✕ ')+esc(big)+'</div>'+(name?'<div class="who2">'+esc(name)+'</div>':'')+'<div class="why">'+esc(why)+'</div>';
+    clearTimeout(this._art);this._art=setTimeout(()=>{el.style.display='none';},6000);
+  },
+  async checkOut(id){
+    const r=await Q.update('checkins',{id},{checked_out_at:new Date().toISOString()});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    this.accInside=this.accInside.filter(x=>x.id!==id);
+    const h=this.accHist.find(x=>x.id===id);if(h)h.checked_out_at=new Date().toISOString();
+    this.renderAccess();toast('Salida registrada ✓');
+  },
+
+  /* ═══════ INVENTARIO ═══════ */
+  invMoves:[],
+  view_inventory(){
+    const canEdit=this.role!=='cajera';
+    const prods=this.products.filter(p=>p.type!=='membership');
+    const low=prods.filter(p=>this.stockOf(p.id)<=this.minOf(p.id)&&this.minOf(p.id)>0);
+    return `
+    <div class="topbar">
+      <div><h1>Inventario</h1><div class="sub">Productos y stock de ${esc(this.branch?this.branch.name:'la sucursal')}</div></div>
+      <div style="display:flex;gap:12px;align-items:center;">${this.branchSelector()}
+      ${canEdit?`<button class="btn btn-ghost" onclick="Pos.stockModal()">＋ Entrada de stock</button>
+      <button class="btn btn-primary" onclick="Pos.productModal()">+ Nuevo producto</button>`:''}</div>
+    </div>
+    ${low.length?`<div class="panel" style="background:#FEF3C7;box-shadow:none;"><b style="font-size:14px">⚠ Stock bajo:</b> <span style="font-size:14px;font-weight:600">${low.map(p=>esc(p.name)+' ('+this.stockOf(p.id)+')').join(' · ')}</span></div>`:''}
+    <div class="panel">
+      ${prods.length?`<table><thead><tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Costo</th><th>Stock</th><th>Estado</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${
+        prods.map(p=>{
+          const st=this.stockOf(p.id),mn=this.minOf(p.id);
+          return `<tr><td style="font-weight:700">${esc(p.name)}${p.sku?' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+esc(p.sku)+'</span>':''}</td>
+          <td>${esc(p.category||'—')}</td>
+          <td style="font-weight:800;color:var(--orange)">${money(p.price)}</td>
+          <td style="color:var(--muted)">${p.cost?money(p.cost):'—'}</td>
+          <td><span class="tag ${st<=0?'tag-red':(mn&&st<=mn?'tag-orange':'tag-green')}">${st}</span></td>
+          <td>${p.active!==false?'<span class="tag tag-green">Activo</span>':'<span class="tag tag-gray">Inactivo</span>'}</td>
+          ${canEdit?`<td style="text-align:right;white-space:nowrap">
+            <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.productModal('${p.id}')">Editar</button>
+            <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.stockModal('${p.id}')">± Stock</button>
+          </td>`:''}</tr>`;}).join('')
+      }</tbody></table>`:'<div class="stub"><div class="st">Sin productos</div><p>Agrega proteínas, aguas, ropa, guantes... con "+ Nuevo producto".</p></div>'}
+    </div>
+    <div class="panel">
+      <h2 style="font-size:18px">Historial del inventario</h2><div class="psub">Cada movimiento de stock: entradas de mercancía, lo que se vendió y ajustes de conteo</div>
+      <div id="inv-moves">Cargando...</div>
+    </div>`;
+  },
+  async after_inventory(){
+    try{
+      const {data}=await sb.from('products').select('*').order('name');
+      if(data){this.products=data;cset('products',this.products);}
+      const {data:st}=await sb.from('stock').select('*');
+      if(st){this.stock=st;cset('stock',st);}
+      let q=sb.from('stock_moves').select('*').order('created_at',{ascending:false}).limit(15);
+      if(this.branch)q=q.eq('branch_id',this.branch.id);
+      const {data:mv}=await q;this.invMoves=mv||[];
+    }catch(e){}
+    const el=$('inv-moves');
+    if(el)el.innerHTML=this.invMoves.length?this.invMoves.map(m=>{
+      const p=this.products.find(x=>x.id===m.product_id);
+      return `<div class="row-line"><div><div style="font-weight:700">${esc(p?p.name:'—')}</div><div style="font-size:12px;color:var(--muted)">${esc(m.reason||'')} · ${fdate(m.created_at)} ${ftime(m.created_at)}</div></div><span class="tag ${m.delta>0?'tag-green':'tag-red'}">${m.delta>0?'+':''}${m.delta}</span></div>`;
+    }).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:8px 0">Sin movimientos aún.</div>';
+  },
+  productModal(id){
+    const p=id?this.products.find(x=>x.id===id):null;
+    openModal(`
+      <h3>${p?'Editar producto':'Nuevo producto'}</h3><p class="msub">Ventas de mostrador</p>
+      <div class="field"><label>Nombre *</label><input class="inp" id="pr-name" value="${p?esc(p.name):''}" placeholder="ej. Proteína Birdman 30g"></div>
+      <div class="frow">
+        <div class="field"><label>Precio venta *</label><input class="inp" type="number" id="pr-price" value="${p?p.price:''}"></div>
+        <div class="field"><label>Costo</label><input class="inp" type="number" id="pr-cost" value="${p&&p.cost?p.cost:''}"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Categoría</label><input class="inp" id="pr-cat" value="${p?esc(p.category||''):''}" placeholder="suplementos, bebidas, ropa..."></div>
+        <div class="field"><label>Código de barras / SKU</label><input class="inp" id="pr-sku" value="${p?esc(p.sku||''):''}" placeholder="escanéalo aquí"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Alerta stock mínimo</label><input class="inp" type="number" id="pr-min" value="${p?this.minOf(p.id):5}"></div>
+        <div class="field"><label>Activo</label><select class="inp" id="pr-active"><option value="si" ${!p||p.active!==false?'selected':''}>Sí</option><option value="no" ${p&&p.active===false?'selected':''}>No</option></select></div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="Pos.saveProduct('${p?p.id:''}')">Guardar producto</button>
+    `);
+  },
+  async saveProduct(id){
+    const name=$('pr-name').value.trim();
+    if(!name){toast('Ponle nombre.',true);return;}
+    const base={name,type:'store_item',price:Number($('pr-price').value)||0,cost:Number($('pr-cost').value)||0,
+      category:$('pr-cat').value.trim()||null,sku:$('pr-sku').value.trim()||null,active:$('pr-active').value==='si'};
+    const bId=this.branch?this.branch.id:null;
+    const minQty=Number($('pr-min').value)||0;
+    if(id){
+      const r=await Q.update('products',{id},base);
+      if(r.error){toast('Error: '+r.error.message,true);return;}
+      Object.assign(this.products.find(x=>x.id===id)||{},base);
+    }else{
+      base.id=uuid();
+      const r=await Q.insert('products',base);
+      if(r.error){toast('Error: '+r.error.message,true);return;}
+      this.products.push(base);id=base.id;
+    }
+    // stock mínimo por sucursal
+    try{
+      const cur=this.stock.find(x=>x.product_id===id&&x.branch_id===bId);
+      await sb.from('stock').upsert({branch_id:bId,product_id:id,qty:cur?cur.qty:0,min_qty:minQty});
+      if(cur)cur.min_qty=minQty;else this.stock.push({branch_id:bId,product_id:id,qty:0,min_qty:minQty});
+    }catch(e){}
+    cset('products',this.products);cset('stock',this.stock);
+    closeModal();toast('Producto guardado ✓');this.go('inventory');
+  },
+  stockModal(productId){
+    const prods=this.products.filter(p=>p.type!=='membership');
+    if(!prods.length){toast('Primero crea un producto.',true);return;}
+    openModal(`
+      <h3>Movimiento de stock</h3><p class="msub">${esc(this.branch?this.branch.name:'')}</p>
+      <div class="field"><label>Producto</label><select class="inp" id="sk-prod">${prods.map(p=>`<option value="${p.id}" ${productId===p.id?'selected':''}>${esc(p.name)} (stock: ${this.stockOf(p.id)})</option>`).join('')}</select></div>
+      <div class="method-cards" style="grid-template-columns:1fr 1fr 1fr;">
+        <button class="method-card on" id="sk-in" onclick="Pos.skMode='in';['sk-in','sk-out','sk-adj'].forEach(x=>$(x).classList.toggle('on',x==='sk-in'))">＋ Entrada</button>
+        <button class="method-card" id="sk-out" onclick="Pos.skMode='out';['sk-in','sk-out','sk-adj'].forEach(x=>$(x).classList.toggle('on',x==='sk-out'))">－ Salida</button>
+        <button class="method-card" id="sk-adj" onclick="Pos.skMode='adj';['sk-in','sk-out','sk-adj'].forEach(x=>$(x).classList.toggle('on',x==='sk-adj'))">Ajuste exacto</button>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Cantidad</label><input class="inp" type="number" id="sk-qty" placeholder="0"></div>
+        <div class="field"><label>Motivo</label><input class="inp" id="sk-reason" placeholder="compra, merma, conteo..."></div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="Pos.saveStockMove()">Registrar</button>
+    `);
+    this.skMode='in';
+  },
+  async saveStockMove(){
+    const pid=$('sk-prod').value,qty=Number($('sk-qty').value);
+    if(!qty&&this.skMode!=='adj'){toast('Escribe la cantidad.',true);return;}
+    const bId=this.branch?this.branch.id:null;
+    let delta=this.skMode==='in'?qty:(this.skMode==='out'?-qty:qty-this.stockOf(pid));
+    if(!delta){closeModal();return;}
+    const reason=$('sk-reason').value.trim()||(this.skMode==='in'?'entrada':(this.skMode==='out'?'salida':'ajuste'));
+    const r=await Q.stockDelta(bId,pid,delta,reason,this.user.id);
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    const st=this.stock.find(x=>x.product_id===pid&&x.branch_id===bId);
+    if(st)st.qty=Number(st.qty)+delta;else this.stock.push({branch_id:bId,product_id:pid,qty:delta,min_qty:0});
+    cset('stock',this.stock);
+    closeModal();toast(r.queued?'Guardado local — sincroniza al volver internet':'Stock actualizado ✓');this.go('inventory');
+  },
+
+  /* ═══════ PROMOCIONES / ANUNCIOS ═══════ */
+  anns:[],
+  view_promos(){
+    const canEdit=this.role!=='cajera';
+    return `
+    <div class="topbar">
+      <div><h1>Promociones</h1><div class="sub">Descuentos del POS y anuncios en la app de los miembros</div></div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        ${canEdit?`<button class="btn btn-ghost" onclick="Pos.annModal()">+ Anuncio en la app</button>
+        <button class="btn btn-primary" onclick="Pos.promoModal()">+ Nueva promoción</button>`:''}
+      </div>
+    </div>
+    <div class="pick-tabs">
+      <button class="pick-tab ${this.promoTab==='promos'?'on':''}" onclick="Pos.promoTab='promos';Pos.go('promos')">Promociones (descuentos)</button>
+      <button class="pick-tab ${this.promoTab==='anns'?'on':''}" onclick="Pos.promoTab='anns';Pos.go('promos')">Anuncios en la app</button>
+    </div>
+    ${this.promoTab==='promos'?`
+    <div class="panel">
+      ${this.promos.length?`<table><thead><tr><th>Promoción</th><th>Descuento</th><th>Aplica a</th><th>Vigencia</th><th>Estado</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${
+        this.promos.map(p=>`<tr>
+          <td style="font-weight:700">${esc(p.name)}</td>
+          <td style="font-weight:800;color:var(--orange)">${p.discount_type==='percent'?p.discount_value+'%':money(p.discount_value)}</td>
+          <td>${p.applies_to==='plans'?'Membresías':(p.applies_to==='products'?'Productos':'Todo')}</td>
+          <td style="color:var(--muted)">${p.starts_at?fdate(p.starts_at):'—'} → ${p.ends_at?fdate(p.ends_at):'sin límite'}</td>
+          <td>${this.activePromos().some(x=>x.id===p.id)?'<span class="tag tag-green">Activa</span>':'<span class="tag tag-gray">Inactiva</span>'}</td>
+          ${canEdit?`<td style="text-align:right;white-space:nowrap">
+            <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.promoModal('${p.id}')">Editar</button>
+            <button class="btn-xs btn ${p.active?'btn-danger':''}" style="${p.active?'':'background:#DCFCE7;color:#16A34A'}" onclick="Pos.togglePromo('${p.id}')">${p.active?'Desactivar':'Activar'}</button>
+          </td>`:''}</tr>`).join('')
+      }</tbody></table>`:'<div class="stub"><div class="st">Sin promociones</div><p>Crea descuentos por % o pesos y la cajera los aplica al cobrar. Las promos activas salen automáticamente al momento del pago.</p></div>'}
+    </div>`:`
+    <div class="panel">
+      <div class="psub" style="margin-bottom:16px">💡 Los anuncios activos aparecen como banner en el inicio de la app de <b>todos los miembros</b> — perfectos para promos, eventos y avisos.</div>
+      <div id="anns-list">Cargando...</div>
+    </div>`}`;
+  },
+  async after_promos(){
+    try{
+      const {data}=await sb.from('promotions').select('*').order('created_at',{ascending:false});
+      if(data){this.promos=data;cset('promos',data);}
+      const {data:an}=await sb.from('announcements').select('*').order('created_at',{ascending:false});
+      if(an){this.anns=an;cset('anns',an);}
+    }catch(e){this.anns=cget('anns')||[];}
+    const el=$('anns-list');
+    if(el)el.innerHTML=this.anns.length?this.anns.map(a=>`
+      <div class="row-line">
+        ${a.image_url?`<div style="width:52px;height:52px;border-radius:12px;overflow:hidden;flex-shrink:0;margin-right:14px;background:#F3F4F6;"><img src="${esc(a.image_url)}" style="width:100%;height:100%;object-fit:cover" alt=""></div>`:''}
+        <div style="flex:1"><div style="font-weight:800;font-size:15px">${esc(a.title||'')}</div><div style="font-size:13px;color:var(--muted);font-weight:500;margin-top:2px">${esc(a.body||'')}</div></div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${a.active?'<span class="tag tag-green">En la app</span>':'<span class="tag tag-gray">Oculto</span>'}
+          ${this.role!=='cajera'?`<button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.annModal('${a.id}')">Editar</button>
+          <button class="btn-xs btn ${a.active?'btn-danger':''}" style="${a.active?'':'background:#DCFCE7;color:#16A34A'}" onclick="Pos.toggleAnn('${a.id}')">${a.active?'Ocultar':'Publicar'}</button>`:''}
+        </div>
+      </div>`).join(''):'<div class="stub" style="padding:26px"><p>Sin anuncios. Publica el primero con "+ Anuncio en la app".</p></div>';
+  },
+  promoModal(id){
+    if(this.role==='cajera')return;
+    const p=id?this.promos.find(x=>x.id===id):null;
+    openModal(`
+      <h3>${p?'Editar promoción':'Nueva promoción'}</h3><p class="msub">Descuento aplicable al cobrar en el POS</p>
+      <div class="field"><label>Nombre *</label><input class="inp" id="pm-name" value="${p?esc(p.name):''}" placeholder="ej. 2x1 Enero, 20% estudiantes..."></div>
+      <div class="frow">
+        <div class="field"><label>Tipo</label><select class="inp" id="pm-type"><option value="percent" ${!p||p.discount_type==='percent'?'selected':''}>Porcentaje %</option><option value="amount" ${p&&p.discount_type==='amount'?'selected':''}>Pesos $</option></select></div>
+        <div class="field"><label>Valor *</label><input class="inp" type="number" id="pm-value" value="${p?p.discount_value:''}" placeholder="20"></div>
+      </div>
+      <div class="field"><label>Aplica a</label><select class="inp" id="pm-applies">
+        <option value="all" ${!p||p.applies_to==='all'?'selected':''}>Todo</option>
+        <option value="plans" ${p&&p.applies_to==='plans'?'selected':''}>Solo membresías</option>
+        <option value="products" ${p&&p.applies_to==='products'?'selected':''}>Solo productos</option>
+      </select></div>
+      <div class="frow">
+        <div class="field"><label>Inicia</label><input class="inp" type="date" id="pm-start" value="${p&&p.starts_at?p.starts_at:todayISO()}"></div>
+        <div class="field"><label>Termina</label><input class="inp" type="date" id="pm-end" value="${p&&p.ends_at?p.ends_at:''}"></div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="Pos.savePromo('${p?p.id:''}')">Guardar promoción</button>
+      <p style="font-size:12px;color:var(--muted);font-weight:500;margin-top:12px;text-align:center">Tip: si también quieres que los miembros la vean en su app, crea además un "Anuncio en la app".</p>
+    `);
+  },
+  async savePromo(id){
+    const payload={name:$('pm-name').value.trim(),discount_type:$('pm-type').value,discount_value:Number($('pm-value').value)||0,
+      applies_to:$('pm-applies').value,starts_at:$('pm-start').value||null,ends_at:$('pm-end').value||null,active:true};
+    if(!payload.name||!payload.discount_value){toast('Nombre y valor son obligatorios.',true);return;}
+    if(id){
+      const r=await Q.update('promotions',{id},payload);
+      if(r.error){toast('Error: '+r.error.message,true);return;}
+      Object.assign(this.promos.find(x=>x.id===id)||{},payload);
+    }else{
+      payload.id=uuid();payload.created_at=new Date().toISOString();
+      const r=await Q.insert('promotions',payload);
+      if(r.error){toast('Error: '+r.error.message,true);return;}
+      this.promos.unshift(payload);
+    }
+    cset('promos',this.promos);closeModal();toast('Promoción guardada ✓');this.go('promos');
+  },
+  async togglePromo(id){
+    const p=this.promos.find(x=>x.id===id);if(!p)return;
+    const r=await Q.update('promotions',{id},{active:!p.active});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    p.active=!p.active;cset('promos',this.promos);this.go('promos');
+  },
+  annModal(id){
+    if(this.role==='cajera')return;
+    const a=id?this.anns.find(x=>x.id===id):null;
+    openModal(`
+      <h3>${a?'Editar anuncio':'Anuncio en la app'}</h3><p class="msub">Banner visible en el inicio de la app de los miembros</p>
+      <div class="field"><label>Título *</label><input class="inp" id="an-title" value="${a?esc(a.title||''):''}" placeholder="ej. 2x1 en mensualidades este viernes"></div>
+      <div class="field"><label>Texto</label><textarea class="inp" id="an-body" rows="3" placeholder="Detalles de la promo o evento...">${a?esc(a.body||''):''}</textarea></div>
+      <div class="frow">
+        <div class="field"><label>Subir foto (opcional)</label><input class="inp" type="file" id="an-photo" accept="image/*" style="padding-top:11px"></div>
+        <div class="field"><label>...o pegar URL de imagen</label><input class="inp" id="an-img" value="${a?esc(a.image_url||''):''}" placeholder="https://..."></div>
+      </div>
+      <button class="btn btn-primary btn-block" id="an-save" onclick="Pos.saveAnn('${a?a.id:''}')">Publicar en la app</button>
+    `);
+  },
+  async saveAnn(id){
+    const payload={title:$('an-title').value.trim(),body:$('an-body').value.trim()||null,image_url:$('an-img').value.trim()||null,active:true};
+    if(!payload.title){toast('Ponle título.',true);return;}
+    // foto subida → bucket avatars/anns (requiere pos_migration3.sql)
+    const f=$('an-photo')&&$('an-photo').files[0];
+    if(f){
+      if(!navigator.onLine){toast('Para subir fotos necesitas internet.',true);return;}
+      $('an-save').disabled=true;$('an-save').textContent='Subiendo foto...';
+      const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
+      const path='anns/'+uuid().slice(0,8)+'.'+ext;
+      const {error:upErr}=await sb.storage.from('avatars').upload(path,f,{upsert:true});
+      $('an-save').disabled=false;$('an-save').textContent='Publicar en la app';
+      if(upErr){toast(/bucket|not found/i.test(upErr.message||'')?'Para subir fotos corre pos_migration3.sql en Supabase.':'Foto: '+upErr.message,true);return;}
+      const {data:pub}=sb.storage.from('avatars').getPublicUrl(path);
+      if(pub)payload.image_url=pub.publicUrl;
+    }
+    if(id){
+      const r=await Q.update('announcements',{id},payload);
+      if(r.error){toast('Error: '+r.error.message,true);return;}
+      Object.assign(this.anns.find(x=>x.id===id)||{},payload);
+    }else{
+      payload.id=uuid();payload.created_at=new Date().toISOString();
+      const r=await Q.insert('announcements',payload);
+      if(r.error){toast('Error: '+r.error.message,true);return;}
+      this.anns.unshift(payload);
+    }
+    cset('anns',this.anns);closeModal();toast('Anuncio publicado ✓ — visible en la app');this.promoTab='anns';this.go('promos');
+  },
+  async toggleAnn(id){
+    const a=this.anns.find(x=>x.id===id);if(!a)return;
+    const r=await Q.update('announcements',{id},{active:!a.active});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    a.active=!a.active;cset('anns',this.anns);this.go('promos');
+  },
+
+  /* ═══════ REPORTES ═══════ */
+  view_reports(){
+    return `
+    <div class="topbar">
+      <div><h1>Reportes</h1><div class="sub">Rendimiento del negocio</div></div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        ${this.branchSelector()}
+        <div class="range-pills">
+          <button class="range-pill ${this.reportRange==='today'?'on':''}" onclick="Pos.reportRange='today';Pos.go('reports')">HOY</button>
+          <button class="range-pill ${this.reportRange==='7d'?'on':''}" onclick="Pos.reportRange='7d';Pos.go('reports')">7 DÍAS</button>
+          <button class="range-pill ${this.reportRange==='30d'?'on':''}" onclick="Pos.reportRange='30d';Pos.go('reports')">30 DÍAS</button>
+        </div>
+      </div>
+    </div>
+    <div class="cards">
+      <div class="card" style="position:relative;overflow:hidden;"><div class="lbl">Ventas brutas <span class="tag tag-green" id="r-trend" style="display:none"></span></div><div class="val" id="r-total">—</div><div class="foot" id="r-total-f"></div><div id="r-spark" style="position:absolute;left:0;right:0;bottom:0;height:44px;opacity:.9;"></div></div>
+      <div class="card"><div class="lbl">Órdenes <span class="dot" style="background:var(--ink)"></span></div><div class="val" id="r-count">—</div><div class="foot">cobradas en el período</div></div>
+      <div class="card"><div class="lbl">Membresías vendidas <span class="dot" style="background:var(--green)"></span></div><div class="val" id="r-subs">—</div><div class="foot">nuevas + renovaciones</div></div>
+      <div class="card"><div class="lbl">Visitas <span class="dot" style="background:var(--amber)"></span></div><div class="val" id="r-visits">—</div><div class="foot">accesos permitidos</div></div>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="lbl">Ticket promedio <span class="dot" style="background:var(--orange)"></span></div><div class="val" id="r-avg">—</div><div class="foot">por orden cobrada</div></div>
+      <div class="card"><div class="lbl">Efectivo metido <span class="dot" style="background:var(--green)"></span></div><div class="val" id="r-movin">—</div><div class="foot">entradas manuales a caja</div></div>
+      <div class="card"><div class="lbl">Retiros / egresos <span class="dot" style="background:var(--red)"></span></div><div class="val" id="r-movout">—</div><div class="foot">efectivo que salió de caja</div></div>
+      <div class="card"><div class="lbl">Utilidad neta <span class="dot" style="background:var(--ink)"></span></div><div class="val" id="r-net" style="color:#16A34A">—</div><div class="foot">ventas menos egresos</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;">
+      <div class="panel"><h2>Ingresos por día</h2><div class="psub" id="r-range-lbl"></div><div id="r-bars"></div></div>
+      <div class="panel"><h2>Métodos de pago</h2><div class="psub">Distribución por tipo</div><div id="r-donut"></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+      <div class="panel"><h2>Asistencia por hora</h2><div class="psub">Para conocer tus horas pico</div><div id="r-hours"></div></div>
+      <div class="panel"><h2>Ventas por empleado</h2><div class="psub">Órdenes y membresías del período</div><div id="r-staff"></div></div>
+    </div>
+    <div class="panel">
+      <div><h2>Reporte por empleado</h2><div class="psub">Elige quién y el período — verás todo lo que vendió: órdenes, membresías y totales</div></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+        <select class="inp" style="max-width:230px;height:44px" id="emp-sel">
+          <option value="">Elegir empleado...</option>
+          ${this.appProfiles.filter(p=>['admin','encargado','cajera'].includes(p.role)).map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)}</option>`).join('')}
+        </select>
+        <input class="inp" type="date" style="height:44px;width:160px" id="emp-from" value="${dISO(new Date(Date.now()-29*864e5))}">
+        <span style="color:var(--muted);font-weight:700">→</span>
+        <input class="inp" type="date" style="height:44px;width:160px" id="emp-to" value="${todayISO()}">
+        <button class="btn btn-sm btn-primary" onclick="Pos.runEmpReport()">Ver reporte</button>
+        <button class="btn btn-sm btn-ghost" onclick="Pos.exportEmpCSV()">Exportar</button>
+      </div>
+      <div id="emp-report" style="color:var(--muted);font-size:14px;font-weight:500;">Elige un empleado y el rango de fechas (día, semana, mes o el período que quieras).</div>
+    </div>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;"><div><h2>Historial de turnos</h2><div class="psub" style="margin-bottom:0">Cortes de caja con diferencias</div></div>
+      <div style="display:flex;gap:8px;"><button class="btn btn-sm btn-ghost" onclick="Pos.exportSalesCSV()">Exportar ventas</button><button class="btn btn-sm btn-ghost" onclick="Pos.exportShiftsCSV()">Exportar turnos</button></div></div>
+      <div id="r-shifts" style="margin-top:14px">Cargando...</div>
+    </div>`;
+  },
+  _repSales:[],_repShifts:[],
+  async after_reports(){
+    const days=this.reportRange==='today'?1:(this.reportRange==='7d'?7:30);
+    const from=new Date();from.setHours(0,0,0,0);from.setDate(from.getDate()-(days-1));
+    const bId=this.branch?this.branch.id:null;
+    let S=[],CI=[],SH=[];
+    try{
+      let q=sb.from('sales').select('*').gte('created_at',from.toISOString()).order('created_at');
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;S=data||[];
+    }catch(e){}
+    try{
+      let q=sb.from('checkins').select('created_at,granted').gte('created_at',from.toISOString()).eq('granted',true);
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;CI=data||[];
+    }catch(e){}
+    try{
+      let q=sb.from('cash_shifts').select('*').order('opened_at',{ascending:false}).limit(15);
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;SH=data||[];
+    }catch(e){}
+    let MV=[];
+    try{
+      const {data}=await sb.from('cash_movements').select('type,amount,created_at').gte('created_at',from.toISOString());
+      MV=data||[];
+    }catch(e){}
+    this._repSales=S;this._repShifts=SH;
+    const total=S.reduce((a,x)=>a+Number(x.total||0),0);
+    const subsN=this.subs.filter(s=>s.start_date>=dISO(from)&&(!bId||s.branch_id===bId)).length;
+    $('r-total').textContent=money(total);
+    $('r-total-f').textContent=this.reportRange==='today'?'hoy':'últimos '+days+' días';
+    $('r-count').textContent=S.length;
+    $('r-subs').textContent=subsN;
+    $('r-visits').textContent=CI.length;
+    const movIn=MV.filter(m=>m.type==='in').reduce((a,x)=>a+Number(x.amount||0),0);
+    const movOut=MV.filter(m=>m.type==='out').reduce((a,x)=>a+Number(x.amount||0),0);
+    $('r-avg').textContent=S.length?money(total/S.length):'$0.00';
+    $('r-movin').textContent=money(movIn);
+    $('r-movout').textContent=money(movOut);
+    $('r-net').textContent=money(total-movOut);
+    // mini-gráfica dentro de la tarjeta + comparación vs período anterior
+    try{
+      const prevFrom=new Date(from.getTime()-days*864e5);
+      let qp=sb.from('sales').select('total,created_at').gte('created_at',prevFrom.toISOString()).lt('created_at',from.toISOString());
+      if(bId)qp=qp.eq('branch_id',bId);
+      const {data:PS}=await qp;
+      const prevTotal=(PS||[]).reduce((a,x)=>a+Number(x.total||0),0);
+      const tr=$('r-trend');
+      if(tr&&prevTotal>0){
+        const pct=Math.round((total-prevTotal)/prevTotal*100);
+        tr.style.display='inline-block';
+        tr.className='tag '+(pct>=0?'tag-green':'tag-red');
+        tr.textContent=(pct>=0?'▲ +':'▼ ')+pct+'%';
+      }
+      const buckets=days===1?12:days; // hoy: por bloques de 2h
+      const vals=Array(buckets).fill(0);
+      S.forEach(s=>{
+        const d=new Date(s.created_at);
+        const i=days===1?Math.min(11,Math.floor(d.getHours()/2)):Math.min(buckets-1,Math.floor((d-from)/864e5));
+        vals[i]+=Number(s.total||0);
+      });
+      const mx=Math.max(1,...vals);const W=100,H=44;
+      const pts=vals.map((v,i)=>(i/(buckets-1)*W).toFixed(1)+','+(H-4-(v/mx*(H-10))).toFixed(1));
+      $('r-spark').innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:100%;display:block">
+        <polygon points="0,${H} ${pts.join(' ')} ${W},${H}" fill="rgba(249,115,22,.14)"/>
+        <polyline points="${pts.join(' ')}" fill="none" stroke="var(--orange)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>`;
+    }catch(e){}
+    $('r-range-lbl').textContent=fdate(from)+' → '+fdate(new Date());
+    // barras por día
+    const byDay={};for(let i=0;i<days;i++){const d=new Date(from.getTime()+i*864e5);byDay[dISO(d)]=0;}
+    S.forEach(s=>{const k=dISO(s.created_at);if(k in byDay)byDay[k]+=Number(s.total||0);});
+    const entries=Object.entries(byDay);
+    const max=Math.max(1,...entries.map(([,v])=>v));
+    $('r-bars').innerHTML='<div style="display:flex;align-items:flex-end;gap:'+(days>7?'3px':'10px')+';height:190px;padding-top:10px;">'+
+      entries.map(([k,v])=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end;" title="${k}: ${money(v)}">
+        ${v?`<div style="font-size:10px;font-weight:700;color:var(--muted)">${days>7?'':money(v).replace('.00','')}</div>`:''}
+        <div style="width:100%;max-width:44px;background:var(--orange);border-radius:8px 8px 4px 4px;height:${Math.max(3,Math.round(v/max*140))}px;${v?'':'background:#EFEFEF;'}"></div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted)">${days>7?new Date(k+'T12:00:00').getDate():new Date(k+'T12:00:00').toLocaleDateString('es-MX',{weekday:'short'})}</div>
+      </div>`).join('')+'</div>';
+    // donut
+    const by=(m)=>S.filter(x=>x.payment_method===m).reduce((a,x)=>a+Number(x.total||0),0);
+    const segs=[['Efectivo',by('cash'),'#22C55E'],['Tarjeta',by('card'),'#F97316'],['Transferencia',by('transfer'),'#111111']].filter(x=>x[1]>0);
+    const segTotal=segs.reduce((a,x)=>a+x[1],0)||1;
+    let acc=0;
+    const arcs=segs.map(([l,v,c])=>{const f=v/segTotal;const s=acc;acc+=f;return `<circle r="15.9" cx="21" cy="21" fill="none" stroke="${c}" stroke-width="6" stroke-dasharray="${(f*100).toFixed(2)} ${(100-f*100).toFixed(2)}" stroke-dashoffset="${(25-s*100).toFixed(2)}"></circle>`;}).join('');
+    $('r-donut').innerHTML=segs.length?`
+      <div style="display:flex;align-items:center;gap:24px;">
+        <svg viewBox="0 0 42 42" style="width:150px;height:150px;transform:rotate(0deg)">${arcs}</svg>
+        <div style="flex:1">${segs.map(([l,v,c])=>`<div class="row-line"><span class="k"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:8px"></span>${l}</span><span class="v">${money(v)}</span></div>`).join('')}</div>
+      </div>`:'<div class="stub" style="padding:26px"><p>Sin ventas en el período.</p></div>';
+    // horas
+    const hours=Array(24).fill(0);CI.forEach(c=>{hours[new Date(c.created_at).getHours()]++;});
+    const hmax=Math.max(1,...hours);
+    const hlbl=(h)=>h===12?'12pm':(h<12?h+'am':(h-12)+'pm');
+    $('r-hours').innerHTML='<div style="display:flex;align-items:flex-end;gap:2px;height:120px;">'+
+      hours.slice(5,23).map((v,i)=>{const h=i+5;return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;" title="${hlbl(h)} — ${v} visita${v===1?'':'s'}">
+        <div style="width:100%;background:${v?'var(--orange)':'#EFEFEF'};border-radius:4px;height:${Math.max(3,Math.round(v/hmax*90))}px;"></div>
+        <div style="font-size:8.5px;font-weight:700;color:var(--muted)">${hlbl(h)}</div>
+      </div>`;}).join('')+'</div>';
+    // por empleado
+    const byStaff={};
+    S.forEach(s=>{const k=s.sold_by||s.staff_id;if(!k)return;byStaff[k]=byStaff[k]||{n:0,t:0,m:0};byStaff[k].n++;byStaff[k].t+=Number(s.total||0);});
+    this.subs.filter(s=>s.start_date>=dISO(from)&&s.sold_by).forEach(s=>{byStaff[s.sold_by]=byStaff[s.sold_by]||{n:0,t:0,m:0};byStaff[s.sold_by].m++;});
+    const staffRows=Object.entries(byStaff).sort((a,b)=>b[1].t-a[1].t);
+    $('r-staff').innerHTML=staffRows.length?`<table><thead><tr><th>Empleado</th><th>Órdenes</th><th>Membresías</th><th>Total</th></tr></thead><tbody>${
+      staffRows.map(([id,v])=>`<tr><td style="font-weight:700">${esc(this.profName(id))}</td><td>${v.n}</td><td>${v.m}</td><td style="font-weight:800;color:var(--orange)">${money(v.t)}</td></tr>`).join('')
+    }</tbody></table>`:'<div class="stub" style="padding:26px"><p>Sin ventas en el período.</p></div>';
+    // turnos
+    $('r-shifts').innerHTML=SH.length?`<table><thead><tr><th>Abrió</th><th>Empleado</th><th>Cerró</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr></thead><tbody>${
+      SH.map(s=>{const d=s.counted_cash!=null&&s.expected_cash!=null?Number(s.counted_cash)-Number(s.expected_cash):null;
+      return `<tr><td>${fdate(s.opened_at)} ${ftime(s.opened_at)}</td><td style="font-weight:700">${esc(this.profName(s.staff_id))}</td><td>${s.closed_at?ftime(s.closed_at):'<span class="tag tag-green">Abierto</span>'}</td><td>${s.expected_cash!=null?money(s.expected_cash):'—'}</td><td>${s.counted_cash!=null?money(s.counted_cash):'—'}</td><td>${d==null?'—':(d===0?'<span class="tag tag-green">Cuadró</span>':(d>0?'<span class="tag tag-orange">+'+money(d)+'</span>':'<span class="tag tag-red">'+money(d)+'</span>'))}</td></tr>`;}).join('')
+    }</tbody></table>`:'<div class="stub" style="padding:20px"><p>Sin turnos registrados.</p></div>';
+  },
+  _empSales:[],_empSubs:[],
+  async runEmpReport(){
+    const emp=$('emp-sel').value,from=$('emp-from').value,to=$('emp-to').value;
+    const box=$('emp-report');
+    if(!emp){box.innerHTML='<span style="color:var(--red);font-weight:600">Primero elige al empleado.</span>';return;}
+    box.innerHTML='Cargando...';
+    const bId=this.branch?this.branch.id:null;
+    let S=[],SU=[];
+    try{
+      let q=sb.from('sales').select('*').eq('sold_by',emp).gte('created_at',from+'T00:00:00').lte('created_at',to+'T23:59:59').order('created_at',{ascending:false});
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;S=data||[];
+      let q2=sb.from('subscriptions').select('*').eq('sold_by',emp).gte('start_date',from).lte('start_date',to).order('start_date',{ascending:false});
+      if(bId)q2=q2.eq('branch_id',bId);
+      const {data:d2}=await q2;SU=d2||[];
+    }catch(e){box.innerHTML='Sin conexión — inténtalo con internet.';return;}
+    this._empSales=S;this._empSubs=SU;
+    const name=this.profName(emp);
+    const total=S.reduce((a,x)=>a+Number(x.total||0),0);
+    const by=(m)=>S.filter(x=>x.payment_method===m).reduce((a,x)=>a+Number(x.total||0),0);
+    box.innerHTML=`
+      <div class="cards" style="margin-bottom:16px;">
+        <div class="card" style="background:var(--orange-soft);"><div class="lbl">Total vendido</div><div class="val" style="color:var(--orange-dark)">${money(total)}</div><div class="foot">${esc(name)} · ${fdate(from)} → ${fdate(to)}</div></div>
+        <div class="card"><div class="lbl">Órdenes</div><div class="val">${S.length}</div><div class="foot">ventas cobradas</div></div>
+        <div class="card"><div class="lbl">Membresías</div><div class="val">${SU.length}</div><div class="foot">vendidas o renovadas</div></div>
+        <div class="card"><div class="lbl">Desglose</div><div style="margin-top:12px;font-size:13.5px;font-weight:600;line-height:1.9;">Efectivo <b>${money(by('cash'))}</b><br>Tarjeta <b>${money(by('card'))}</b><br>Transf. <b>${money(by('transfer'))}</b></div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+        <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Membresías que vendió</div>
+        ${SU.length?`<table><thead><tr><th>Cliente</th><th>Plan</th><th>Cobró</th><th>Fecha</th></tr></thead><tbody>${SU.map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td>${esc(this.planName(s.plan_id))}</td><td style="font-weight:800;color:var(--orange)">${s.price_paid!=null?money(s.price_paid):'—'}</td><td style="color:var(--muted)">${fdate(s.start_date)}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Ninguna en este período.</div>'}</div>
+        <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Todas sus ventas</div>
+        ${S.length?`<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pago</th></tr></thead><tbody>${S.slice(0,25).map(v=>`<tr><td style="color:var(--muted)">${fdate(v.created_at)} ${ftime(v.created_at)}</td><td style="font-weight:700">${esc(this.custName(v.customer_id))}</td><td style="font-weight:800;color:#16A34A">${money(v.total)}</td><td><span class="tag tag-gray">${PAY_LABEL[v.payment_method]||'—'}</span></td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin ventas en este período.</div>'}</div>
+      </div>`;
+  },
+  exportEmpCSV(){
+    const emp=$('emp-sel').value;
+    if(!emp||!this._empSales){toast('Primero genera el reporte.',true);return;}
+    const name=this.profName(emp).replace(/\s+/g,'_');
+    csvExport('reporte_'+name,['Fecha','Hora','Cliente','Total','Método'],
+      this._empSales.map(s=>[fdate(s.created_at),ftime(s.created_at),this.custName(s.customer_id),Number(s.total||0),PAY_LABEL[s.payment_method]||'']));
+  },
+  exportSalesCSV(){
+    csvExport('ventas_volten',['Fecha','Hora','Cliente','Total','Método','Atendió'],
+      this._repSales.map(s=>[fdate(s.created_at),ftime(s.created_at),this.custName(s.customer_id),Number(s.total||0),PAY_LABEL[s.payment_method]||s.payment_method,this.profName(s.sold_by||s.staff_id)]));
+  },
+  exportShiftsCSV(){
+    csvExport('turnos_volten',['Abrió','Empleado','Cerró','Fondo','Esperado','Contado','Diferencia'],
+      this._repShifts.map(s=>[fdate(s.opened_at)+' '+ftime(s.opened_at),this.profName(s.staff_id),s.closed_at?fdate(s.closed_at)+' '+ftime(s.closed_at):'abierto',Number(s.opening_cash||0),s.expected_cash!=null?Number(s.expected_cash):'',s.counted_cash!=null?Number(s.counted_cash):'',s.counted_cash!=null&&s.expected_cash!=null?Number(s.counted_cash)-Number(s.expected_cash):'']));
+  },
+
+  /* ═══════ PERSONAL ═══════ */
+  staffBranches:[],
+  view_staff(){
+    if(this.role!=='admin')return '<div class="panel"><div class="stub"><div class="st">Solo el administrador</div></div></div>';
+    return `
+    <div class="topbar">
+      <div><h1>Personal</h1><div class="sub">Cajeras, encargados, coaches, limpieza y contadores</div></div>
+      <button class="btn btn-primary" onclick="Pos.staffModal()">+ Nuevo empleado</button>
+    </div>
+    <div class="panel">
+      <table><thead><tr><th></th><th>Nombre</th><th>Rol</th><th>Correo / usuario</th><th>Sucursal</th><th>Desde</th><th></th></tr></thead>
+      <tbody id="staff-tbody">${this.staffRows()}</tbody></table>
+      <p style="font-size:12px;color:var(--muted);font-weight:500;margin-top:14px">Los <b>coaches</b> que des de alta aquí aparecen automáticamente en "Elige tu entrenador" dentro de la app, en su sucursal. El <b>contador</b> solo puede ver Reportes. Para borrar una cuenta por completo se hace desde el panel de Supabase — aquí puedes quitarle el rol.</p>
+    </div>`;
+  },
+  staffRows(){
+    const staff=this.appProfiles.filter(p=>p.role&&p.role!=='member');
+    return staff.map(p=>{
+      const sbr=this.staffBranches.find(x=>x.staff_id===p.id);
+      const br=sbr?this.branches.find(b=>b.id===sbr.branch_id):null;
+      return `<tr>
+      <td style="width:46px"><div class="av2" style="width:36px;height:36px;border-radius:50%;background:#E5E7EB;color:#6B7280;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;overflow:hidden;">${p.avatar_url?'<img src="'+esc(p.avatar_url)+'" style="width:100%;height:100%;object-fit:cover" alt="">':esc((p.full_name||'?')[0].toUpperCase())}</div></td>
+      <td style="font-weight:700">${esc(p.full_name||'—')}</td>
+      <td><span class="tag ${p.role==='admin'?'tag-dark':(p.role==='coach'?'tag-orange':'tag-gray')}">${ROLE_LABEL[p.role]||p.role}</span></td>
+      <td style="color:var(--muted)">${esc(p.email||'—')}</td>
+      <td>${br?esc(br.name):'Todas'}</td>
+      <td style="color:var(--muted)">${fdate(p.created_at)}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.staffEditModal('${p.id}')">Editar</button>
+        ${p.role==='coach'?`<button class="btn-xs btn btn-danger" onclick="Pos.removeCoachRole('${p.id}')">Quitar coach</button>`:''}
+      </td></tr>`;
+    }).join('');
+  },
+  async after_staff(){
+    // recarga datos y actualiza SOLO la tabla (sin re-render completo, que causaba ciclo infinito)
+    try{
+      const {data}=await sb.from('staff_branches').select('*');
+      if(data)this.staffBranches=data;
+      const {data:profs}=await sb.from('profiles').select('id,full_name,email,role,avatar_url,created_at');
+      if(profs){this.appProfiles=profs;cset('appProfiles',profs);}
+    }catch(e){}
+    const tb=$('staff-tbody');if(tb)tb.innerHTML=this.staffRows();
+  },
+  staffEditModal(id){
+    const p=this.appProfiles.find(x=>x.id===id);if(!p)return;
+    const sbr=this.staffBranches.find(x=>x.staff_id===id);
+    openModal(`
+      <h3>Editar empleado</h3><p class="msub">${esc(p.email||'')}</p>
+      <div class="field"><label>Nombre completo</label><input class="inp" id="se-name" value="${esc(p.full_name||'')}"></div>
+      <div class="frow">
+        <div class="field"><label>Rol</label><select class="inp" id="se-role">
+          ${['cajera','encargado','coach','limpieza','contador','admin'].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Sucursal</label><select class="inp" id="se-branch">${this.branches.map(b=>`<option value="${b.id}" ${sbr&&sbr.branch_id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>Foto (se ve en el POS y en la app si es coach)</label><input class="inp" type="file" id="se-photo" accept="image/*" style="padding-top:11px"></div>
+      <button class="btn btn-primary btn-block" id="se-save" onclick="Pos.saveStaffEdit('${id}')">Guardar cambios</button>
+    `);
+  },
+  async saveStaffEdit(id){
+    if(!navigator.onLine){toast('Necesitas internet para editar personal.',true);return;}
+    $('se-save').disabled=true;$('se-save').textContent='Guardando...';
+    const patch={full_name:$('se-name').value.trim(),role:$('se-role').value};
+    // foto → bucket avatars (requiere pos_migration3.sql)
+    const f=$('se-photo').files[0];
+    if(f){
+      const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
+      const path='staff/'+id+'_'+Date.now()+'.'+ext;
+      const {error:upErr}=await sb.storage.from('avatars').upload(path,f,{upsert:true});
+      if(upErr){toast(/bucket|not found/i.test(upErr.message||'')?'Para subir fotos corre pos_migration3.sql en Supabase.':'Foto: '+upErr.message,true);}
+      else{const {data:pub}=sb.storage.from('avatars').getPublicUrl(path);if(pub)patch.avatar_url=pub.publicUrl;}
+    }
+    const {error}=await sb.from('profiles').update(patch).eq('id',id);
+    if(error){toast(/constraint|check/i.test(error.message||'')?'Para el rol Contador corre pos_migration3.sql.':'Error: '+error.message,true);$('se-save').disabled=false;$('se-save').textContent='Guardar cambios';return;}
+    try{
+      await sb.from('staff_branches').delete().eq('staff_id',id);
+      await sb.from('staff_branches').insert({staff_id:id,branch_id:$('se-branch').value});
+    }catch(e){}
+    // si es coach, refleja el nombre/foto en el directorio de la app
+    if(patch.role==='coach'){
+      try{
+        const {data:cp}=await sb.from('coach_profiles').select('certifications').eq('profile_id',id).maybeSingle();
+        const certs=((cp&&cp.certifications)||[]).filter(x=>typeof x!=='string'||(x.indexOf('__name:')!==0&&x.indexOf('__avatar:')!==0));
+        certs.push('__name:'+patch.full_name);
+        if(patch.avatar_url)certs.push('__avatar:'+patch.avatar_url);
+        if(cp)await sb.from('coach_profiles').update({certifications:certs}).eq('profile_id',id);
+        else await sb.from('coach_profiles').insert({profile_id:id,certifications:certs});
+      }catch(e){}
+    }
+    const p=this.appProfiles.find(x=>x.id===id);if(p)Object.assign(p,patch);
+    cset('appProfiles',this.appProfiles);
+    if(id===this.user.id&&patch.avatar_url)$('su-av').innerHTML='<img src="'+esc(patch.avatar_url)+'" alt="">';
+    closeModal();toast('Empleado actualizado ✓');this.after_staff();
+  },
+  async removeCoachRole(id){
+    const p=this.appProfiles.find(x=>x.id===id);if(!p)return;
+    if(!confirm('¿Quitar a '+(p.full_name||'este coach')+' del directorio de coaches de la app? Su cuenta pasa a miembro normal.'))return;
+    try{await sb.from('coach_profiles').delete().eq('profile_id',id);}catch(e){}
+    const {error}=await sb.from('profiles').update({role:'member'}).eq('id',id);
+    if(error){toast('Error: '+error.message,true);return;}
+    p.role='member';cset('appProfiles',this.appProfiles);
+    toast('Coach dado de baja — ya no aparece en la app');this.after_staff();
+  },
+  staffModal(){
+    openModal(`
+      <h3>Nuevo empleado</h3><p class="msub">Se crea su cuenta con acceso según el rol</p>
+      <div class="field"><label>Nombre completo *</label><input class="inp" id="st-name" placeholder="Nombre y apellido"></div>
+      <div class="frow">
+        <div class="field"><label>Usuario o correo *</label><input class="inp" id="st-user" placeholder="ej. caja1 o correo@..."></div>
+        <div class="field"><label>Contraseña *</label><input class="inp" id="st-pass" placeholder="mínimo 6 caracteres"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Rol</label><select class="inp" id="st-role">
+          <option value="cajera">Cajera / Cajero</option>
+          <option value="encargado">Encargado de sucursal</option>
+          <option value="coach">Coach (aparece en la app)</option>
+          <option value="limpieza">Limpieza</option>
+          <option value="contador">Contador (solo ve Reportes)</option>
+          <option value="admin">Administrador</option>
+        </select></div>
+        <div class="field"><label>Sucursal</label><select class="inp" id="st-branch">${this.branches.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select></div>
+      </div>
+      <button class="btn btn-primary btn-block" id="st-save" onclick="Pos.createStaff()">Crear cuenta</button>
+      <p style="font-size:12px;color:var(--muted);font-weight:500;margin-top:12px;text-align:center">Si pones solo usuario (sin @) se guarda como usuario@volten.pos — entra con ese usuario y su contraseña.</p>
+    `);
+  },
+  async createStaff(){
+    const name=$('st-name').value.trim(),u=$('st-user').value.trim(),pass=$('st-pass').value,role=$('st-role').value,branchId=$('st-branch').value;
+    if(!name||!u||pass.length<6){toast('Llena nombre, usuario y contraseña (6+).',true);return;}
+    if(!navigator.onLine){toast('Necesitas internet para crear cuentas.',true);return;}
+    $('st-save').disabled=true;$('st-save').textContent='Creando...';
+    const email=u.includes('@')?u:(u+'@volten.pos');
+    const {data,error}=await sb2.auth.signUp({email,password:pass,options:{data:{full_name:name,role}}});
+    $('st-save').disabled=false;$('st-save').textContent='Crear cuenta';
+    if(error||!data.user){
+      const msg=(error&&error.message)||'error desconocido';
+      toast(/check|constraint|violates/i.test(msg)?'Falta correr pos_migration2.sql para habilitar roles nuevos.':'No se pudo crear: '+msg,true);
+      return;
+    }
+    const uid=data.user.id;
+    try{await sb.from('staff_branches').insert({staff_id:uid,branch_id:branchId});}catch(e){}
+    if(role==='coach'){
+      try{await sb.from('coach_profiles').insert({profile_id:uid,certifications:['__name:'+name]});}catch(e){}
+    }
+    this.appProfiles.push({id:uid,role,full_name:name,email,created_at:new Date().toISOString()});
+    cset('appProfiles',this.appProfiles);
+    openModal(`
+      <h3>Cuenta creada ✓</h3><p class="msub">Anota o comparte estas credenciales</p>
+      <div style="background:var(--gray);border-radius:16px;padding:20px;font-size:15px;font-weight:600;line-height:2;">
+        Usuario: <b>${esc(u.includes('@')?email:u)}</b><br>Contraseña: <b>${esc(pass)}</b><br>Rol: <b>${ROLE_LABEL[role]}</b>
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:18px" onclick="closeModal();Pos.go('staff')">Listo</button>
+    `);
+  },
+};
+// Candado anti doble-click: un guardado a la vez (evita stock/ventas duplicados)
+['saveStockMove','saveCashMove','saveNewCustomer','savePlan','savePromo','saveAnn','saveFamily','saveCustomerEdit','doCloseShift','joinFamily','famAddMember','saveProduct'].forEach(m=>{
+  const orig=Pos[m].bind(Pos);
+  Pos[m]=async function(){ if(Pos._lock)return; Pos._lock=true; try{ return await orig.apply(Pos,arguments); } finally{ Pos._lock=false; } };
+});
+Pos.init();
+</script>
+</body>
+</html>

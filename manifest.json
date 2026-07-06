@@ -1,0 +1,15 @@
+{
+  "name": "Volten Gym",
+  "short_name": "Volten",
+  "description": "Tu gym en tu bolsillo: rutinas, dieta, progreso y acceso.",
+  "start_url": "./app.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#F97316",
+  "icons": [
+    { "src": "voltengym.png", "sizes": "324x319", "type": "image/png", "purpose": "any" },
+    { "src": "voltengym.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

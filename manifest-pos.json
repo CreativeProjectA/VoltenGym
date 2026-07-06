@@ -1,0 +1,12 @@
+{
+  "name": "Volten Gym — Punto de Venta",
+  "short_name": "Volten POS",
+  "start_url": "./pos.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FAFAFA",
+  "theme_color": "#F97316",
+  "icons": [
+    { "src": "voltengym.png", "sizes": "324x319", "type": "image/png", "purpose": "any" }
+  ]
+}

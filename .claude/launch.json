@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gym-app",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "5544", "C:/Users/Armando/OneDrive/Desktop/gym"],
+      "port": 5544
+    }
+  ]
+}
