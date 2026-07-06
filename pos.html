@@ -1830,8 +1830,9 @@ const Pos={
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <div class="range-pills">
               <button class="range-pill" onclick="Pos.accPreset(1)">HOY</button>
-              <button class="range-pill" onclick="Pos.accPreset(7)">7 DÍAS</button>
-              <button class="range-pill" onclick="Pos.accPreset(30)">30 DÍAS</button>
+              <button class="range-pill" onclick="Pos.accPreset(7)">SEMANA</button>
+              <button class="range-pill" onclick="Pos.accPreset(30)">MES</button>
+              <button class="range-pill" onclick="Pos.accPreset(90)">3 MESES</button>
             </div>
             <input class="inp" type="date" style="height:40px;width:150px" id="acc-from" value="${this.accFrom}">
             <span style="color:var(--muted);font-weight:700">→</span>
@@ -1854,7 +1855,7 @@ const Pos={
   async loadAccess(){
     const bId=this.branch?this.branch.id:null;
     try{
-      let q=sb.from('checkins').select('*').gte('created_at',this.accFrom+'T00:00:00').lte('created_at',this.accTo+'T23:59:59').order('created_at',{ascending:false}).limit(300);
+      let q=sb.from('checkins').select('*').gte('created_at',this.accFrom+'T00:00:00').lte('created_at',this.accTo+'T23:59:59').order('created_at',{ascending:false}).limit(2000);
       if(bId)q=q.eq('branch_id',bId);
       const {data}=await q;this.accHist=data||[];cset('acc_hist',this.accHist);
     }catch(e){this.accHist=cget('acc_hist')||[];}
@@ -1878,7 +1879,8 @@ const Pos={
         <div><div style="font-weight:700">${esc(this.accName(ci))}</div><div style="font-size:12px;color:var(--muted)">entró ${ftime(ci.created_at)} · ${METHOD_LABEL[ci.method]||ci.method}</div></div>
         <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.checkOut('${ci.id}')">Marcar salida</button>
       </div>`).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:10px 0">Nadie adentro ahora.</div>';
-    $('acc-hist').innerHTML=this.accHist.length?`<table><thead><tr><th>Cliente</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Método</th><th>Acceso</th></tr></thead><tbody>${
+    const nOk=this.accHist.filter(c=>c.granted).length;
+    $('acc-hist').innerHTML=this.accHist.length?`<div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:10px">${this.accHist.length} registro${this.accHist.length===1?'':'s'} · ${nOk} entrada${nOk===1?'':'s'} permitida${nOk===1?'':'s'} del ${fdate(this.accFrom)} al ${fdate(this.accTo)}</div><table><thead><tr><th>Cliente</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Método</th><th>Acceso</th></tr></thead><tbody>${
       this.accHist.map(ci=>`<tr><td style="font-weight:700">${esc(this.accName(ci))}</td><td>${fdate(ci.created_at)}</td><td>${ftime(ci.created_at)}</td><td>${ci.checked_out_at?ftime(ci.checked_out_at):'—'}</td><td>${METHOD_LABEL[ci.method]||ci.method}</td><td>${ci.granted?'<span class="tag tag-green">Permitido</span>':'<span class="tag tag-red">Rechazado</span>'}</td></tr>`).join('')
     }</tbody></table>`:'<div class="stub" style="padding:26px"><p>Sin accesos en este rango de fechas.</p></div>';
   },
