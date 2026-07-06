@@ -245,6 +245,7 @@
     }
     @media (min-width: 700px) {
       body { background: #ECECEE !important; }
+      #dc-root .sc-host > div { background: #ECECEE !important; }
       #app-root {
         max-width: 540px !important;
         height: 100dvh !important;
@@ -4752,6 +4753,21 @@ class Component extends DCLogic {
   }
 
   renderVals() {
+    if (!this._pwaDone) {
+      this._pwaDone = true;
+      try {
+        document.title = 'Volten Gym';
+        var _h = document.head || document.getElementsByTagName('head')[0];
+        if (_h && !document.querySelector('link[rel=manifest]')) {
+          var _t = [['link', { rel: 'manifest', href: 'manifest.json' }], ['link', { rel: 'icon', type: 'image/png', href: 'voltengym.png' }], ['link', { rel: 'apple-touch-icon', href: 'voltengym.png' }], ['meta', { name: 'theme-color', content: '#F97316' }]];
+          for (var _i = 0; _i < _t.length; _i++) {
+            var _e = document.createElement(_t[_i][0]);
+            for (var _k in _t[_i][1]) _e.setAttribute(_k, _t[_i][1][_k]);
+            _h.appendChild(_e);
+          }
+        }
+      } catch (e) {}
+    }
     const { onboardingStep, screen, workoutOpen, selectedGoal, selectedLevel, selectedDays, userName, userEmail, activeFilter, showNotifications, favPrograms, authMode, userType, selectedProgramId, authError, authLoading, selectedCoachId, assignedCoach, coaches, workoutLogging } = this.state;
     const rawCoachList = coaches || [];
     const hoursMatch = (preferred, coachHours) => {
