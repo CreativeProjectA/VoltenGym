@@ -1158,6 +1158,10 @@ const Pos={
         if(rs&&rs.error){toast('Venta cobrada pero la membresía falló: '+rs.error.message+' — ¿ya corriste pos_migration2.sql?',true);}
       }else if(it.kind==='coach'){
         productId=await this.ensureCoachProduct(it,put);
+        // AL PAGAR se asigna el coach al cliente (si tiene app) → el coach ve su nuevo alumno
+        if(c&&c.profile_id){
+          try{await sb.from('member_profiles').upsert({profile_id:c.profile_id,coach_id:it.id},{onConflict:'profile_id'});}catch(e){}
+        }
       }
       await put('sale_items',{id:uuid(),sale_id:saleId,product_id:productId,quantity:it.qty,unit_price:it.price});
       if(it.kind==='product'){
@@ -1785,13 +1789,13 @@ const Pos={
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
       <div class="scan-box" style="margin-bottom:0">
         <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Entrada / Salida</div>
-        <input class="inp" id="scan-inp" placeholder="Escanea el QR o teclea nombre / Nº de cuenta + Enter" onkeydown="if(event.key==='Enter')Pos.accessScan(this.value)">
-        <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">Primer escaneo = entra · segundo escaneo = sale. Valida la membresía sola.</div>
+        <input class="inp" id="scan-inp" placeholder="Teclea el nombre o Nº de cuenta del cliente + Enter" onkeydown="if(event.key==='Enter')Pos.accessScan(this.value)">
+        <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">Primera vez = entra · segunda vez = sale. Valida la membresía sola. (Con QR/huella/facial cuando esté el equipo, es automático.)</div>
       </div>
       <div class="scan-box" style="margin-bottom:0;border-color:var(--orange);background:var(--orange-soft);">
-        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--orange-dark);margin-bottom:10px">Vincular cuenta de la app</div>
-        <input class="inp" id="link-scan-inp" placeholder="Escanea el QR o teclea el Nº de cuenta del cliente + Enter" onkeydown="if(event.key==='Enter')Pos.linkAccountScan(this.value)">
-        <div style="font-size:12px;color:var(--orange-dark);font-weight:500;margin-top:10px">Conecta el celular del cliente con su ficha del gym para que su membresía le aparezca en la app.</div>
+        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--orange-dark);margin-bottom:10px">Enlazar app del cliente</div>
+        <input class="inp" id="link-scan-inp" placeholder="Teclea el Nº de cuenta que ve el cliente en su app + Enter" onkeydown="if(event.key==='Enter')Pos.linkAccountScan(this.value)">
+        <div style="font-size:12px;color:var(--orange-dark);font-weight:500;margin-top:10px">El cliente abre su app → Perfil → Mi código QR y te dicta su Nº de cuenta. Al enlazar, su membresía y su QR quedan activos.</div>
       </div>
     </div>
     <div id="access-result"></div>

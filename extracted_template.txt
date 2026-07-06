@@ -2066,14 +2066,7 @@
               <h1 style="font-size:34px;font-weight:800;color:#111111;letter-spacing:-0.03em;line-height:1.05;">Progreso</h1>
               <p style="font-size:14px;color:#9CA3AF;margin-top:4px;">de tus atletas</p>
             </div>
-            <div class="vg-s1" style="margin:18px 16px 0;position:relative;border-radius:20px;overflow:hidden;height:120px;">
-              <div style="position:absolute;inset:0;background-image:url('aa000015-0000-0000-0000-000000000015');background-size:cover;background-position:center;"></div>
-              <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,0.78),rgba(0,0,0,0.15));"></div>
-              <div style="position:absolute;inset:0;padding:18px 20px;display:flex;flex-direction:column;justify-content:center;">
-                <p style="font-size:9px;font-weight:700;color:#F97316;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:5px;">Báscula inteligente</p>
-                <p style="font-size:15.5px;font-weight:800;color:#FFFFFF;line-height:1.35;">Peso, grasa y músculo de cada atleta<br>en su ficha, al abrirla</p>
-              </div>
-            </div>
+
             <div class="vg-s1" style="margin:20px 16px 0;display:flex;flex-direction:column;gap:12px;">
               <div style="{{ cprEmptyStyle }}">
                 <div style="background:#F5F5F5;border-radius:24px;padding:28px 22px;text-align:center;">
@@ -3569,11 +3562,10 @@ class Component extends DCLogic {
       .from('member_profiles')
       .upsert({ profile_id: this.state.session.user.id, coach_id: cid }, { onConflict: 'profile_id' });
     if (error) { alert('No se pudo guardar tu coach: ' + error.message); return; }
-    this.sendIntroToCoach(cid);
     const c = (this.state.coaches || []).find(x => x.id === cid);
     if (c) this.sendPosRequest('coach', c.id, c.name, parseFloat(String(c.price || '').replace(/[^0-9.]/g, '')) || null);
-    this.setState({ assignedCoach: c ? { id: c.id, name: c.name, bio: c.bio || 'Tu entrenador asignado' } : null, coachPickerOpen: false });
-    if (c) alert('Solicitud enviada. Tu entrenador ' + c.name + ' queda pendiente de pago — pasa a recepción a pagarlo (' + (c.price || 'precio en recepcion') + ') y queda activo.');
+    this.setState({ coachPickerOpen: false });
+    if (c) alert('Solicitud enviada. Tu entrenador ' + c.name + ' queda PENDIENTE de pago — pasa a recepción a pagarlo (' + (c.price || 'precio en recepcion') + '). Aparecerá como tu coach en cuanto se registre el pago.');
   }
 
   async coachAssignProgram() {
@@ -4205,22 +4197,26 @@ class Component extends DCLogic {
   }
 
   async loginWithEmail() {
+    // login por usuario o correo: coaches/staff pueden teclear solo su usuario
     const { userEmail, userPassword } = this.state;
     if (!userEmail || !userPassword) {
-      this.setState({ authError: 'Completa correo y contraseña.' });
+      this.setState({ authError: 'Completa usuario y contraseña.' });
       return;
     }
     this.setState({ authLoading: true, authError: '' });
     await waitForSupabase();
-    const { data, error } = await getSupabase().auth.signInWithPassword({
-      email: userEmail,
-      password: userPassword,
-    });
+    const raw = String(userEmail).trim();
+    const tries = raw.indexOf('@') !== -1 ? [raw] : [raw + '@volten.pos', raw + '@volten.app', raw + '@gmail.com'];
+    let data = null, error = null;
+    for (const em of tries) {
+      const r = await getSupabase().auth.signInWithPassword({ email: em, password: userPassword });
+      if (!r.error) { data = r.data; error = null; break; }
+      error = r.error;
+    }
     if (error) {
-      this.setState({ authLoading: false, authError: error.message });
+      this.setState({ authLoading: false, authError: 'Usuario o contraseña incorrectos.' });
       return;
     }
-    // Logging into an existing account skips the questionnaire entirely.
     if (data.session) this.applySession(data.session);
   }
 
@@ -4710,14 +4706,10 @@ class Component extends DCLogic {
     const list = this.state.coaches || [];
     const coach = list.find(c => c.id === this.state.selectedCoachId);
     if (!coach) return;
-    this.setState({ assignedCoach: coach, onboardingStep: 7 });
+    this.setState({ onboardingStep: 7 });
     if (coach.real && this.state.session) {
-      await waitForSupabase();
-      await getSupabase()
-        .from('member_profiles')
-        .upsert({ profile_id: this.state.session.user.id, coach_id: coach.id }, { onConflict: 'profile_id' });
-      this.sendIntroToCoach(coach.id);
       this.sendPosRequest('coach', coach.id, coach.name, parseFloat(String(coach.price || '').replace(/[^0-9.]/g, '')) || null);
+      alert('Solicitud enviada. Tu entrenador queda pendiente de pago — pásalo a pagar en recepción y quedará activo.');
     }
   }
 
