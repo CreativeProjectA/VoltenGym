@@ -36,22 +36,24 @@ newTemplate = newTemplate.replace('__BUILD_ID__', buildId);
 
 // ── Inject local PNG photos into the manifest ──────────────────────────────
 // Each entry maps a stable UUID (used in the template) to a local PNG file.
+// Fotos comprimidas (JPEG ~30-70KB) en img/ — antes eran PNGs de ~1.2MB cada una,
+// hacían el bundle de 21MB y tardaba minutos en cargar. Ahora ~1MB total.
 const LOCAL_PHOTOS = {
-  'aa000001-0000-0000-0000-000000000001': 'fuerza.png',
-  'aa000002-0000-0000-0000-000000000002': 'cardio.png',
-  'aa000003-0000-0000-0000-000000000003': 'abdomen.png',
-  'aa000004-0000-0000-0000-000000000004': 'pierna.png',
-  'aa000005-0000-0000-0000-000000000005': 'principiantes.png',
-  'aa000006-0000-0000-0000-000000000006': 'ChatGPT Image 2 jul 2026, 23_38_14.png',
-  'aa000007-0000-0000-0000-000000000007': 'ChatGPT Image 3 jul 2026, 10_55_32.png',
-  'aa000008-0000-0000-0000-000000000008': 'fuerza 2.png',
-  'aa000009-0000-0000-0000-000000000009': 'cardio 2.png',
-  'aa000010-0000-0000-0000-000000000010': 'core 2.png',
-  'aa000011-0000-0000-0000-000000000011': 'pierno 2.png',
-  'aa000012-0000-0000-0000-000000000012': 'principiante 2.png',
-  'aa000013-0000-0000-0000-000000000013': 'plan prgramas.png',
-  'aa000014-0000-0000-0000-000000000014': 'ensalada.png',
-  'aa000015-0000-0000-0000-000000000015': 'bascula.png',
+  'aa000001-0000-0000-0000-000000000001': 'img/fuerza.jpg',
+  'aa000002-0000-0000-0000-000000000002': 'img/cardio.jpg',
+  'aa000003-0000-0000-0000-000000000003': 'img/abdomen.jpg',
+  'aa000004-0000-0000-0000-000000000004': 'img/pierna.jpg',
+  'aa000005-0000-0000-0000-000000000005': 'img/principiantes.jpg',
+  'aa000006-0000-0000-0000-000000000006': 'img/ChatGPT Image 2 jul 2026, 23_38_14.jpg',
+  'aa000007-0000-0000-0000-000000000007': 'img/ChatGPT Image 3 jul 2026, 10_55_32.jpg',
+  'aa000008-0000-0000-0000-000000000008': 'img/fuerza 2.jpg',
+  'aa000009-0000-0000-0000-000000000009': 'img/cardio 2.jpg',
+  'aa000010-0000-0000-0000-000000000010': 'img/core 2.jpg',
+  'aa000011-0000-0000-0000-000000000011': 'img/pierno 2.jpg',
+  'aa000012-0000-0000-0000-000000000012': 'img/principiante 2.jpg',
+  'aa000013-0000-0000-0000-000000000013': 'img/plan prgramas.jpg',
+  'aa000014-0000-0000-0000-000000000014': 'img/ensalada.jpg',
+  'aa000015-0000-0000-0000-000000000015': 'img/bascula.jpg',
 };
 
 let rebuilt = original;
@@ -73,7 +75,8 @@ if (manifestMatch) {
     const filePath = path.join(__dirname, filename);
     if (fs.existsSync(filePath)) {
       const data = fs.readFileSync(filePath).toString('base64');
-      manifest[uuid] = { mime: 'image/png', compressed: false, data };
+      const mime = /\.jpe?g$/i.test(filename) ? 'image/jpeg' : 'image/png';
+      manifest[uuid] = { mime, compressed: false, data };
       console.log(`Injected ${filename} as ${uuid}`);
     } else {
       console.warn(`Warning: ${filename} not found, skipping`);

@@ -5214,13 +5214,13 @@ class Component extends DCLogic {
       exShowTodos: '',
       welcomeBgStyle: (() => {
         // Una foto distinta cada vez que abres la app (fija durante la sesión)
+        // welcomePoolLocal: fotos reales del gym embebidas (cargan al instante, sin internet)
         const pool = [
-          ['https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1000&q=80', 'center 25%'],
-          ['https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=1000&q=80', 'center'],
-          ['https://images.unsplash.com/photo-1540497077202-7c8a3999166f?w=1000&q=80', 'center'],
-          ['https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=1000&q=80', 'center'],
-          ['https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=1000&q=80', 'center'],
-          ['https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1000&q=80', 'center'],
+          ['aa000001-0000-0000-0000-000000000001', 'center 25%'],
+          ['aa000004-0000-0000-0000-000000000004', 'center'],
+          ['aa000003-0000-0000-0000-000000000003', 'center'],
+          ['aa000002-0000-0000-0000-000000000002', 'center'],
+          ['aa000005-0000-0000-0000-000000000005', 'center'],
         ];
         if (this._welcomeIdx === undefined) this._welcomeIdx = Math.floor(Math.random() * pool.length);
         const [ph, pos] = pool[this._welcomeIdx];
@@ -5370,9 +5370,9 @@ class Component extends DCLogic {
           try { return localStorage.getItem(this.lsKey('vg_has_programs')) !== '1'; } catch (_) { return true; }
         })();
         if (_noProg2) {
-          const _wpool = ['photo-1534438327276-14e5300c3a48', 'photo-1517838277536-f5f99be501cd', 'photo-1540497077202-7c8a3999166f', 'photo-1581009146145-b5ef050c2e1e'];
+          const _wpool = ['aa000001-0000-0000-0000-000000000001', 'aa000002-0000-0000-0000-000000000002', 'aa000004-0000-0000-0000-000000000004', 'aa000005-0000-0000-0000-000000000005'];
           const _wp2 = _wpool[Math.floor(Date.now() / 86400000) % _wpool.length];
-          return 'position:absolute;inset:0;background-size:cover;background-position:center;background-image:url("https://images.unsplash.com/' + _wp2 + '?w=1000&q=80");';
+          return 'position:absolute;inset:0;background-size:cover;background-position:center;background-image:url("' + _wp2 + '");';
         }
         const _hwPhotos = { fuerza: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&q=80', assigned: 'd545a0a7-a1bd-42c2-839e-7914082512c5', espalda: 'aa000001-0000-0000-0000-000000000001', core: 'aa000003-0000-0000-0000-000000000003', cardio: 'aa000002-0000-0000-0000-000000000002', pierna: 'aa000004-0000-0000-0000-000000000004', principiantes: 'aa000005-0000-0000-0000-000000000005', movilidad: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800&q=80', yoga: 'https://images.unsplash.com/photo-1545389336-cf090694435e?w=800&q=80' };
         const _heroReal = this.state.realPrograms && this.state.realPrograms['assigned'];
