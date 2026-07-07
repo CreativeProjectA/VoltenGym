@@ -2737,18 +2737,18 @@
               <div style="{{ cdsEmptyStyle }}"><p style="font-size:13px;color:#9CA3AF;padding:0 8px;">Envía tu primera dieta y aparecerá aquí.</p></div>
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <div onclick="{{ cdsOpen0 }}" class="vg-press" style="{{ cds0Style }}">
-                  <div style="width:42px;height:42px;border-radius:12px;background-image:url(&quot;aa000014-0000-0000-0000-000000000014&quot;);background-size:cover;background-position:center;flex-shrink:0;"></div>
-                  <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ cds0Title }}</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">{{ cds0Meta }}</div></div>
+                  <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#F97316,#EA580C);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#FFFFFF;flex-shrink:0;">{{ cds0Initial }}</div>
+                  <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:800;color:#0A0A0A;">{{ cds0Title }}</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">{{ cds0Meta }}</div></div>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </div>
                 <div onclick="{{ cdsOpen1 }}" class="vg-press" style="{{ cds1Style }}">
-                  <div style="width:42px;height:42px;border-radius:12px;background-image:url(&quot;aa000014-0000-0000-0000-000000000014&quot;);background-size:cover;background-position:center;flex-shrink:0;"></div>
-                  <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ cds1Title }}</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">{{ cds1Meta }}</div></div>
+                  <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#F97316,#EA580C);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#FFFFFF;flex-shrink:0;">{{ cds1Initial }}</div>
+                  <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:800;color:#0A0A0A;">{{ cds1Title }}</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">{{ cds1Meta }}</div></div>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </div>
                 <div onclick="{{ cdsOpen2 }}" class="vg-press" style="{{ cds2Style }}">
-                  <div style="width:42px;height:42px;border-radius:12px;background-image:url(&quot;aa000014-0000-0000-0000-000000000014&quot;);background-size:cover;background-position:center;flex-shrink:0;"></div>
-                  <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ cds2Title }}</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">{{ cds2Meta }}</div></div>
+                  <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#F97316,#EA580C);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#FFFFFF;flex-shrink:0;">{{ cds2Initial }}</div>
+                  <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:800;color:#0A0A0A;">{{ cds2Title }}</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">{{ cds2Meta }}</div></div>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </div>
               </div>
@@ -5603,10 +5603,12 @@ class Component extends DCLogic {
           const d = (this.state.coachSentDiets || [])[i];
           const c = d ? clients.find(x => x.id === d.member_id) : null;
           const when = d && d.updated_at ? new Date(/Z$|[+-]\d{2}:?\d{2}$/.test(d.updated_at) ? d.updated_at : (d.updated_at + 'Z')).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '';
+          const nm = c ? c.name : 'Atleta';
           out['cds' + i + 'Style'] = d ? { display: 'flex', alignItems: 'center', gap: '12px', background: '#F5F5F5', borderRadius: '16px', padding: '12px 14px', cursor: 'pointer' } : { display: 'none' };
-          out['cds' + i + 'Title'] = d ? d.title : '';
-          out['cds' + i + 'Meta'] = d ? ((c ? c.name : 'Atleta') + ' · ' + when) : '';
-          out['cdsOpen' + i] = d ? (() => this.setState({ cddOpen: true, cddDiet: { ...d, clientName: c ? c.name : 'Atleta', when } })) : (() => {});
+          out['cds' + i + 'Initial'] = d ? ((nm.trim().charAt(0) || 'A').toUpperCase()) : '';
+          out['cds' + i + 'Title'] = d ? nm : '';
+          out['cds' + i + 'Meta'] = d ? ('Dieta: ' + d.title + ' · ' + when) : '';
+          out['cdsOpen' + i] = d ? (() => this.setState({ cddOpen: true, cddDiet: { ...d, clientName: nm, when } })) : (() => {});
         });
         return out;
       })()),
