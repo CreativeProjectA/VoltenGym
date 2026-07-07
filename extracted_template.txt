@@ -4197,6 +4197,9 @@ class Component extends DCLogic {
     this.setState(s => ({
       session: data.session,
       authLoading: false,
+      userAvatar: null,        // cuenta nueva = sin foto (no heredar la anterior)
+      memberBranchId: null,
+      subscriptionActive: false,
       onboardingStep: s.onboardingStep + 1,
     }));
   }
@@ -4326,6 +4329,13 @@ class Component extends DCLogic {
       userName: '',
       userEmail: '',
       userPassword: '',
+      userAvatar: null,
+      memberBranchId: null,
+      subscriptionActive: false,
+      subscriptionPlanName: null,
+      subscriptionEndDate: null,
+      memberDiet: null,
+      coachSentDiets: [],
       authError: '',
       authMode: 'signup',
       stats: { totalWorkouts: 0, totalHours: 0, totalHoursUnit: 'h', streak: 0, thisWeekCount: 0, weekDots: {} },
@@ -5246,13 +5256,19 @@ class Component extends DCLogic {
       exShowTodos: '',
       welcomeBgStyle: (() => {
         // Una foto distinta cada vez que abres la app (fija durante la sesión)
-        // welcomePoolLocal: fotos reales del gym embebidas (cargan al instante, sin internet)
+        // welcomePoolLocal: fotos embebidas del gym + variadas de gimnasio (más variedad)
         const pool = [
           ['aa000001-0000-0000-0000-000000000001', 'center 25%'],
           ['aa000004-0000-0000-0000-000000000004', 'center'],
           ['aa000003-0000-0000-0000-000000000003', 'center'],
           ['aa000002-0000-0000-0000-000000000002', 'center'],
           ['aa000005-0000-0000-0000-000000000005', 'center'],
+          ['https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1000&q=80', 'center 25%'],
+          ['https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?w=1000&q=80', 'center'],
+          ['https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=1000&q=80', 'center'],
+          ['https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=1000&q=80', 'center'],
+          ['https://images.unsplash.com/photo-1550345332-09e3ac987658?w=1000&q=80', 'center'],
+          ['https://images.unsplash.com/photo-1518611012118-696072aa579a?w=1000&q=80', 'center'],
         ];
         if (this._welcomeIdx === undefined) this._welcomeIdx = Math.floor(Math.random() * pool.length);
         const [ph, pos] = pool[this._welcomeIdx];
