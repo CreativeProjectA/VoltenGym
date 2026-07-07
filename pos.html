@@ -648,6 +648,8 @@ const Pos={
       +'\nContado: '+money(counted)
       +'\nDiferencia: '+money(counted-expected);
     this._corte=resumen;
+    // correo automático del corte al dueño/contadores (si la Edge Function está desplegada)
+    try{ sb.functions.invoke('corte-email',{body:{resumen}}); }catch(e){}
     openModal(`
       <h3>Turno cerrado ✓</h3>
       <p class="msub">Resumen del corte</p>

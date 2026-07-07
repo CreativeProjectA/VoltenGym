@@ -841,6 +841,11 @@
           </div>
           <p style="font-size:11px;color:#B0B0B0;margin-top:10px;">{{ ccdBodyNote }}</p>
         </div>
+        <!-- Elecciones de dieta del cliente -->
+        <div style="{{ ccdDietChoicesStyle }}">
+          <div style="font-size:14px;font-weight:700;color:#0A0A0A;margin-bottom:10px;">Qué comidas eligió</div>
+          <div style="font-size:13px;color:#374151;line-height:1.9;white-space:pre-line;">{{ ccdDietChoices }}</div>
+        </div>
         <!-- Últimas sesiones del cliente -->
         <div style="background:#F2F2F4;border-radius:20px;padding:18px;">
           <div style="font-size:14px;font-weight:700;color:#0A0A0A;margin-bottom:10px;">Últimas sesiones</div>
@@ -878,7 +883,18 @@
       <div style="background:#FFFFFF;border-radius:24px;padding:24px 22px;max-width:320px;width:88%;">
         <div style="font-size:9px;font-weight:700;color:#F97316;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:4px;">{{ dietDetailHora }}</div>
         <h3 style="font-size:22px;font-weight:800;color:#0A0A0A;letter-spacing:-0.02em;margin-bottom:12px;">{{ dietDetailMeal }}</h3>
-        <div style="font-size:14.5px;font-weight:600;color:#374151;line-height:1.8;white-space:pre-line;background:#F8F8F8;border-radius:14px;padding:14px 16px;">{{ dietDetailText }}</div>
+        <div style="{{ dietDetailSingleStyle }}">{{ dietDetailText }}</div>
+        <div style="{{ dietDetailOptsStyle }}">
+          <p style="font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Elige la que vas a hacer</p>
+          <div onclick="{{ pickDietOpt1 }}" class="vg-press" style="{{ dietOpt1Style }}">
+            <div style="font-size:10px;font-weight:800;color:#F97316;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Opción 1 {{ dietOpt1Check }}</div>
+            <div style="font-size:14px;font-weight:600;color:#0A0A0A;line-height:1.5;">{{ dietDetailOpt1 }}</div>
+          </div>
+          <div onclick="{{ pickDietOpt2 }}" class="vg-press" style="{{ dietOpt2Style }}">
+            <div style="font-size:10px;font-weight:800;color:#F97316;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Opción 2 {{ dietOpt2Check }}</div>
+            <div style="font-size:14px;font-weight:600;color:#0A0A0A;line-height:1.5;">{{ dietDetailOpt2 }}</div>
+          </div>
+        </div>
         <div onclick="{{ closeDietDetail }}" class="vg-press" style="margin-top:16px;background:#0A0A0A;border-radius:100px;padding:13px 0;text-align:center;cursor:pointer;"><span style="font-size:14px;font-weight:700;color:#FFFFFF;">Listo</span></div>
       </div>
     </div>
@@ -3040,25 +3056,11 @@ class Component extends DCLogic {
   }
 
   async fetchPrograms() {
-    await waitForSupabase();
-    const { data, error } = await getSupabase()
-      .from('programs')
-      .select('id, slug, title, level, duration_weeks, program_exercises(id, order_index, name, sets, reps, notes)')
-      .not('slug', 'is', null);
-    if (error || !data || !data.length) return; // keep MOCK_PROGRAMS fallback
-    const bySlug = {};
-    data.forEach(p => {
-      const exercises = (p.program_exercises || []).slice().sort((a, b) => a.order_index - b.order_index);
-      bySlug[p.slug] = {
-        id: p.id,
-        name: p.title,
-        level: p.level || 'Intermedio',
-        duration: String(Math.min(90, Math.max(20, Math.round(exercises.length * 4 / 5) * 5))),
-        exercises: String(exercises.length),
-        exerciseList: exercises.map(e => ({ id: e.id, name: e.name, subtitle: e.notes || '', setsReps: e.reps ? `${e.sets || '3'} × ${e.reps}` : (e.sets ? `${e.sets} series` : '3 × 12') })),
-      };
-    });
-    if (Object.keys(bySlug).length) this.setState(s => ({ realPrograms: { ...s.realPrograms, ...bySlug } }));
+    // Los programas semilla de la base (slug "fuerza"/"movilidad") pisaban el
+    // catálogo mock: abrías "Fuerza y Espalda" y salía "Fuerza Total" con otra
+    // foto. El catálogo mock ya tiene los nombres y fotos correctos, así que NO
+    // se sobreescribe. Los programas del coach llegan por fetchAssignedProgram.
+    return;
   }
 
   async openCategoryPanel(key, name) {
@@ -3559,15 +3561,16 @@ class Component extends DCLogic {
   async saveCoachFromProfile() {
     const cid = this.state.selectedCoachId;
     if (!cid || !this.state.session) return;
-    await waitForSupabase();
-    const { error } = await getSupabase()
-      .from('member_profiles')
-      .upsert({ profile_id: this.state.session.user.id, coach_id: cid }, { onConflict: 'profile_id' });
-    if (error) { alert('No se pudo guardar tu coach: ' + error.message); return; }
+    // Candado: para pedir coach necesitas membresía ACTIVA (cuenta vinculada en recepción).
+    if (!this.state.subscriptionActive) {
+      alert('Para elegir entrenador necesitas tu membresía activa. Pásate a recepción: baja la app, dales tu Nº de cuenta (Perfil → Mi código QR), activan tu membresía y desde ahí podrás solicitar tu coach.');
+      return;
+    }
+    // El coach NO se asigna aquí: solo se manda la solicitud y se paga en recepción.
     const c = (this.state.coaches || []).find(x => x.id === cid);
     if (c) this.sendPosRequest('coach', c.id, c.name, parseFloat(String(c.price || '').replace(/[^0-9.]/g, '')) || null);
     this.setState({ coachPickerOpen: false });
-    if (c) alert('Solicitud enviada. Tu entrenador ' + c.name + ' queda PENDIENTE de pago — pasa a recepción a pagarlo (' + (c.price || 'precio en recepcion') + '). Aparecerá como tu coach en cuanto se registre el pago.');
+    if (c) alert('Solicitud enviada. Tu entrenador ' + c.name + ' queda PENDIENTE de pago — pásate a recepción a pagarlo (' + (c.price || 'precio en recepcion') + '). Aparecerá como tu coach en cuanto se registre el pago.');
   }
 
   async coachAssignProgram() {
@@ -4502,6 +4505,17 @@ class Component extends DCLogic {
     try { localStorage.setItem('vg_body', JSON.stringify(current)); } catch (_) {}
     this.syncBodyData(current);
     this.setState({ bodyDataTick: Date.now() });
+  }
+
+  async saveDietChoices(choices) {
+    if (!this.state.session) return;
+    try {
+      await waitForSupabase();
+      let bd = {};
+      try { bd = JSON.parse(localStorage.getItem('vg_body') || '{}'); } catch (_) {}
+      bd.dietChoices = choices;
+      await getSupabase().from('member_profiles').upsert({ profile_id: this.state.session.user.id, body_data: bd }, { onConflict: 'profile_id' });
+    } catch (_) {}
   }
 
   syncBodyData(data) {
@@ -5685,7 +5699,11 @@ class Component extends DCLogic {
         ? { display: 'flex', alignItems: 'center', gap: '14px', margin: '0 16px 4px', background: '#F2F2F4', borderRadius: '20px', padding: '16px', cursor: 'pointer' }
         : { display: 'none' },
       coachPickerPanelStyle: { display: this.state.coachPickerOpen ? 'flex' : 'none', position: 'absolute', inset: 0, zIndex: 254, flexDirection: 'column', background: '#FFFFFF' },
-      openCoachPicker: () => { this.fetchCoaches(); this.setState({ coachPickerOpen: true, selectedCoachId: null }); },
+      openCoachPicker: () => {
+        if (!this.state.memberBranchId) { alert('Primero elige tu sucursal (Perfil → Mi sucursal). Los entrenadores que verás son los de esa sucursal.'); return; }
+        if (!this.state.subscriptionActive) { alert('Para elegir entrenador necesitas tu membresía activa. Pásate a recepción a activarla con tu Nº de cuenta.'); return; }
+        this.fetchCoaches(); this.setState({ coachPickerOpen: true, selectedCoachId: null });
+      },
       closeCoachPicker: () => this.setState({ coachPickerOpen: false }),
       confirmCoachFromProfile: () => this.saveCoachFromProfile(),
       removeCoach: () => this.removeCoach(),
@@ -5739,7 +5757,41 @@ class Component extends DCLogic {
       dietDetailPanelStyle: { display: this.state.dietDetail ? 'flex' : 'none', position: 'absolute', inset: 0, zIndex: 256, alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' },
       dietDetailMeal: this.state.dietDetail ? this.state.dietDetail.meal : '',
       dietDetailHora: this.state.dietDetail ? ('Hora sugerida · ' + this.state.dietDetail.hora) : '',
-      dietDetailText: this.state.dietDetail ? String(this.state.dietDetail.text).split(' · ').map(x => '• ' + x).join('\n') : '',
+      ...((() => {
+        const dd = this.state.dietDetail;
+        if (!dd) return { dietDetailText: '', dietDetailSingleStyle: { display: 'none' }, dietDetailOptsStyle: { display: 'none' }, dietDetailOpt1: '', dietDetailOpt2: '', dietOpt1Check: '', dietOpt2Check: '', dietOpt1Style: {}, dietOpt2Style: {}, pickDietOpt1: () => {}, pickDietOpt2: () => {} };
+        const raw = String(dd.text || '');
+        // separar "Opción 1: ... · Opción 2: ..." (o con saltos de línea)
+        const m1 = raw.match(/Opci[oó]n\s*1\s*:\s*([\s\S]*?)(?=(?:·\s*)?Opci[oó]n\s*2\s*:|$)/i);
+        const m2 = raw.match(/Opci[oó]n\s*2\s*:\s*([\s\S]*)$/i);
+        const clean = (t) => (t || '').replace(/·/g, ' ').replace(/\s+/g, ' ').trim();
+        const hasOpts = !!(m1 && m2);
+        const opt1 = hasOpts ? clean(m1[1]) : '';
+        const opt2 = hasOpts ? clean(m2[1]) : '';
+        let choices = {};
+        try { choices = JSON.parse(localStorage.getItem(this.lsKey('vg_diet_choices')) || '{}'); } catch (_) {}
+        const chosen = choices[dd.meal] || null;
+        const cardBase = { borderRadius: '14px', padding: '13px 15px', marginBottom: '10px', cursor: 'pointer', border: '2px solid #EFEFEF', background: '#F8F8F8' };
+        const sel = { border: '2px solid #F97316', background: '#FFF4EC' };
+        const pick = (n) => () => {
+          let ch = {};
+          try { ch = JSON.parse(localStorage.getItem(this.lsKey('vg_diet_choices')) || '{}'); } catch (_) {}
+          ch[dd.meal] = n;
+          try { localStorage.setItem(this.lsKey('vg_diet_choices'), JSON.stringify(ch)); } catch (_) {}
+          this.saveDietChoices(ch);
+          this.setState({ dietDetail: { ...dd } });
+        };
+        return {
+          dietDetailText: hasOpts ? '' : (raw.split(' · ').map(x => '• ' + x).join('\n')),
+          dietDetailSingleStyle: hasOpts ? { display: 'none' } : { fontSize: '14.5px', fontWeight: '600', color: '#374151', lineHeight: '1.8', whiteSpace: 'pre-line', background: '#F8F8F8', borderRadius: '14px', padding: '14px 16px' },
+          dietDetailOptsStyle: hasOpts ? { display: 'block' } : { display: 'none' },
+          dietDetailOpt1: opt1, dietDetailOpt2: opt2,
+          dietOpt1Check: chosen === 1 ? '· elegida ✓' : '', dietOpt2Check: chosen === 2 ? '· elegida ✓' : '',
+          dietOpt1Style: chosen === 1 ? { ...cardBase, ...sel } : cardBase,
+          dietOpt2Style: chosen === 2 ? { ...cardBase, ...sel } : cardBase,
+          pickDietOpt1: pick(1), pickDietOpt2: pick(2),
+        };
+      })()),
       closeDietDetail: () => this.setState({ dietDetail: null }),
       qaAssign: () => { const el = document.getElementById('coach-assign'); if (el) el.scrollIntoView({ behavior: 'smooth' }); },
       qaDiet: () => { const el = document.getElementById('coach-diet'); if (el) el.scrollIntoView({ behavior: 'smooth' }); },
@@ -5779,6 +5831,15 @@ class Component extends DCLogic {
               ccdBodyLegs: g('legs', '%'),
               ccdBodyAbs: g('abs', '%'),
               ccdBodyNote: Object.keys(bd).length ? 'Datos registrados por el cliente desde su app / báscula inteligente.' : 'El cliente aún no registra su composición: en su app va a Progreso → Mi cuerpo (o conecta la báscula).',
+              ...((() => {
+                const ch = (bd && bd.dietChoices) || {};
+                const ks = Object.keys(ch);
+                if (!ks.length) return { ccdDietChoicesStyle: { display: 'none' }, ccdDietChoices: '' };
+                return {
+                  ccdDietChoicesStyle: { background: '#FFF4EC', borderRadius: '20px', padding: '18px', marginBottom: '12px' },
+                  ccdDietChoices: ks.map(k => '• ' + k + ': Opción ' + ch[k]).join('\n'),
+                };
+              })()),
             };
           })()),
           ccdHeight: p.height_cm ? p.height_cm + ' cm' : 'Sin registrar',
