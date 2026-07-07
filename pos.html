@@ -1932,8 +1932,26 @@ const Pos={
         return;
       }
     }
-    if(!cust){this.showAccessResult(false,'Cliente no encontrado','Verifica el QR o regístralo en Clientes',null);return;}
+    if(!cust){
+      // ¿es personal (cajera/coach/encargado/admin/limpieza)? el staff siempre entra
+      const q=code.toLowerCase();
+      const staff=this.appProfiles.find(x=>x.role&&x.role!=='member'&&(x.full_name||'').toLowerCase().includes(q));
+      if(staff){this.doStaffCheckin(staff);return;}
+      this.showAccessResult(false,'No encontrado','Verifica el QR/nombre o regístralo en Clientes',null);return;
+    }
     this.doCheckin(cust.id,isUuid?'qr':'manual');
+  },
+  async doStaffCheckin(staff){
+    const now=new Date().toISOString();
+    // busca si ya está adentro (para marcar salida con el 2º escaneo)
+    const open=this.accInside.find(x=>x.member_id===staff.id);
+    if(open){await this.checkOut(open.id);this.showAccessResult(true,'SALIDA REGISTRADA','Hasta luego',staff.full_name);const i=$('scan-inp');if(i)i.focus();return;}
+    const payload={id:uuid(),member_id:staff.id,customer_id:null,branch_id:this.branch?this.branch.id:null,
+      method:'manual',verified_by:this.user.id,granted:true,created_at:now,checked_in_at:now};
+    const r=await Q.insert('checkins',payload);
+    if(!r.error){this.accInside.unshift(payload);this.accHist.unshift(payload);}
+    this.showAccessResult(true,'ACCESO PERMITIDO',(ROLE_LABEL[staff.role]||'Personal')+' · acceso de trabajo',staff.full_name);
+    this.renderAccess();const i=$('scan-inp');if(i)i.focus();
   },
   /* ── Enlazar app: primero por NOMBRE, luego el Nº de cuenta ── */
   linkByName(name){
@@ -2555,7 +2573,7 @@ const Pos={
     if(!emp){box.innerHTML='<span style="color:var(--red);font-weight:600">Primero elige al empleado.</span>';return;}
     box.innerHTML='Cargando...';
     const bId=this.branch?this.branch.id:null;
-    let S=[],SU=[];
+    let S=[],SU=[],SH=[];
     try{
       let q=sb.from('sales').select('*').eq('sold_by',emp).gte('created_at',from+'T00:00:00').lte('created_at',to+'T23:59:59').order('created_at',{ascending:false});
       if(bId)q=q.eq('branch_id',bId);
@@ -2563,8 +2581,11 @@ const Pos={
       let q2=sb.from('subscriptions').select('*').eq('sold_by',emp).gte('start_date',from).lte('start_date',to).order('start_date',{ascending:false});
       if(bId)q2=q2.eq('branch_id',bId);
       const {data:d2}=await q2;SU=d2||[];
+      let q3=sb.from('cash_shifts').select('*').eq('staff_id',emp).gte('opened_at',from+'T00:00:00').lte('opened_at',to+'T23:59:59').order('opened_at',{ascending:false});
+      if(bId)q3=q3.eq('branch_id',bId);
+      const {data:d3}=await q3;SH=d3||[];
     }catch(e){box.innerHTML='Sin conexión — inténtalo con internet.';return;}
-    this._empSales=S;this._empSubs=SU;
+    this._empSales=S;this._empSubs=SU;this._empShifts=SH;
     const name=this.profName(emp);
     const total=S.reduce((a,x)=>a+Number(x.total||0),0);
     const by=(m)=>S.filter(x=>x.payment_method===m).reduce((a,x)=>a+Number(x.total||0),0);
@@ -2580,7 +2601,9 @@ const Pos={
         ${SU.length?`<table><thead><tr><th>Cliente</th><th>Plan</th><th>Cobró</th><th>Fecha</th></tr></thead><tbody>${SU.map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td>${esc(this.planName(s.plan_id))}</td><td style="font-weight:800;color:var(--orange)">${s.price_paid!=null?money(s.price_paid):'—'}</td><td style="color:var(--muted)">${fdate(s.start_date)}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Ninguna en este período.</div>'}</div>
         <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Todas sus ventas</div>
         ${S.length?`<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pago</th></tr></thead><tbody>${S.slice(0,25).map(v=>`<tr><td style="color:var(--muted)">${fdate(v.created_at)} ${ftime(v.created_at)}</td><td style="font-weight:700">${esc(this.custName(v.customer_id))}</td><td style="font-weight:800;color:#16A34A">${money(v.total)}</td><td><span class="tag tag-gray">${PAY_LABEL[v.payment_method]||'—'}</span></td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin ventas en este período.</div>'}</div>
-      </div>`;
+      </div>
+      <div style="margin-top:18px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Sus turnos de caja (${SH.length})</div>
+      ${SH.length?`<table><thead><tr><th>Abrió</th><th>Cerró</th><th>Fondo</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr></thead><tbody>${SH.map(s=>{const d=s.counted_cash!=null&&s.expected_cash!=null?Number(s.counted_cash)-Number(s.expected_cash):null;return `<tr><td>${fdate(s.opened_at)} ${ftime(s.opened_at)}</td><td>${s.closed_at?ftime(s.closed_at):'<span class="tag tag-green">Abierto</span>'}</td><td>${money(s.opening_cash)}</td><td>${s.expected_cash!=null?money(s.expected_cash):'—'}</td><td>${s.counted_cash!=null?money(s.counted_cash):'—'}</td><td>${d==null?'—':(d===0?'<span class="tag tag-green">Cuadró</span>':(d>0?'<span class="tag tag-orange">+'+money(d)+'</span>':'<span class="tag tag-red">'+money(d)+'</span>'))}</td></tr>`;}).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin turnos en este período.</div>'}</div>`;
   },
   exportEmpCSV(){
     const emp=$('emp-sel').value;
