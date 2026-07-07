@@ -3002,7 +3002,9 @@ class Component extends DCLogic {
         if (sbr && sbr.length) {
           const byCoach = {};
           sbr.forEach(x => { (byCoach[x.staff_id] = byCoach[x.staff_id] || []).push(x.branch_id); });
-          visibles = real.filter(c => !byCoach[c.id] || byCoach[c.id].indexOf(myBranch) !== -1);
+          const filtered = real.filter(c => !byCoach[c.id] || byCoach[c.id].indexOf(myBranch) !== -1);
+          // si la sucursal no tiene coaches asignados, muestra todos (nunca dejar al miembro sin poder elegir)
+          visibles = filtered.length ? filtered : real;
         }
       }
     } catch (e) {}
@@ -4408,16 +4410,22 @@ class Component extends DCLogic {
     if (this.state.session) {
       await waitForSupabase();
       const real = this.state.realPrograms[this.state.selectedProgramId];
+      // program_id SOLO si es un UUID real de la base. Los programas del catálogo
+      // usan ids tipo "fuerza"/"cardio" que rompían el insert (error 22P02) y el
+      // entrenamiento NO se guardaba: sin racha, sin conteo, sin tiempo.
+      const _isUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+      const _pid = (real && _isUuid(real.id)) ? real.id : null;
       // duration_minutes starts as a placeholder and gets corrected to the
       // real elapsed time in finishWorkoutSession() once we know it.
       const { data, error } = await getSupabase().from('workout_logs')
         .insert({
           member_id: this.state.session.user.id,
-          program_id: real ? real.id : null,
+          program_id: _pid,
           duration_minutes: 1,
         })
         .select('id')
         .single();
+      if (error) console.warn('workout_log insert', error.message);
       if (!error && data) this.setState({ currentWorkoutLogId: data.id });
     }
   }
