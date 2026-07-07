@@ -1149,9 +1149,10 @@ const Pos={
   },
 
   async checkout(){
+    if(this._checkingOut)return; this._checkingOut=true;   // candado: un solo cobro aunque piquen doble
     const s=this.sale;const t=this.saleTotals();
-    if(!s.method||!s.cart.length)return;
-    $('btn-cobrar').disabled=true;$('btn-cobrar').textContent='Cobrando...';
+    if(!s.method||!s.cart.length){this._checkingOut=false;return;}
+    const bc=$('btn-cobrar');if(bc){bc.disabled=true;bc.textContent='Cobrando...';}
     const c=s.customer;const bId=this.branch?this.branch.id:null;
     const saleId=uuid();const nowIso=new Date().toISOString();
     let qd=false; // si una operación se encola, las que dependen de ella también
@@ -1166,7 +1167,7 @@ const Pos={
       member_id:(c&&c.profile_id)||null,staff_id:this.user.id,sold_by:this.user.id,
       payment_method:s.method,total:t.total,promo_id:s.promoId||null,created_at:nowIso};
     let r=await this.insertSale(salePayload);
-    if(r.error){toast('No se pudo cobrar: '+r.error.message,true);$('btn-cobrar').disabled=false;$('btn-cobrar').textContent='Cobrar '+money(t.total);return;}
+    if(r.error){toast('No se pudo cobrar: '+r.error.message,true);this._checkingOut=false;if(bc){bc.disabled=false;bc.textContent='Cobrar '+money(t.total);}return;}
     if(r.queued)qd=true;
     // 2) partidas + efectos
     for(const it of s.cart){
@@ -1178,10 +1179,16 @@ const Pos={
         if(rs&&rs.error){toast('Venta cobrada pero la membresía falló: '+rs.error.message+' — ¿ya corriste pos_migration2.sql?',true);}
       }else if(it.kind==='coach'){
         productId=await this.ensureCoachProduct(it,put);
-        // AL PAGAR se asigna el coach al cliente (si tiene app) → el coach ve su nuevo alumno
+        // AL PAGAR se asigna el coach Y la sucursal al perfil del cliente (si ya tiene app)
+        // → en su teléfono aparece el mismo entrenador y su sucursal.
         if(c&&c.profile_id){
-          try{await sb.from('member_profiles').upsert({profile_id:c.profile_id,coach_id:it.id},{onConflict:'profile_id'});}catch(e){}
+          const mp={profile_id:c.profile_id,coach_id:it.id};
+          if(c.branch_id)mp.branch_id=c.branch_id;
+          try{await sb.from('member_profiles').upsert(mp,{onConflict:'profile_id'});}catch(e){}
         }
+        // guarda el coach en la ficha para que se transfiera si vincula la app después
+        try{await Q.update('customers',{id:c.id},{coach_id:it.id});}catch(e){}
+        c.coach_id=it.id;cset('customers',this.customers);
       }
       await put('sale_items',{id:uuid(),sale_id:saleId,product_id:productId,quantity:it.qty,unit_price:it.price});
       if(it.kind==='product'){
@@ -1207,7 +1214,7 @@ const Pos={
     }
     // 5) actualizar cache de ventas del turno
     const sc=cget('shift_sales')||[];sc.unshift(salePayload);cset('shift_sales',sc);
-    s.queued=qd;s.step=4;this.go('sale');this.refreshChip();
+    s.queued=qd;s.step=4;this._checkingOut=false;this.go('sale');this.refreshChip();
     Q.badge();
   },
   printTicket(){
@@ -1370,9 +1377,9 @@ const Pos={
         <div class="field"><label>Teléfono / WhatsApp</label><input class="inp" id="nc-phone" placeholder="656..."></div>
         <div class="field"><label>Correo</label><input class="inp" id="nc-email" placeholder="opcional"></div>
       </div>
-      <div class="field"><label>¿Ya tiene cuenta en la app? (buscar y vincular)</label>
-        <input class="inp" id="nc-app-q" placeholder="Buscar por nombre o correo de la app..." oninput="Pos.ncSearchApp(this.value)">
-        <div id="nc-app-res" style="margin-top:8px"></div>
+      <div class="field"><label>¿Ya tiene la app? Teclea su Nº de cuenta (opcional)</label>
+        <input class="inp" id="nc-app-q" placeholder="Nº de cuenta que ve en su app (Perfil → Mi código QR)" oninput="Pos.ncSearchApp(this.value)">
+        <div id="nc-app-res" style="margin-top:8px;font-size:13px;color:var(--muted);font-weight:500">Si no tiene app, déjalo vacío.</div>
       </div>
       <div class="field"><label>Notas</label><input class="inp" id="nc-notes" placeholder="opcional"></div>
       <button class="btn btn-primary btn-block" onclick="Pos.saveNewCustomer(${fromSale?'true':'false'})">Guardar cliente</button>
@@ -1383,23 +1390,18 @@ const Pos={
     q=(q||'').toLowerCase().trim();
     if(q.startsWith(QR_PREFIX))q=q.slice(QR_PREFIX.length); // QR escaneado de la app
     const box=$('nc-app-res');
-    if(!q){box.innerHTML='';this._newCustLink=null;return;}
+    if(!q){box.innerHTML='Si no tiene app, déjalo vacío.';this._newCustLink=null;return;}
+    if(q.length<4){box.innerHTML='Escribe el Nº de cuenta completo (8 caracteres).';this._newCustLink=null;return;}
     const linked=new Set(this.customers.map(c=>c.profile_id).filter(Boolean));
-    const res=this.appProfiles.filter(p=>p.role==='member'&&!linked.has(p.id)&&((p.full_name||'').toLowerCase().includes(q)||(p.email||'').toLowerCase().includes(q)||p.id.startsWith(q))).slice(0,5);
-    box.innerHTML=res.length?res.map(p=>`
-      <button class="cust-row" style="${this._newCustLink===p.id?'border-color:var(--orange);background:#FFF;':''}" onclick="Pos.ncPickApp('${p.id}')">
-        <div class="av2">${esc((p.full_name||p.email||'?')[0].toUpperCase())}</div>
-        <div class="cd"><b>${esc(p.full_name||'(sin nombre)')}</b><span>${esc(p.email||'')}</span></div>
-        ${this._newCustLink===p.id?'<span class="tag tag-orange">Seleccionado</span>':''}
-      </button>`).join(''):'<div style="font-size:13px;color:var(--muted);font-weight:500">Sin coincidencias en la app.</div>';
-  },
-  ncPickApp(pid){
-    this._newCustLink=this._newCustLink===pid?null:pid;
-    this.ncSearchApp($('nc-app-q').value);
-    if(this._newCustLink){
-      const p=this.appProfiles.find(x=>x.id===pid);
-      if(p&&!$('nc-name').value)$('nc-name').value=p.full_name||'';
-      if(p&&!$('nc-email').value)$('nc-email').value=p.email||'';
+    const p=this.appProfiles.find(x=>x.role==='member'&&!linked.has(x.id)&&(x.id===q||x.id.startsWith(q)));
+    if(p){
+      this._newCustLink=p.id;
+      if(!$('nc-name').value)$('nc-name').value=p.full_name||'';
+      if(!$('nc-email').value&&p.email)$('nc-email').value=p.email||'';
+      box.innerHTML='<span style="color:#16A34A;font-weight:700">Cuenta encontrada: '+esc(p.full_name||p.email)+' ✓ (quedará vinculada)</span>';
+    }else{
+      this._newCustLink=null;
+      box.innerHTML='<span style="color:var(--muted)">Sin coincidencia con ese número (o ya está vinculada). Puedes dejarlo vacío.</span>';
     }
   },
   async saveNewCustomer(fromSale){
@@ -1986,9 +1988,13 @@ const Pos={
     c.profile_id=pid;cset('customers',this.customers);
     try{await sb.from('subscriptions').update({member_id:pid}).eq('customer_id',custId).is('member_id',null);}catch(e){}
     this.subs.forEach(s=>{if(s.customer_id===custId&&!s.member_id)s.member_id=pid;});cset('subs',this.subs);
-    if(c.branch_id){try{await sb.from('member_profiles').upsert({profile_id:pid,branch_id:c.branch_id},{onConflict:'profile_id'});}catch(e){}}
+    // pasa sucursal y coach (si ya se le había cobrado uno) al perfil del cliente
+    const mp={profile_id:pid};
+    if(c.branch_id)mp.branch_id=c.branch_id;
+    if(c.coach_id)mp.coach_id=c.coach_id;
+    if(mp.branch_id||mp.coach_id){try{await sb.from('member_profiles').upsert(mp,{onConflict:'profile_id'});}catch(e){}}
     closeModal();
-    toast('App enlazada ✓ — en su teléfono ya salen su sucursal, sus coaches y su QR funciona');
+    toast('App enlazada ✓ — en su teléfono ya salen su sucursal, su coach y su QR funciona');
   },
   linkAccountScan(code){
     code=(code||'').trim();
@@ -2611,9 +2617,19 @@ const Pos={
       <td style="color:var(--muted)">${fdate(p.created_at)}</td>
       <td style="text-align:right;white-space:nowrap">
         <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.staffEditModal('${p.id}')">Editar</button>
-        ${p.role==='coach'?`<button class="btn-xs btn btn-danger" onclick="Pos.removeCoachRole('${p.id}')">Quitar coach</button>`:''}
+        ${p.id!==this.user.id&&p.role!=='admin'?`<button class="btn-xs btn btn-danger" onclick="Pos.removeStaff('${p.id}')">Quitar</button>`:''}
       </td></tr>`;
     }).join('');
+  },
+  async removeStaff(id){
+    const p=this.appProfiles.find(x=>x.id===id);if(!p)return;
+    if(!confirm('¿Quitar a '+(p.full_name||'esta persona')+' del personal? Ya no podrá entrar al POS ni saldrá como coach. (La cuenta sigue existiendo; para borrarla del todo se hace en Supabase.)'))return;
+    try{await sb.from('staff_branches').delete().eq('staff_id',id);}catch(e){}
+    if(p.role==='coach'){try{await sb.from('coach_profiles').delete().eq('profile_id',id);}catch(e){}}
+    const {error}=await sb.from('profiles').update({role:'member'}).eq('id',id);
+    if(error){toast('Error: '+error.message,true);return;}
+    p.role='member';cset('appProfiles',this.appProfiles);
+    toast('Quitado del personal ✓');this.after_staff();
   },
   async after_staff(){
     // recarga datos y actualiza SOLO la tabla (sin re-render completo, que causaba ciclo infinito)

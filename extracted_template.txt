@@ -3563,14 +3563,14 @@ class Component extends DCLogic {
     if (!cid || !this.state.session) return;
     // Candado: para pedir coach necesitas membresía ACTIVA (cuenta vinculada en recepción).
     if (!this.state.subscriptionActive) {
-      alert('Para elegir entrenador necesitas tu membresía activa. Pásate a recepción: baja la app, dales tu Nº de cuenta (Perfil → Mi código QR), activan tu membresía y desde ahí podrás solicitar tu coach.');
+      this.showToast('Necesitas membresía activa. Pásate a recepción con tu Nº de cuenta (Perfil → Mi código QR).');
       return;
     }
     // El coach NO se asigna aquí: solo se manda la solicitud y se paga en recepción.
     const c = (this.state.coaches || []).find(x => x.id === cid);
     if (c) this.sendPosRequest('coach', c.id, c.name, parseFloat(String(c.price || '').replace(/[^0-9.]/g, '')) || null);
     this.setState({ coachPickerOpen: false });
-    if (c) alert('Solicitud enviada. Tu entrenador ' + c.name + ' queda PENDIENTE de pago — pásate a recepción a pagarlo (' + (c.price || 'precio en recepcion') + '). Aparecerá como tu coach en cuanto se registre el pago.');
+    if (c) this.showToast('Solicitud enviada: ' + c.name + '. Pásate a recepción a pagarlo y aparecerá como tu coach.');
   }
 
   async coachAssignProgram() {
@@ -3981,6 +3981,7 @@ class Component extends DCLogic {
     if (data.session) this.applySession(data.session);
     this.setupManualScroll();
     this.fetchCoaches();
+    this.fetchBranches();   // sucursales SIEMPRE cargadas (para el paso de sucursal del onboarding)
     this.fetchPrograms();
     this.fetchCuratedExercises();
     // Restore diet streak from localStorage
@@ -4741,7 +4742,7 @@ class Component extends DCLogic {
     this.setState({ onboardingStep: 7 });
     if (coach.real && this.state.session) {
       this.sendPosRequest('coach', coach.id, coach.name, parseFloat(String(coach.price || '').replace(/[^0-9.]/g, '')) || null);
-      alert('Solicitud enviada. Tu entrenador queda pendiente de pago — pásalo a pagar en recepción y quedará activo.');
+      this.showToast('Solicitud enviada. Pásalo a pagar en recepción y quedará activo.');
     }
   }
 
@@ -4777,12 +4778,12 @@ class Component extends DCLogic {
       const { data: dup } = await getSupabase().from('pos_requests')
         .select('id').eq('member_id', this.state.session.user.id).eq('type', 'plan').eq('status', 'pendiente').limit(1);
       if (dup && dup.length) {
-        this.setState({ planReqSent: 'Ya tienes una solicitud pendiente. Pásala a pagar en recepción antes de pedir otra.' });
+        this.setState({ planReqSent: 'Ya tienes una solicitud pendiente. Pásala a pagar en recepción antes de pedir otra.' }); this.showToast('Ya tienes una solicitud pendiente.');
         return;
       }
       await this.sendPosRequest('plan', p.id, p.name, p.price);
       this.setState({ planReqSent: 'Solicitud enviada: ' + p.name + '. Pásala a pagar en recepción y tu membresía queda activa.', planReqOpen: false });
-      alert('Solicitud de ' + p.name + ' enviada. Pasa a recepción a pagarla.');
+      this.showToast('Solicitud de ' + p.name + ' enviada. Pasa a recepción a pagarla.');
     } finally { this._reqBusy = false; }
   }
 
@@ -5716,8 +5717,8 @@ class Component extends DCLogic {
         : { display: 'none' },
       coachPickerPanelStyle: { display: this.state.coachPickerOpen ? 'flex' : 'none', position: 'absolute', inset: 0, zIndex: 254, flexDirection: 'column', background: '#FFFFFF' },
       openCoachPicker: () => {
-        if (!this.state.memberBranchId) { alert('Primero elige tu sucursal (Perfil → Mi sucursal). Los entrenadores que verás son los de esa sucursal.'); return; }
-        if (!this.state.subscriptionActive) { alert('Para elegir entrenador necesitas tu membresía activa. Pásate a recepción a activarla con tu Nº de cuenta.'); return; }
+        if (!this.state.memberBranchId) { this.showToast('Primero elige tu sucursal en Perfil → Mi sucursal'); return; }
+        if (!this.state.subscriptionActive) { this.showToast('Necesitas tu membresía activa. Pásate a recepción con tu Nº de cuenta.'); return; }
         this.fetchCoaches(); this.setState({ coachPickerOpen: true, selectedCoachId: null });
       },
       closeCoachPicker: () => this.setState({ coachPickerOpen: false }),
