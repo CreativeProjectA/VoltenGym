@@ -3357,7 +3357,10 @@ class Component extends DCLogic {
     if (!data) return;
     const planName = data.plans ? data.plans.name : 'Plan';
     const isActive = data.status === 'active';
-    const endDate = data.end_date ? new Date(data.end_date).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+    // Fecha solo-día (YYYY-MM-DD): agregar T12:00:00 para leerla en hora LOCAL.
+    // Sin esto se leía como UTC y en México mostraba un día menos (POS decía 4, app decía 3).
+    const _fixD = (d) => d && d.length === 10 ? d + 'T12:00:00' : d;
+    const endDate = data.end_date ? new Date(_fixD(data.end_date)).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
     this.setState({
       subscriptionStatus: data.status,
       subscriptionPlanName: planName,
@@ -3945,9 +3948,12 @@ class Component extends DCLogic {
   }
 
   async addPersonalRecord() {
+    if (this._savingPr) return;   // candado: un solo récord aunque piquen varias veces
     const name = (this.state.newPrName || '').trim();
     const value = parseFloat(this.state.newPrValue);
     if (!name || !value || !this.state.session) return;
+    this._savingPr = true;
+    setTimeout(() => { this._savingPr = false; }, 2500);
     await waitForSupabase();
     const { error } = await getSupabase().from('personal_records').insert({
       member_id: this.state.session.user.id,
@@ -5560,8 +5566,9 @@ class Component extends DCLogic {
           return { membershipBarSectionStyle: { display: 'none' }, membershipBarFillStyle: {}, membershipDaysLeft: '', membershipDaysLeftStyle: {}, membershipPeriodLabel: '' };
         }
         const _ms = 24 * 60 * 60 * 1000;
-        const start = new Date(startRaw).getTime();
-        const end = new Date(endRaw).getTime();
+        const _fx = (d) => (d && d.length === 10) ? d + 'T12:00:00' : d;
+        const start = new Date(_fx(startRaw)).getTime();
+        const end = new Date(_fx(endRaw)).getTime();
         const now = Date.now();
         const daysLeft = Math.max(0, Math.ceil((end - now) / _ms));
         const pct = Math.min(100, Math.max(0, ((now - start) / Math.max(1, end - start)) * 100));

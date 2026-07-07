@@ -1347,7 +1347,7 @@ const Pos={
     if(!list.length)return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
     return `<table><thead><tr><th>Cliente</th><th>Teléfono</th><th>App</th><th>Membresía</th><th>Alta</th><th></th></tr></thead><tbody>${
       list.slice(0,60).map(c=>`<tr>
-        <td style="cursor:pointer" onclick="Pos.openCustomer('${c.id}')"><div style="display:flex;align-items:center;gap:10px;">${this.custAvatar(c,32)}<b>${esc(c.full_name)}</b>${c.suspended?' <span class="tag tag-red">Suspendido</span>':''}</div></td>
+        <td style="cursor:pointer" onclick="Pos.openCustomer('${c.id}')"><div style="display:flex;align-items:center;gap:10px;">${this.custAvatar(c,32)}<b>${esc(c.full_name)}</b>${c.suspended?' <span class="tag tag-red">Suspendido</span>':''}${c.family_id?' <span class="tag tag-orange">'+esc((this.families.find(f=>f.id===c.family_id)||{}).name||'Familia')+'</span>':''}</div></td>
         <td>${esc(c.phone||'—')}</td>
         <td>${c.profile_id?'<span class="tag tag-green">Vinculada</span>':'<span class="tag tag-gray">—</span>'}</td>
         <td>${this.membershipTag(c)}</td>
@@ -1381,6 +1381,8 @@ const Pos={
         <input class="inp" id="nc-app-q" placeholder="Nº de cuenta que ve en su app (Perfil → Mi código QR)" oninput="Pos.ncSearchApp(this.value)">
         <div id="nc-app-res" style="margin-top:8px;font-size:13px;color:var(--muted);font-weight:500">Si no tiene app, déjalo vacío.</div>
       </div>
+      ${this.families.length?`<div class="field"><label>¿Es parte de una familia? (opcional)</label>
+        <select class="inp" id="nc-family"><option value="">No / independiente</option>${this.families.map(f=>`<option value="${f.id}">${esc(f.name||'Familia')}</option>`).join('')}</select></div>`:''}
       <div class="field"><label>Notas</label><input class="inp" id="nc-notes" placeholder="opcional"></div>
       <button class="btn btn-primary btn-block" onclick="Pos.saveNewCustomer(${fromSale?'true':'false'})">Guardar cliente</button>
     `);
@@ -1407,8 +1409,9 @@ const Pos={
   async saveNewCustomer(fromSale){
     const name=$('nc-name').value.trim();
     if(!name){toast('El nombre es obligatorio.',true);return;}
+    const famSel=$('nc-family')?$('nc-family').value||null:null;
     const payload={id:uuid(),full_name:name,phone:$('nc-phone').value.trim()||null,email:$('nc-email').value.trim()||null,
-      notes:$('nc-notes').value.trim()||null,profile_id:this._newCustLink||null,
+      notes:$('nc-notes').value.trim()||null,profile_id:this._newCustLink||null,family_id:famSel,
       branch_id:this.branch?this.branch.id:null,suspended:false,created_at:new Date().toISOString()};
     const r=await Q.insert('customers',payload);
     if(r.error){toast('Error: '+r.error.message,true);return;}
@@ -2093,8 +2096,11 @@ const Pos={
   invMoves:[],
   view_inventory(){
     const canEdit=this.role!=='cajera';
-    const prods=this.products.filter(p=>p.type!=='membership');
-    const low=prods.filter(p=>this.stockOf(p.id)<=this.minOf(p.id)&&this.minOf(p.id)>0);
+    const allProds=this.products.filter(p=>p.type!=='membership');
+    const cats=[...new Set(allProds.map(p=>p.category||'Sin categoría'))].sort();
+    if(this.invCat&&this.invCat!=='__all'&&!cats.includes(this.invCat))this.invCat='__all';
+    const prods=(!this.invCat||this.invCat==='__all')?allProds:allProds.filter(p=>(p.category||'Sin categoría')===this.invCat);
+    const low=allProds.filter(p=>this.stockOf(p.id)<=this.minOf(p.id)&&this.minOf(p.id)>0);
     return `
     <div class="topbar">
       <div><h1>Inventario</h1><div class="sub">Productos y stock de ${esc(this.branch?this.branch.name:'la sucursal')}</div></div>
@@ -2103,6 +2109,10 @@ const Pos={
       <button class="btn btn-primary" onclick="Pos.productModal()">+ Nuevo producto</button>`:''}</div>
     </div>
     ${low.length?`<div class="panel" style="background:#FEF3C7;box-shadow:none;"><b style="font-size:14px">⚠ Stock bajo:</b> <span style="font-size:14px;font-weight:600">${low.map(p=>esc(p.name)+' ('+this.stockOf(p.id)+')').join(' · ')}</span></div>`:''}
+    ${cats.length>1?`<div class="pick-tabs" style="margin-bottom:14px;flex-wrap:wrap">
+      <button class="pick-tab ${!this.invCat||this.invCat==='__all'?'on':''}" onclick="Pos.invCat='__all';Pos.go('inventory')">Todas</button>
+      ${cats.map(c=>`<button class="pick-tab ${this.invCat===c?'on':''}" onclick="Pos.invCat='${esc(c).replace(/'/g,"")}';Pos.go('inventory')">${esc(c)}</button>`).join('')}
+    </div>`:''}
     <div class="panel">
       ${prods.length?`<table><thead><tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Costo</th><th>Stock</th><th>Estado</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${
         prods.map(p=>{
