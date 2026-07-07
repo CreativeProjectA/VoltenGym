@@ -523,12 +523,20 @@ const Pos={
     this.appProfiles=await load('appProfiles',sb.from('profiles').select('id,full_name,email,role,avatar_url,created_at'));
     this.families=await load('families',sb.from('families').select('*'));
     this.coachProfiles=await load('coachProfiles',sb.from('coach_profiles').select('profile_id,monthly_price'));
+    this.staffBranches=await load('staffBranches',sb.from('staff_branches').select('*'));
     this.requests=await load('requests',sb.from('pos_requests').select('*').eq('status','pendiente').order('created_at',{ascending:false}));
   },
   // planes visibles en ESTA sucursal (branch_id null = aplica en ambas)
   plansForBranch(){
     const b=this.branch?this.branch.id:null;
     return this.plans.filter(p=>p.active!==false&&(!p.branch_id||p.branch_id===b));
+  },
+  // coaches de ESTA sucursal (según staff_branches). Coach sin sucursal = aparece en todas.
+  coachesForBranch(){
+    const b=this.branch?this.branch.id:null;
+    const byCoach={};(this.staffBranches||[]).forEach(x=>{(byCoach[x.staff_id]=byCoach[x.staff_id]||[]).push(x.branch_id);});
+    return this.appProfiles.filter(p=>p.role==='coach'&&this.coachProfiles.find(x=>x.profile_id===p.id))
+      .filter(p=>!byCoach[p.id]||!b||byCoach[p.id].indexOf(b)!==-1);
   },
 
   /* ── Turno ── */
@@ -974,7 +982,7 @@ const Pos={
         <div class="pp">${money(p.price)}</div>
         <div class="ps">${p.duration_days} día${p.duration_days===1?'':'s'}${p.is_family?' · familiar':''}</div>
       </button>`).join('')||'<div class="stub"><p>No hay planes en esta sucursal. El admin los crea en Membresías.</p></div>';
-    const coachesHtml=this.appProfiles.filter(p=>p.role==='coach').map(p=>{
+    const coachesHtml=this.coachesForBranch().map(p=>{
       const cp=this.coachProfiles.find(x=>x.profile_id===p.id);
       const price=cp&&cp.monthly_price?Number(cp.monthly_price):0;
       return `<button class="prod-card" onclick="Pos.addCoachToCart('${p.id}')">
@@ -982,7 +990,7 @@ const Pos={
         <div class="pp">${price?money(price):'—'}</div>
         <div class="ps">${price?'mensualidad':'sin precio definido'}</div>
       </button>`;
-    }).join('')||'<div class="stub"><p>Sin coaches dados de alta.</p></div>';
+    }).join('')||'<div class="stub"><p>Sin coaches en esta sucursal. El admin los asigna en Personal.</p></div>';
     const q=(s.q||'').toLowerCase();
     // solo productos con stock en esta sucursal (sin stock no se venden)
     let prods=this.products.filter(p=>p.type!=='membership'&&p.active!==false&&this.stockOf(p.id)>0);
@@ -1162,10 +1170,11 @@ const Pos={
       if(r.queued)qd=true;
       return r;
     };
-    // 1) venta
+    // 1) venta (con concepto = qué se vendió, para el desglose en reportes)
+    const concept=s.cart.map(it=>it.name+(it.qty>1?' x'+it.qty:'')).join(', ');
     const salePayload={id:saleId,branch_id:bId,shift_id:this.shift.id,customer_id:c?c.id:null,
       member_id:(c&&c.profile_id)||null,staff_id:this.user.id,sold_by:this.user.id,
-      payment_method:s.method,total:t.total,promo_id:s.promoId||null,created_at:nowIso};
+      payment_method:s.method,total:t.total,promo_id:s.promoId||null,concept,created_at:nowIso};
     let r=await this.insertSale(salePayload);
     if(r.error){toast('No se pudo cobrar: '+r.error.message,true);this._checkingOut=false;if(bc){bc.disabled=false;bc.textContent='Cobrar '+money(t.total);}return;}
     if(r.queued)qd=true;
@@ -1250,9 +1259,14 @@ const Pos={
     if(navigator.onLine){
       try{
         let {error}=await sb.from('sales').insert(payload);
+        // si falta la columna concept (migración 6 no corrida), reintenta sin ella
+        if(error&&/concept/i.test(error.message||'')){
+          const p2=Object.assign({},payload);delete p2.concept;
+          const r=await sb.from('sales').insert(p2);error=r.error;
+        }
         if(error&&/register_id/i.test(error.message||'')){
           const regId=await this.legacyRegister();
-          if(regId){const r2=await sb.from('sales').insert(Object.assign({},payload,{register_id:regId}));error=r2.error;}
+          if(regId){const p3=Object.assign({},payload,{register_id:regId});if(/concept/i.test(error.message||''))delete p3.concept;const r2=await sb.from('sales').insert(p3);error=r2.error;}
         }
         if(!error)return{ok:true};
         if(!isNetErr(error))return{error};
@@ -2009,9 +2023,13 @@ const Pos={
     c.profile_id=pid;cset('customers',this.customers);
     try{await sb.from('subscriptions').update({member_id:pid}).eq('customer_id',custId).is('member_id',null);}catch(e){}
     this.subs.forEach(s=>{if(s.customer_id===custId&&!s.member_id)s.member_id=pid;});cset('subs',this.subs);
-    // pasa sucursal y coach (si ya se le había cobrado uno) al perfil del cliente
+    // pasa la sucursal DONDE ESTÁ EL CAJERO (no la de la ficha) + coach si ya se le cobró uno
+    const posBranch=this.branch?this.branch.id:c.branch_id;
     const mp={profile_id:pid};
-    if(c.branch_id)mp.branch_id=c.branch_id;
+    if(posBranch){mp.branch_id=posBranch;
+      // deja la ficha en la sucursal del cajero también
+      if(c.branch_id!==posBranch){try{await Q.update('customers',{id:custId},{branch_id:posBranch});}catch(e){}c.branch_id=posBranch;cset('customers',this.customers);}
+    }
     if(c.coach_id)mp.coach_id=c.coach_id;
     if(mp.branch_id||mp.coach_id){try{await sb.from('member_profiles').upsert(mp,{onConflict:'profile_id'});}catch(e){}}
     closeModal();
@@ -2600,7 +2618,7 @@ const Pos={
         <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Membresías que vendió</div>
         ${SU.length?`<table><thead><tr><th>Cliente</th><th>Plan</th><th>Cobró</th><th>Fecha</th></tr></thead><tbody>${SU.map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td>${esc(this.planName(s.plan_id))}</td><td style="font-weight:800;color:var(--orange)">${s.price_paid!=null?money(s.price_paid):'—'}</td><td style="color:var(--muted)">${fdate(s.start_date)}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Ninguna en este período.</div>'}</div>
         <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Todas sus ventas</div>
-        ${S.length?`<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pago</th></tr></thead><tbody>${S.slice(0,25).map(v=>`<tr><td style="color:var(--muted)">${fdate(v.created_at)} ${ftime(v.created_at)}</td><td style="font-weight:700">${esc(this.custName(v.customer_id))}</td><td style="font-weight:800;color:#16A34A">${money(v.total)}</td><td><span class="tag tag-gray">${PAY_LABEL[v.payment_method]||'—'}</span></td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin ventas en este período.</div>'}</div>
+        ${S.length?`<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Qué vendió</th><th>Total</th><th>Pago</th></tr></thead><tbody>${S.slice(0,25).map(v=>`<tr><td style="color:var(--muted)">${fdate(v.created_at)} ${ftime(v.created_at)}</td><td style="font-weight:700">${esc(this.custName(v.customer_id))}</td><td style="font-size:12.5px">${esc(v.concept||'—')}</td><td style="font-weight:800;color:#16A34A">${money(v.total)}</td><td><span class="tag tag-gray">${PAY_LABEL[v.payment_method]||'—'}</span></td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin ventas en este período.</div>'}</div>
       </div>
       <div style="margin-top:18px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Sus turnos de caja (${SH.length})</div>
       ${SH.length?`<table><thead><tr><th>Abrió</th><th>Cerró</th><th>Fondo</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr></thead><tbody>${SH.map(s=>{const d=s.counted_cash!=null&&s.expected_cash!=null?Number(s.counted_cash)-Number(s.expected_cash):null;return `<tr><td>${fdate(s.opened_at)} ${ftime(s.opened_at)}</td><td>${s.closed_at?ftime(s.closed_at):'<span class="tag tag-green">Abierto</span>'}</td><td>${money(s.opening_cash)}</td><td>${s.expected_cash!=null?money(s.expected_cash):'—'}</td><td>${s.counted_cash!=null?money(s.counted_cash):'—'}</td><td>${d==null?'—':(d===0?'<span class="tag tag-green">Cuadró</span>':(d>0?'<span class="tag tag-orange">+'+money(d)+'</span>':'<span class="tag tag-red">'+money(d)+'</span>'))}</td></tr>`;}).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin turnos en este período.</div>'}</div>`;
