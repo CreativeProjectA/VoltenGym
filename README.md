@@ -2,6 +2,9 @@
 
 Sistema completo del gimnasio: app de miembros y coaches + punto de venta, sobre Supabase.
 
+<!-- deploy: 2026-07-07 -->
+
+
 ## Archivos principales
 
 | Archivo | Qué es |
