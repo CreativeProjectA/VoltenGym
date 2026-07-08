@@ -1297,13 +1297,6 @@
               <div><div style="font-size:17px;font-weight:800;color:#0A0A0A;margin-bottom:2px;">Flexible</div><div style="font-size:13px;color:#9CA3AF;">Cualquier horario</div></div>
             </div>
           </div>
-          <div style="margin-top:20px;">
-            <div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">¿En qué sucursal entrenas?</div>
-            <div style="display:flex;gap:10px;">
-              <div onclick="{{ pickBranch1 }}" class="vg-press" style="{{ branch1BtnStyle }}">{{ branch1Label }}</div>
-              <div onclick="{{ pickBranch2 }}" class="vg-press" style="{{ branch2BtnStyle }}">{{ branch2Label }}</div>
-            </div>
-          </div>
           <div style="margin-top:16px;background:#F3F4F6;border-radius:16px;padding:18px;">
             <div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">Datos físicos (opcional)</div>
             <div style="display:flex;gap:10px;">
@@ -1323,7 +1316,7 @@
               </div>
             </div>
           </div>
-          <button onclick="{{ nextStep }}" style="background:#F97316;color:#FFFFFF;border:none;padding:18px 0;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;margin-top:16px;width:100%;">Continuar</button>
+          <button onclick="{{ skipCoach }}" style="background:#F97316;color:#FFFFFF;border:none;padding:18px 0;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;margin-top:16px;width:100%;">Continuar</button>
         </div>
       </div>
 
@@ -2511,11 +2504,11 @@
                 </div>
               </div>
               </div>
-              <!-- Mi sucursal -->
-              <div onclick="{{ cycleMemberBranch }}" class="vg-press" style="background:#F2F2F4;border-radius:20px;padding:16px 18px;margin-bottom:12px;cursor:pointer;">
+              <!-- Mi sucursal (la asigna recepción al registrar tu membresía) -->
+              <div style="background:#F2F2F4;border-radius:20px;padding:16px 18px;margin-bottom:12px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
                   <div><div style="font-size:15px;font-weight:600;color:#0A0A0A;">Mi sucursal</div>
-                  <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Toca para cambiar de sucursal</div></div>
+                  <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">La define recepción al registrar tu membresía</div></div>
                   <div style="font-size:13px;font-weight:700;color:#F97316;text-align:right;">{{ memberBranchName }}</div>
                 </div>
               </div>
@@ -3990,6 +3983,18 @@ class Component extends DCLogic {
     this.fetchBranches();   // sucursales SIEMPRE cargadas (para el paso de sucursal del onboarding)
     this.fetchPrograms();
     this.fetchCuratedExercises();
+    // Al volver a la app (p.ej. tras pagar el coach/membresía en recepción),
+    // refresca lo que el POS pudo haber cambiado — sin tener que salir y entrar.
+    this._refreshOnReturn = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!this.state.session || this.state.onboardingStep < 8) return;
+      this.fetchMemberProfile();
+      this.fetchSubscription();
+      this.fetchAssignedProgram();
+      this.fetchMemberDiet();
+    };
+    document.addEventListener('visibilitychange', this._refreshOnReturn);
+    window.addEventListener('focus', this._refreshOnReturn);
     // Restore diet streak from localStorage
     try {
       const _vgd = JSON.parse(localStorage.getItem('vg_diet') || '{}');
@@ -5724,7 +5729,7 @@ class Component extends DCLogic {
         : { display: 'none' },
       coachPickerPanelStyle: { display: this.state.coachPickerOpen ? 'flex' : 'none', position: 'absolute', inset: 0, zIndex: 254, flexDirection: 'column', background: '#FFFFFF' },
       openCoachPicker: () => {
-        if (!this.state.memberBranchId) { this.showToast('Primero elige tu sucursal en Perfil → Mi sucursal'); return; }
+        // La sucursal y la membresía las asigna recepción juntas al registrarte.
         if (!this.state.subscriptionActive) { this.showToast('Necesitas tu membresía activa. Pásate a recepción con tu Nº de cuenta.'); return; }
         this.fetchCoaches(); this.setState({ coachPickerOpen: true, selectedCoachId: null });
       },

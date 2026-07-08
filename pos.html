@@ -992,15 +992,15 @@ const Pos={
       </button>`;
     }).join('')||'<div class="stub"><p>Sin coaches en esta sucursal. El admin los asigna en Personal.</p></div>';
     const q=(s.q||'').toLowerCase();
-    // solo productos con stock en esta sucursal (sin stock no se venden)
-    let prods=this.products.filter(p=>p.type!=='membership'&&p.active!==false&&this.stockOf(p.id)>0);
+    // productos con stock en esta sucursal + servicios (sin inventario)
+    let prods=this.products.filter(p=>p.type!=='membership'&&p.active!==false&&(p.type==='service'||this.stockOf(p.id)>0));
     if(q)prods=prods.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q));
     const prodsHtml=prods.map(p=>{
-      const st=this.stockOf(p.id);
+      const isSrv=p.type==='service';
       return `<button class="prod-card" onclick="Pos.addToCart('product','${p.id}')">
         <div class="pn">${esc(p.name)}</div>
         <div class="pp">${money(p.price)}</div>
-        <div class="ps">Stock: ${st}</div>
+        <div class="ps">${isSrv?'Servicio':'Stock: '+this.stockOf(p.id)}</div>
       </button>`;
     }).join('')||'<div class="stub"><p>Sin productos con stock'+(q?' con esa búsqueda':' en esta sucursal — dales entrada en Inventario')+'.</p></div>';
     return `
@@ -1051,8 +1051,8 @@ const Pos={
       const p=this.products.find(x=>x.id===id);if(!p)return;
       const ex=s.cart.find(x=>x.kind==='product'&&x.id===id);
       const inCart=ex?ex.qty:0;
-      if(this.stockOf(id)-inCart<=0)toast('Ojo: sin stock en esta sucursal (se venderá en negativo).',true);
-      if(ex)ex.qty++;else s.cart.push({kind:'product',id,name:p.name,price:Number(p.price),qty:1});
+      if(p.type!=='service'&&this.stockOf(id)-inCart<=0)toast('Ojo: sin stock en esta sucursal (se venderá en negativo).',true);
+      if(ex)ex.qty++;else s.cart.push({kind:'product',id,name:p.name,price:Number(p.price),qty:1,service:p.type==='service'});
     }
     this.go('sale');
   },
@@ -1200,7 +1200,7 @@ const Pos={
         c.coach_id=it.id;cset('customers',this.customers);
       }
       await put('sale_items',{id:uuid(),sale_id:saleId,product_id:productId,quantity:it.qty,unit_price:it.price});
-      if(it.kind==='product'){
+      if(it.kind==='product'&&!it.service){
         if(qd)Q.push({t:'stock',branch_id:bId,product_id:it.id,delta:-it.qty,reason:'venta',staff_id:this.user.id,moveId:uuid()});
         else await Q.stockDelta(bId,it.id,-it.qty,'venta',this.user.id);
         const st=this.stock.find(x=>x.product_id===it.id&&x.branch_id===bId);
@@ -2157,11 +2157,11 @@ const Pos={
           <td>${esc(p.category||'—')}</td>
           <td style="font-weight:800;color:var(--orange)">${money(p.price)}</td>
           <td style="color:var(--muted)">${p.cost?money(p.cost):'—'}</td>
-          <td><span class="tag ${st<=0?'tag-red':(mn&&st<=mn?'tag-orange':'tag-green')}">${st}</span></td>
+          <td>${p.type==='service'?'<span class="tag tag-blue">Servicio</span>':'<span class="tag '+(st<=0?'tag-red':(mn&&st<=mn?'tag-orange':'tag-green'))+'">'+st+'</span>'}</td>
           <td>${p.active!==false?'<span class="tag tag-green">Activo</span>':'<span class="tag tag-gray">Inactivo</span>'}</td>
           ${canEdit?`<td style="text-align:right;white-space:nowrap">
             <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.productModal('${p.id}')">Editar</button>
-            <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.stockModal('${p.id}')">± Stock</button>
+            ${p.type==='service'?'':`<button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.stockModal('${p.id}')">± Stock</button>`}
           </td>`:''}</tr>`;}).join('')
       }</tbody></table>`:'<div class="stub"><div class="st">Sin productos</div><p>Agrega proteínas, aguas, ropa, guantes... con "+ Nuevo producto".</p></div>'}
     </div>
@@ -2196,23 +2196,30 @@ const Pos={
         <div class="field"><label>Costo</label><input class="inp" type="number" id="pr-cost" value="${p&&p.cost?p.cost:''}"></div>
       </div>
       <div class="frow">
-        <div class="field"><label>Categoría</label><input class="inp" id="pr-cat" value="${p?esc(p.category||''):''}" placeholder="suplementos, bebidas, ropa..."></div>
+        <div class="field"><label>Tipo</label><select class="inp" id="pr-type" onchange="Pos.togglePrType()"><option value="store_item" ${!p||p.type!=='service'?'selected':''}>Producto físico (con inventario)</option><option value="service" ${p&&p.type==='service'?'selected':''}>Servicio — sin inventario</option></select></div>
+        <div class="field"><label>Categoría</label><input class="inp" id="pr-cat" value="${p?esc(p.category||''):''}" placeholder="suplementos, ropa, clases..."></div>
+      </div>
+      <div class="frow" id="pr-physical-row" style="${p&&p.type==='service'?'display:none':''}">
         <div class="field"><label>Código de barras / SKU</label><input class="inp" id="pr-sku" value="${p?esc(p.sku||''):''}" placeholder="escanéalo aquí"></div>
-      </div>
-      <div class="frow">
         <div class="field"><label>Alerta stock mínimo</label><input class="inp" type="number" id="pr-min" value="${p?this.minOf(p.id):5}"></div>
-        <div class="field"><label>Activo</label><select class="inp" id="pr-active"><option value="si" ${!p||p.active!==false?'selected':''}>Sí</option><option value="no" ${p&&p.active===false?'selected':''}>No</option></select></div>
       </div>
-      <button class="btn btn-primary btn-block" onclick="Pos.saveProduct('${p?p.id:''}')">Guardar producto</button>
+      <div class="field"><label>Activo</label><select class="inp" id="pr-active"><option value="si" ${!p||p.active!==false?'selected':''}>Sí</option><option value="no" ${p&&p.active===false?'selected':''}>No</option></select></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.saveProduct('${p?p.id:''}')">Guardar</button>
     `);
+  },
+  togglePrType(){
+    const isSrv=$('pr-type')&&$('pr-type').value==='service';
+    const row=$('pr-physical-row'); if(row)row.style.display=isSrv?'none':'';
   },
   async saveProduct(id){
     const name=$('pr-name').value.trim();
     if(!name){toast('Ponle nombre.',true);return;}
-    const base={name,type:'store_item',price:Number($('pr-price').value)||0,cost:Number($('pr-cost').value)||0,
-      category:$('pr-cat').value.trim()||null,sku:$('pr-sku').value.trim()||null,active:$('pr-active').value==='si'};
+    const type=($('pr-type')&&$('pr-type').value)||'store_item';
+    const isSrv=type==='service';
+    const base={name,type,price:Number($('pr-price').value)||0,cost:Number($('pr-cost').value)||0,
+      category:$('pr-cat').value.trim()||null,sku:isSrv?null:(($('pr-sku')&&$('pr-sku').value.trim())||null),active:$('pr-active').value==='si'};
     const bId=this.branch?this.branch.id:null;
-    const minQty=Number($('pr-min').value)||0;
+    const minQty=isSrv?0:(Number($('pr-min')&&$('pr-min').value)||0);
     if(id){
       const r=await Q.update('products',{id},base);
       if(r.error){toast('Error: '+r.error.message,true);return;}
@@ -2223,14 +2230,16 @@ const Pos={
       if(r.error){toast('Error: '+r.error.message,true);return;}
       this.products.push(base);id=base.id;
     }
-    // stock mínimo por sucursal
-    try{
-      const cur=this.stock.find(x=>x.product_id===id&&x.branch_id===bId);
-      await sb.from('stock').upsert({branch_id:bId,product_id:id,qty:cur?cur.qty:0,min_qty:minQty});
-      if(cur)cur.min_qty=minQty;else this.stock.push({branch_id:bId,product_id:id,qty:0,min_qty:minQty});
-    }catch(e){}
+    // Los servicios NO llevan inventario
+    if(!isSrv){
+      try{
+        const cur=this.stock.find(x=>x.product_id===id&&x.branch_id===bId);
+        await sb.from('stock').upsert({branch_id:bId,product_id:id,qty:cur?cur.qty:0,min_qty:minQty});
+        if(cur)cur.min_qty=minQty;else this.stock.push({branch_id:bId,product_id:id,qty:0,min_qty:minQty});
+      }catch(e){}
+    }
     cset('products',this.products);cset('stock',this.stock);
-    closeModal();toast('Producto guardado ✓');this.go('inventory');
+    closeModal();toast((isSrv?'Servicio':'Producto')+' guardado ✓');this.go('inventory');
   },
   stockModal(productId){
     const prods=this.products.filter(p=>p.type!=='membership');
@@ -2430,7 +2439,7 @@ const Pos={
       </div>
     </div>
     <div class="cards">
-      <div class="card" style="position:relative;overflow:hidden;"><div class="lbl">Ventas brutas <span class="tag tag-green" id="r-trend" style="display:none"></span></div><div class="val" id="r-total">—</div><div class="foot" id="r-total-f"></div><div id="r-spark" style="position:absolute;left:0;right:0;bottom:0;height:44px;opacity:.9;"></div></div>
+      <div class="card"><div class="lbl">Ventas brutas <span class="tag tag-green" id="r-trend" style="display:none"></span></div><div class="val" id="r-total">—</div><div class="foot" id="r-total-f"></div></div>
       <div class="card"><div class="lbl">Órdenes <span class="dot" style="background:var(--ink)"></span></div><div class="val" id="r-count">—</div><div class="foot">cobradas en el período</div></div>
       <div class="card"><div class="lbl">Membresías vendidas <span class="dot" style="background:var(--green)"></span></div><div class="val" id="r-subs">—</div><div class="foot">nuevas + renovaciones</div></div>
       <div class="card"><div class="lbl">Visitas <span class="dot" style="background:var(--amber)"></span></div><div class="val" id="r-visits">—</div><div class="foot">accesos permitidos</div></div>
@@ -2552,7 +2561,7 @@ const Pos={
       </div>`).join('')+'</div>';
     // donut
     const by=(m)=>S.filter(x=>x.payment_method===m).reduce((a,x)=>a+Number(x.total||0),0);
-    const segs=[['Efectivo',by('cash'),'#22C55E'],['Tarjeta',by('card'),'#F97316'],['Transferencia',by('transfer'),'#111111']].filter(x=>x[1]>0);
+    const segs=[['Efectivo',by('cash'),'#22C55E'],['Tarjeta',by('card'),'#F97316'],['Transferencia',by('transfer'),'#3B82F6']].filter(x=>x[1]>0);
     const segTotal=segs.reduce((a,x)=>a+x[1],0)||1;
     let acc=0;
     const arcs=segs.map(([l,v,c])=>{const f=v/segTotal;const s=acc;acc+=f;return `<circle r="15.9" cx="21" cy="21" fill="none" stroke="${c}" stroke-width="6" stroke-dasharray="${(f*100).toFixed(2)} ${(100-f*100).toFixed(2)}" stroke-dashoffset="${(25-s*100).toFixed(2)}"></circle>`;}).join('');
@@ -2627,12 +2636,13 @@ const Pos={
     const emp=$('emp-sel').value;
     if(!emp||!this._empSales){toast('Primero genera el reporte.',true);return;}
     const name=this.profName(emp).replace(/\s+/g,'_');
-    csvExport('reporte_'+name,['Fecha','Hora','Cliente','Total','Método'],
-      this._empSales.map(s=>[fdate(s.created_at),ftime(s.created_at),this.custName(s.customer_id),Number(s.total||0),PAY_LABEL[s.payment_method]||'']));
+    csvExport('reporte_'+name,['Fecha','Hora','Cliente','Concepto','Total','Método','Referencia'],
+      this._empSales.map(s=>[fdate(s.created_at),ftime(s.created_at),this.custName(s.customer_id),s.concept||'',Number(s.total||0),PAY_LABEL[s.payment_method]||'',s.reference||s.payment_reference||'']));
   },
   exportSalesCSV(){
-    csvExport('ventas_volten',['Fecha','Hora','Cliente','Total','Método','Atendió'],
-      this._repSales.map(s=>[fdate(s.created_at),ftime(s.created_at),this.custName(s.customer_id),Number(s.total||0),PAY_LABEL[s.payment_method]||s.payment_method,this.profName(s.sold_by||s.staff_id)]));
+    const bn=(id)=>(this.branches.find(b=>b.id===id)||{}).name||'';
+    csvExport('ventas_volten',['# Venta','Fecha','Hora','Cliente','Concepto','Total','Método','Referencia','Sucursal','Atendió'],
+      this._repSales.map(s=>[String(s.id||'').slice(0,8),fdate(s.created_at),ftime(s.created_at),this.custName(s.customer_id),s.concept||'',Number(s.total||0),PAY_LABEL[s.payment_method]||s.payment_method,s.reference||s.payment_reference||'',bn(s.branch_id),this.profName(s.sold_by||s.staff_id)]));
   },
   exportShiftsCSV(){
     csvExport('turnos_volten',['Abrió','Empleado','Cerró','Fondo','Esperado','Contado','Diferencia'],
