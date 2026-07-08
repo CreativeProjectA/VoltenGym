@@ -4142,15 +4142,12 @@ class Component extends DCLogic {
   applySession(session) {
     this._appliedSessionUserId = session.user.id;
     const meta = session.user.user_metadata || {};
-    // El personal (admin/encargado/cajera) SIEMPRE va al punto de venta,
-    // nunca a la app de miembros. Redirige de inmediato si el rol ya se
-    // conoce, y como respaldo lo confirma contra la tabla profiles.
+    // El personal (admin/encargado/cajera) usa el Punto de Venta, no la app
+    // de miembros. No aplicamos su sesión aquí (sin redirigir, para no dejar
+    // la app "pegada"); simplemente queda en la pantalla de bienvenida y
+    // cualquiera puede iniciar sesión con su propia cuenta de cliente.
     const STAFF = ['admin', 'encargado', 'cajera'];
-    if (STAFF.includes(meta.role)) { window.location.href = 'pos.html'; return; }
-    try {
-      getSupabase().from('profiles').select('role').eq('id', session.user.id).single()
-        .then(({ data }) => { if (data && STAFF.includes(data.role)) window.location.href = 'pos.html'; });
-    } catch (_) {}
+    if (STAFF.includes(meta.role)) { this.setState({ authLoading: false }); return; }
     this.setState({
       session,
       userName: meta.full_name || this.state.userName,
@@ -4244,6 +4241,11 @@ class Component extends DCLogic {
     }
     if (error) {
       this.setState({ authLoading: false, authError: 'Usuario o contraseña incorrectos.' });
+      return;
+    }
+    const _role = (data.session && data.session.user && data.session.user.user_metadata && data.session.user.user_metadata.role) || '';
+    if (['admin', 'encargado', 'cajera'].includes(_role)) {
+      this.setState({ authLoading: false, authError: 'Esta cuenta es del personal. Entra por el Punto de Venta.' });
       return;
     }
     if (data.session) this.applySession(data.session);
