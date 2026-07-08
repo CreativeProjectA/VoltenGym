@@ -4142,6 +4142,15 @@ class Component extends DCLogic {
   applySession(session) {
     this._appliedSessionUserId = session.user.id;
     const meta = session.user.user_metadata || {};
+    // El personal (admin/encargado/cajera) SIEMPRE va al punto de venta,
+    // nunca a la app de miembros. Redirige de inmediato si el rol ya se
+    // conoce, y como respaldo lo confirma contra la tabla profiles.
+    const STAFF = ['admin', 'encargado', 'cajera'];
+    if (STAFF.includes(meta.role)) { window.location.href = 'pos.html'; return; }
+    try {
+      getSupabase().from('profiles').select('role').eq('id', session.user.id).single()
+        .then(({ data }) => { if (data && STAFF.includes(data.role)) window.location.href = 'pos.html'; });
+    } catch (_) {}
     this.setState({
       session,
       userName: meta.full_name || this.state.userName,

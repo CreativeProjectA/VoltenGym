@@ -68,7 +68,7 @@
   .side-foot{margin-top:auto;padding-top:16px;}
   .shift-chip{background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:13px 15px;margin-bottom:10px;}
   .shift-chip .t{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);}
-  .shift-chip .v{font-size:19px;font-weight:800;letter-spacing:-0.02em;margin-top:3px;}
+  .shift-chip .v{font-size:19px;font-weight:700;letter-spacing:-0.02em;margin-top:3px;}
   .side-user{padding:12px 14px;border-radius:16px;background:var(--bg);display:flex;align-items:center;gap:11px;}
   .side-user .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#F97316,#EA580C);display:flex;align-items:center;justify-content:center;color:#FFF;font-weight:800;font-size:15px;flex-shrink:0;overflow:hidden;}
   .side-user .av img{width:100%;height:100%;object-fit:cover;}
@@ -76,7 +76,7 @@
 
   .main{overflow-y:auto;padding:36px 44px;}
   .topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:30px;gap:20px;flex-wrap:wrap;}
-  .topbar h1{font-size:38px;font-weight:800;letter-spacing:-0.035em;line-height:1.05;}
+  .topbar h1{font-size:36px;font-weight:700;letter-spacing:-0.035em;line-height:1.05;}
   .topbar .sub{color:var(--muted);font-size:15px;font-weight:500;margin-top:6px;}
   .branch-pick select{height:44px;padding:0 16px;border-radius:12px;border:1.5px solid var(--line);font-size:13px;font-weight:600;background:#FFF;cursor:pointer;transition:border .2s;}
   .branch-pick select:hover{border-color:var(--orange);}
@@ -86,11 +86,11 @@
   .card:hover{transform:translateY(-3px);}
   .card .lbl{font-size:13px;color:var(--muted);font-weight:600;display:flex;align-items:center;justify-content:space-between;}
   .card .dot{width:9px;height:9px;border-radius:50%;}
-  .card .val{font-size:36px;font-weight:800;letter-spacing:-0.04em;margin-top:14px;line-height:1;}
+  .card .val{font-size:34px;font-weight:700;letter-spacing:-0.035em;margin-top:14px;line-height:1;}
   .card .foot{font-size:13px;color:var(--muted);margin-top:9px;font-weight:500;}
 
   .panel{background:var(--card);border-radius:22px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,.03);margin-bottom:16px;}
-  .panel h2{font-size:22px;font-weight:800;letter-spacing:-0.025em;margin-bottom:3px;}
+  .panel h2{font-size:21px;font-weight:700;letter-spacing:-0.02em;margin-bottom:3px;}
   .panel .psub{font-size:14px;color:var(--muted);font-weight:500;margin-bottom:20px;}
   /* Panel de acento (flujo de caja) — naranja, ya no negro */
   .dark-panel{background:linear-gradient(135deg,#F97316 0%,#EA580C 100%);color:#FFF;box-shadow:0 14px 34px rgba(249,115,22,.28);}
@@ -195,7 +195,7 @@
   .scan-box .inp:focus{border-color:var(--orange);}
   #access-result{border-radius:22px;padding:34px;text-align:center;margin-bottom:16px;display:none;animation:popIn .4s cubic-bezier(.34,1.4,.64,1) both;}
   #access-result.ok{background:#DCFCE7;} #access-result.deny{background:#FEE2E2;}
-  #access-result .big{font-size:30px;font-weight:800;letter-spacing:-0.03em;}
+  #access-result .big{font-size:28px;font-weight:700;letter-spacing:-0.03em;}
   #access-result.ok .big{color:#15803D;} #access-result.deny .big{color:#DC2626;}
   #access-result .who2{font-size:17px;font-weight:700;margin-top:8px;color:var(--ink);}
   #access-result .why{font-size:14px;font-weight:600;margin-top:5px;color:var(--muted);}
@@ -820,7 +820,7 @@ const Pos={
       <div>
         <div class="panel dark-panel">
           <div style="font-size:11px;font-weight:700;letter-spacing:0.14em;color:rgba(255,255,255,.5);text-transform:uppercase">Flujo de caja · turno</div>
-          <div style="font-size:42px;font-weight:800;letter-spacing:-0.04em;margin:10px 0 4px" id="d-flow-total">—</div>
+          <div style="font-size:40px;font-weight:700;letter-spacing:-0.035em;margin:10px 0 4px" id="d-flow-total">—</div>
           <div style="font-size:13px;color:rgba(255,255,255,.4);margin-bottom:20px" id="d-flow-count">— órdenes cobradas</div>
           <div class="row-line"><span class="k">Efectivo</span><span class="v" id="d-flow-cash">$0</span></div>
           <div class="row-line"><span class="k">Tarjeta</span><span class="v" id="d-flow-card">$0</span></div>
@@ -866,12 +866,12 @@ const Pos={
     $('d-act-grid').innerHTML=cells.map(([lbl,n,c])=>`
       <div style="background:var(--bg);border-radius:18px;padding:20px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span class="dot" style="background:${c};width:9px;height:9px;border-radius:50%;display:inline-block"></span><span style="font-size:13px;font-weight:600;color:#374151">${lbl}</span></div>
-        <div style="font-size:32px;font-weight:800;letter-spacing:-0.04em">${n}</div>
+        <div style="font-size:30px;font-weight:700;letter-spacing:-0.035em">${n}</div>
       </div>`).join('');
     // últimas ventas
     if(t.sales.length){
       $('d-last-sales').innerHTML='<table><thead><tr><th>Cliente</th><th>Total</th><th>Pago</th><th>Hora</th></tr></thead><tbody>'+
-        t.sales.slice(0,6).map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td style="color:#16A34A;font-weight:800">${money(s.total)}</td><td><span class="tag tag-gray">${PAY_LABEL[s.payment_method]||s.payment_method||'—'}</span></td><td>${ftime(s.created_at)}</td></tr>`).join('')+'</tbody></table>';
+        t.sales.slice(0,6).map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td style="color:#16A34A;font-weight:700">${money(s.total)}</td><td><span class="tag tag-gray">${PAY_LABEL[s.payment_method]||s.payment_method||'—'}</span></td><td>${ftime(s.created_at)}</td></tr>`).join('')+'</tbody></table>';
     }
     // por vencer
     const t7=new Date(Date.now()+7*864e5);
