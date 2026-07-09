@@ -1090,6 +1090,26 @@
     </div>
 
     <!-- ═══════════════════════════════════════
+         MEMBRESÍA REQUERIDA — la app solo funciona con membresía activa
+         (no aplica a coaches, ellos siempre entran a su panel)
+    ═══════════════════════════════════════ -->
+    <div style="{{ membershipGateStyle }}">
+      <div style="width:100%;max-width:340px;text-align:center;padding:0 24px;">
+        <div style="width:64px;height:64px;border-radius:50%;background:rgba(249,115,22,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round"><path d="M12 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+        </div>
+        <h2 style="font-size:24px;font-weight:800;color:#0A0A0A;letter-spacing:-0.02em;margin-bottom:10px;">Necesitas tu membresía activa</h2>
+        <p style="font-size:14px;color:#9CA3AF;line-height:1.5;margin-bottom:28px;">Para entrenar, ver tu dieta y usar la app tienes que tener tu membresía al corriente. Pásate a recepción o solicítala aquí y la pagas ahí.</p>
+        <div onclick="{{ openPlanReq }}" class="vg-press" style="background:#F97316;border-radius:14px;padding:15px 0;margin-bottom:12px;cursor:pointer;box-shadow:0 8px 22px rgba(249,115,22,0.35);">
+          <span style="font-size:14px;font-weight:700;color:#FFFFFF;">Solicitar / renovar membresía</span>
+        </div>
+        <div onclick="{{ signOut }}" class="vg-press" style="padding:12px 0;cursor:pointer;">
+          <span style="font-size:13px;font-weight:600;color:#9CA3AF;">Cerrar sesión</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════
          ONBOARDING  (position:absolute, z:100)
     ═══════════════════════════════════════ -->
     <div style="{{ onbStyle }}">
@@ -6463,6 +6483,15 @@ class Component extends DCLogic {
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 195,
         background: '#EF4444', color: '#FFFFFF', padding: '10px 16px',
         alignItems: 'center', gap: '8px', fontSize: '13px',
+      },
+      // La app solo funciona con membresía activa — no aplica a coaches
+      // (ellos usan la app para trabajar, no son socios) ni mientras el
+      // onboarding sigue abierto o mientras aún no se sabe el estado real
+      // (subscriptionStatus null = todavía no se consultó la base).
+      membershipGateStyle: {
+        display: (userType !== 'trainer' && !isOnb && this.state.subscriptionStatus !== null && !this.state.subscriptionActive) ? 'flex' : 'none',
+        position: 'absolute', inset: 0, zIndex: 200, background: '#FFFFFF',
+        alignItems: 'center', justifyContent: 'center',
       },
       // Calendario detallado en "Tus programas" (Progreso)
       ...((() => {

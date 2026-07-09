@@ -1248,6 +1248,7 @@ const Pos={
 
   async checkout(){
     if(this._checkingOut)return; this._checkingOut=true;   // candado: un solo cobro aunque piquen doble
+    this._acctCreated=null;
     const s=this.sale;const t=this.saleTotals();
     if(!s.method||!s.cart.length){this._checkingOut=false;return;}
     if(s.method==='cash'&&!(Number(s.received)>0)){toast('Captura cuánto recibiste en efectivo antes de cobrar.',true);this._checkingOut=false;return;}
@@ -1282,6 +1283,16 @@ const Pos={
           // Marca el uso de la cortesía — 1 sola vez por persona.
           try{await Q.update('customers',{id:c.id},{courtesy_used_at:new Date().toISOString()});}catch(e){}
           c.courtesy_used_at=new Date().toISOString();cset('customers',this.customers);
+        }
+        // Al pagar su membresía, si aún no tiene cuenta de la app, se le crea
+        // sola (edge function con la service key — nunca en el navegador).
+        if(c&&!c.profile_id&&c.email&&navigator.onLine&&!this._acctCreated){
+          try{
+            const {data:j,error:fnErr}=await sb.functions.invoke('create-member-account',{
+              body:{customer_id:c.id,full_name:c.full_name,email:c.email,branch_id:c.branch_id,coach_id:c.coach_id||null,coach_until:c.coach_until||null},
+            });
+            if(!fnErr&&j&&j.ok){this._acctCreated={email:j.email,password:j.password};c.profile_id=j.profile_id;cset('customers',this.customers);}
+          }catch(e){/* función aún no desplegada u offline — no bloquea la venta */}
         }
       }else if(it.kind==='coach'){
         productId=await this.ensureCoachProduct(it,put);
@@ -1429,6 +1440,14 @@ const Pos={
       <h2 style="font-size:30px;">Venta cobrada</h2>
       <div class="psub" style="margin-bottom:6px">${money(t.total)} · ${PAY_LABEL[s.method]||''}${c?' · '+esc(c.full_name):''}</div>
       ${sub&&s.cart.some(x=>x.kind==='plan')?`<div style="font-size:15px;font-weight:700;color:var(--orange);margin-bottom:6px">Membresía vigente hasta el ${fdate(sub.end_date)} (le quedan ${daysLeft(sub.end_date)} días en total)</div>`:''}
+      ${this._acctCreated?`
+      <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:16px;padding:18px 20px;margin-top:16px;text-align:left;">
+        <div style="font-size:13px;font-weight:800;color:#15803D;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Cuenta de la app creada ✓</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);">Usuario: <b>${esc(this._acctCreated.email)}</b></div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);margin-top:2px;">Contraseña: <b style="font-family:monospace">${esc(this._acctCreated.password)}</b></div>
+        <p style="font-size:12px;color:var(--muted);margin-top:8px">Dale estos datos al cliente — puede cambiar su contraseña luego en Perfil.</p>
+        ${c&&c.phone?`<a class="btn btn-sm" style="background:#DCFCE7;color:#16A34A;text-decoration:none;margin-top:10px;display:inline-block" target="_blank" href="${waLink(c.phone,'¡Bienvenido a Volten Gym! Ya puedes descargar la app. Tu usuario: '+this._acctCreated.email+' · Contraseña: '+this._acctCreated.password)}">Enviar por WhatsApp</a>`:''}
+      </div>`:''}
       ${s.queued?'<div class="tag tag-orange" style="margin-top:8px">Guardada localmente — se sincroniza al volver el internet</div>':''}
       <div style="display:flex;gap:12px;justify-content:center;margin-top:26px;">
         <button class="btn btn-ghost" onclick="Pos.printTicket()"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Imprimir ticket</button>
@@ -1974,18 +1993,12 @@ const Pos={
       <div><h1>Accesos</h1><div class="sub">Control de entrada · QR, huella, facial o manual</div></div>
       ${this.branchSelector()}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
-      <div class="scan-box" style="margin-bottom:0">
-        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Entrada / Salida</div>
-        <input class="inp" id="scan-inp" placeholder="Teclea el nombre o Nº de cuenta del cliente + Enter" onkeydown="if(event.key==='Enter')Pos.accessScan(this.value)">
-        <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">Primera vez = entra · segunda vez = sale. Valida la membresía sola. (Con QR/huella/facial cuando esté el equipo, es automático.)</div>
-      </div>
-      <div class="scan-box" style="margin-bottom:0;border-color:var(--orange);background:var(--orange-soft);">
-        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--orange-dark);margin-bottom:10px">Enlazar app del cliente</div>
-        <input class="inp" id="link-name-inp" placeholder="Teclea el NOMBRE del cliente (como está registrado) + Enter" onkeydown="if(event.key==='Enter')Pos.linkByName(this.value)">
-        <div style="font-size:12px;color:var(--orange-dark);font-weight:500;margin-top:10px">1) Escribes el nombre → confirmas quién es. 2) Te pide su Nº de cuenta de la app. Al enlazar, en su teléfono aparece su sucursal, sus coaches y su QR ya funciona.</div>
-      </div>
+    <div class="scan-box" style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Entrada / Salida</div>
+      <input class="inp" id="scan-inp" placeholder="Teclea el nombre o Nº de cuenta del cliente + Enter" onkeydown="if(event.key==='Enter')Pos.accessScan(this.value)">
+      <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">Primera vez = entra · segunda vez = sale. Valida la membresía sola. (Con QR/huella/facial cuando esté el equipo, es automático.)</div>
     </div>
+    <p style="font-size:12px;color:var(--muted);font-weight:500;margin:-8px 0 16px">La cuenta de la app ya se crea sola al cobrar su membresía. Si un cliente antiguo aún no tiene cuenta, vincúlasela desde su ficha en Clientes.</p>
     <div id="access-result"></div>
     <div id="scan-picker"></div>
     <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:16px;align-items:start;">
