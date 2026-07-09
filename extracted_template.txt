@@ -1790,8 +1790,20 @@
 
             <!-- ══ ANUNCIO DEL GYM (publicado desde el POS) ══ -->
             <div class="vg-s4" style="{{ gymAnnStyle }}">
-              <div style="background:linear-gradient(135deg,#FFF4EC 0%,#FFE9D6 100%);border:1px solid #FFE0C2;border-radius:20px;padding:20px 22px;">
-                <div style="{{ gymAnnImgStyle }}"></div>
+              <!-- Con foto: card editorial oscura estilo "What's New" (foto + degradado + texto encima).
+                   Sin foto: card clara de texto, como antes. -->
+              <div style="{{ gymAnnPhotoCardStyle }}">
+                <div style="position:absolute;inset:0;background-image:url('{{ gymAnnPhotoUrl }}');background-size:cover;background-position:center;"></div>
+                <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 30%,rgba(0,0,0,0.82) 100%);"></div>
+                <div style="position:relative;padding:18px 20px;display:flex;align-items:flex-end;min-height:170px;">
+                  <div>
+                    <p style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:0.14em;margin-bottom:6px;">Volten Gym</p>
+                    <p style="font-size:19px;font-weight:800;color:#FFFFFF;line-height:1.2;letter-spacing:-0.02em;margin-bottom:10px;">{{ gymAnnTitle }}</p>
+                    <div style="display:inline-block;background:#FFFFFF;border-radius:100px;padding:8px 16px;"><span style="font-size:12px;font-weight:700;color:#0A0A0A;">Ver más</span></div>
+                  </div>
+                </div>
+              </div>
+              <div style="{{ gymAnnTextCardStyle }}">
                 <p style="font-size:9px;font-weight:700;color:#F59E5B;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:8px;">Volten Gym anuncia</p>
                 <p style="font-size:16px;font-weight:800;color:#B45309;line-height:1.35;letter-spacing:-0.02em;">{{ gymAnnTitle }}</p>
                 <p style="font-size:13px;font-weight:500;color:#B4763B;line-height:1.5;margin-top:6px;">{{ gymAnnBody }}</p>
@@ -5863,7 +5875,13 @@ class Component extends DCLogic {
       gymAnnStyle: this.state.gymAnnouncement ? { padding: '14px 16px 0' } : { display: 'none' },
       gymAnnTitle: this.state.gymAnnouncement ? (this.state.gymAnnouncement.title || '') : '',
       gymAnnBody: this.state.gymAnnouncement ? (this.state.gymAnnouncement.body || '') : '',
-      gymAnnImgStyle: (this.state.gymAnnouncement && this.state.gymAnnouncement.image_url) ? ('height:150px;border-radius:14px;background-size:cover;background-position:center;margin-bottom:14px;background-image:url("' + this.state.gymAnnouncement.image_url + '")') : 'display:none',
+      gymAnnPhotoUrl: (this.state.gymAnnouncement && this.state.gymAnnouncement.image_url) || '',
+      gymAnnPhotoCardStyle: (this.state.gymAnnouncement && this.state.gymAnnouncement.image_url)
+        ? 'position:relative;border-radius:20px;overflow:hidden;'
+        : 'display:none;',
+      gymAnnTextCardStyle: (this.state.gymAnnouncement && this.state.gymAnnouncement.image_url)
+        ? 'display:none;'
+        : 'background:linear-gradient(135deg,#FFF4EC 0%,#FFE9D6 100%);border:1px solid #FFE0C2;border-radius:20px;padding:20px 22px;',
       memberBranchName: userType === 'trainer'
         ? (this.state.coachBranchName || 'Sin asignar')
         : (() => { const b = (this.state.branchesList || []).find(x => x.id === this.state.memberBranchId); return b ? b.name : 'Elegir sucursal'; })(),
