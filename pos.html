@@ -547,7 +547,7 @@ const Pos={
     this.customers=await load('customers',sb.from('customers').select('*').order('full_name'));
     this.subs=await load('subs',sb.from('subscriptions').select('*').order('end_date',{ascending:false}));
     this.promos=await load('promos',sb.from('promotions').select('*').order('created_at',{ascending:false}));
-    this.appProfiles=await load('appProfiles',sb.from('profiles').select('id,full_name,email,role,avatar_url,created_at'));
+    this.appProfiles=await load('appProfiles',sb.from('profiles').select('*'));
     this.families=await load('families',sb.from('families').select('*'));
     this.coachProfiles=await load('coachProfiles',sb.from('coach_profiles').select('profile_id,monthly_price'));
     this.staffBranches=await load('staffBranches',sb.from('staff_branches').select('*'));
@@ -2063,12 +2063,23 @@ const Pos={
       const {data:d2}=await q2;
       // Sin lector de salida (el torniquete deja salir libre, sin escanear),
       // el sistema NO sabe la hora exacta en que alguien se fue. Para que
-      // "adentro ahora" no acumule gente que ya se fue hace rato, se asume
-      // que después de 3 horas sin actividad ya no está — es un estimado,
-      // no un dato real (por eso NO se escribe checked_out_at, solo se
-      // oculta de esta lista en vivo; en el corte del día sí se cierra).
+      // "adentro ahora" no acumule gente que ya se fue hace rato:
+      // - Personal (coach/encargados) con horario configurado: se asume que
+      //   ya salió en cuanto pasa su hora de salida programada.
+      // - Todos los demás (miembros, o personal sin horario puesto): estimado
+      //   de 3 horas sin actividad. Nunca se escribe una hora de salida falsa,
+      //   solo se oculta de esta lista en vivo (el corte del día sí la cierra).
       const STALE_MS=3*60*60*1000;
-      this.accInside=(d2||[]).filter(ci=>(Date.now()-new Date(ci.created_at).getTime())<STALE_MS);
+      const now=new Date();
+      this.accInside=(d2||[]).filter(ci=>{
+        const staff=!ci.customer_id&&ci.member_id?this.appProfiles.find(p=>p.id===ci.member_id):null;
+        if(staff&&staff.shift_end){
+          const [hh,mm]=staff.shift_end.split(':').map(Number);
+          const shiftEnd=new Date(ci.created_at);shiftEnd.setHours(hh,mm||0,0,0);
+          return now<shiftEnd;
+        }
+        return (now.getTime()-new Date(ci.created_at).getTime())<STALE_MS;
+      });
     }catch(e){this.accInside=[];}
     this.renderAccess();
   },
@@ -3019,7 +3030,7 @@ const Pos={
     try{
       const {data}=await sb.from('staff_branches').select('*');
       if(data)this.staffBranches=data;
-      const {data:profs}=await sb.from('profiles').select('id,full_name,email,role,avatar_url,created_at');
+      const {data:profs}=await sb.from('profiles').select('*');
       if(profs){this.appProfiles=profs;cset('appProfiles',profs);}
     }catch(e){}
     const tb=$('staff-tbody');if(tb)tb.innerHTML=this.staffRows();
@@ -3037,6 +3048,11 @@ const Pos={
         <div class="field"><label>Sucursal</label><select class="inp" id="se-branch">${this.branches.map(b=>`<option value="${b.id}" ${sbr&&sbr.branch_id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
       </div>
       <div class="field"><label>Foto (se ve en el POS y en la app si es coach)</label><input class="inp" type="file" id="se-photo" accept="image/*" style="padding-top:11px"></div>
+      <div class="frow">
+        <div class="field"><label>Entra a trabajar</label><input class="inp" type="time" id="se-shift-start" value="${esc(p.shift_start||'')}"></div>
+        <div class="field"><label>Sale de trabajar</label><input class="inp" type="time" id="se-shift-end" value="${esc(p.shift_end||'')}"></div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);font-weight:500;margin:-8px 0 14px">Con esto, en "Adentro ahora" de Accesos se sabe que ya salió pasada su hora, sin que tenga que volver a marcar.</p>
       <div id="se-coach-price" class="${p.role==='coach'?'':'hidden'}">
         <div class="frow">
           <div class="field"><label>Precio del coach (se ve en la app)</label><input class="inp" type="number" id="se-price" value="${(this.coachProfiles.find(x=>x.profile_id===id)||{}).monthly_price||''}" placeholder="500"></div>
@@ -3050,7 +3066,9 @@ const Pos={
   async saveStaffEdit(id){
     if(!navigator.onLine){toast('Necesitas internet para editar personal.',true);return;}
     $('se-save').disabled=true;$('se-save').textContent='Guardando...';
-    const patch={full_name:$('se-name').value.trim(),role:$('se-role').value};
+    const patch={full_name:$('se-name').value.trim(),role:$('se-role').value,
+      shift_start:($('se-shift-start')&&$('se-shift-start').value)||null,
+      shift_end:($('se-shift-end')&&$('se-shift-end').value)||null};
     // foto → bucket avatars (requiere pos_migration3.sql)
     const f=$('se-photo').files[0];
     if(f){
@@ -3060,7 +3078,12 @@ const Pos={
       if(upErr){toast(/bucket|not found/i.test(upErr.message||'')?'Para subir fotos corre pos_migration3.sql en Supabase.':'Foto: '+upErr.message,true);}
       else{const {data:pub}=sb.storage.from('avatars').getPublicUrl(path);if(pub)patch.avatar_url=pub.publicUrl;}
     }
-    const {error}=await sb.from('profiles').update(patch).eq('id',id);
+    let {error}=await sb.from('profiles').update(patch).eq('id',id);
+    if(error&&/shift_start|shift_end/i.test(error.message||'')){
+      const p2={...patch};delete p2.shift_start;delete p2.shift_end;
+      const r2=await sb.from('profiles').update(p2).eq('id',id);error=r2.error;
+      if(!error)toast('Guardado — corre pos_migration9.sql para poder guardar su horario.',true);
+    }
     if(error){toast(/constraint|check/i.test(error.message||'')?'Para el rol Contador corre pos_migration3.sql.':'Error: '+error.message,true);$('se-save').disabled=false;$('se-save').textContent='Guardar cambios';return;}
     try{
       await sb.from('staff_branches').delete().eq('staff_id',id);
