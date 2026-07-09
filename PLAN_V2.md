@@ -97,8 +97,11 @@
 - Horario de entrada/salida programable para coach/encargados (pos_migration9.sql).
 - Ficha del cliente con gráficas: asistencia por semana + línea de tiempo de pagos.
 
-### ⏳ Pendiente — Fase 4 (Stripe)
-- Pausado a petición de Armando, se agrupa con Fase 6. Falta: edge functions stripe-checkout + stripe-webhook, botón de pago en la app, que el dueño active su cuenta de Stripe con datos reales del negocio.
+### ✅ Fase 4 (Stripe) — HECHA en modo test
+- Edge functions stripe-checkout + stripe-webhook desplegadas y probadas (creación de sesión de pago confirmada en vivo).
+- Botón "💳 Pagar con tarjeta" en cada plan de membresía y en el selector de coach dentro de la app.
+- El webhook acumula días igual que el POS y asigna coach con vigencia igual que el POS.
+- FALTA: que el dueño del gym (no Armando) active su cuenta de Stripe con RFC/CLABE reales para pasar a modo live — es un trámite de ellos con Stripe, no depende de código. Cuando lo hagan, solo se cambian las 2 llaves de test por las de producción.
 
 ### ⏳ Pendiente — Fase 5 (resto)
 - **Push notifications reales** (que lleguen con la app cerrada/pantalla apagada) — requiere VAPID keys + service worker con push listener. Lo que ya existe es el centro de notificaciones DENTRO de la app, no push del sistema operativo.
@@ -107,8 +110,8 @@
 - **Analíticas de horas pico ya existen**; falta comparativo entre sucursales lado a lado en una sola vista (hoy se ve una sucursal a la vez con el selector).
 
 ### ⏳ Pendiente — Fase 6 (Stripe real + Hardware)
-- Activar cuenta de Stripe con datos del dueño del gym (no de Armando).
-- Facial AI07F + torniquete ZKTeco: falta el puente local (programa en la PC de recepción) — se hace cuando el equipo esté físicamente conectado en el gym y Armando pueda darme acceso a su configuración de red.
+- Activar cuenta de Stripe con datos del dueño del gym (no de Armando) — trámite de ellos.
+- **Puente de hardware YA ESCRITO** en [hardware-bridge/bridge.js](hardware-bridge/bridge.js) + [README](hardware-bridge/README.md) — implementa el protocolo estándar ZKTeco (push/ADMS), listo para correr en la PC de recepción de cada sucursal. FALTA: probarlo con el equipo físico real conectado (no se puede simular sin el hardware) — el torniquete es ZKTeco confirmado así que debería funcionar directo; el facial AI07F puede necesitar ajustes menores si su protocolo difiere.
 - Báscula FitMe Wise: confirmado que es un sistema cerrado, no se integra — se mantiene la captura manual de peso ya existente en la app.
 
 ### Otros pendientes menores (no estaban en las 6 fases originales pero salieron en el camino)
