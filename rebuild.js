@@ -104,6 +104,10 @@ const PWA_TAGS = '<title>Volten Gym</title>'
   + '<link rel="icon" type="image/png" href="voltengym.png">'
   + '<link rel="apple-touch-icon" href="voltengym.png">'
   + '<meta name="theme-color" content="#F97316">'
+  // Fondo blanco forzado: en el teléfono (PWA instalada) el body del bundler
+  // era oscuro y se asomaba como un cuadro negro bajo la barra inferior.
+  + '<style>html,body{background:#FFFFFF !important;}</style>'
+  + '<meta name="apple-mobile-web-app-status-bar-style" content="default">'
   + '<script>if("serviceWorker" in navigator&&location.protocol.indexOf("http")===0)navigator.serviceWorker.register("sw.js").catch(function(){});</script>';
 rebuilt = rebuilt.replace(/<title>[\s\S]*?<\/title>/i, '');
 rebuilt = rebuilt.replace(/<head([^>]*)>/i, (m) => m + PWA_TAGS);

@@ -87,6 +87,11 @@
   .card .lbl{font-size:13px;color:var(--muted);font-weight:600;display:flex;align-items:center;justify-content:space-between;}
   .card .dot{width:9px;height:9px;border-radius:50%;}
   .card .val{font-size:34px;font-weight:700;letter-spacing:-0.035em;margin-top:14px;line-height:1;}
+  .mini-ch{height:46px;margin-top:12px;}
+  .mini-ch svg{width:100%;height:100%;display:block;}
+  .chart-toggle{display:inline-flex;background:#F3F4F6;border-radius:100px;padding:3px;gap:2px;}
+  .chart-toggle button{border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:700;padding:6px 14px;border-radius:100px;cursor:pointer;font-family:inherit;}
+  .chart-toggle button.on{background:#FFF;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08);}
   .card .foot{font-size:13px;color:var(--muted);margin-top:9px;font-weight:500;}
 
   .panel{background:var(--card);border-radius:22px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,.03);margin-bottom:16px;}
@@ -2439,20 +2444,22 @@ const Pos={
       </div>
     </div>
     <div class="cards">
-      <div class="card"><div class="lbl">Ventas brutas <span class="tag tag-green" id="r-trend" style="display:none"></span></div><div class="val" id="r-total">—</div><div class="foot" id="r-total-f"></div></div>
-      <div class="card"><div class="lbl">Órdenes</div><div class="val" id="r-count">—</div><div class="foot">cobradas en el período</div></div>
-      <div class="card"><div class="lbl">Membresías vendidas</div><div class="val" id="r-subs">—</div><div class="foot">nuevas + renovaciones</div></div>
-      <div class="card"><div class="lbl">Visitas</div><div class="val" id="r-visits">—</div><div class="foot">accesos permitidos</div></div>
+      <div class="card"><div class="lbl">Ventas brutas <span class="tag tag-green" id="r-trend" style="display:none"></span></div><div class="val" id="r-total">—</div><div class="foot" id="r-total-f"></div><div class="mini-ch" id="mc-total"></div></div>
+      <div class="card"><div class="lbl">Órdenes</div><div class="val" id="r-count">—</div><div class="foot">cobradas en el período</div><div class="mini-ch" id="mc-count"></div></div>
+      <div class="card"><div class="lbl">Membresías vendidas</div><div class="val" id="r-subs">—</div><div class="foot">nuevas + renovaciones</div><div class="mini-ch" id="mc-subs"></div></div>
+      <div class="card"><div class="lbl">Visitas</div><div class="val" id="r-visits">—</div><div class="foot">accesos permitidos</div><div class="mini-ch" id="mc-visits"></div></div>
     </div>
     <div class="cards">
-      <div class="card"><div class="lbl">Ticket promedio</div><div class="val" id="r-avg">—</div><div class="foot">por orden cobrada</div></div>
-      <div class="card"><div class="lbl">Efectivo metido</div><div class="val" id="r-movin">—</div><div class="foot">entradas manuales a caja</div></div>
-      <div class="card"><div class="lbl">Retiros / egresos</div><div class="val" id="r-movout">—</div><div class="foot">efectivo que salió de caja</div></div>
-      <div class="card"><div class="lbl">Utilidad neta</div><div class="val" id="r-net">—</div><div class="foot">ventas menos egresos</div></div>
+      <div class="card"><div class="lbl">Ticket promedio</div><div class="val" id="r-avg">—</div><div class="foot">por orden cobrada</div><div class="mini-ch" id="mc-avg"></div></div>
+      <div class="card"><div class="lbl">Efectivo metido</div><div class="val" id="r-movin">—</div><div class="foot">entradas manuales a caja</div><div class="mini-ch" id="mc-movin"></div></div>
+      <div class="card"><div class="lbl">Retiros / egresos</div><div class="val" id="r-movout">—</div><div class="foot">efectivo que salió de caja</div><div class="mini-ch" id="mc-movout"></div></div>
+      <div class="card"><div class="lbl">Utilidad neta</div><div class="val" id="r-net">—</div><div class="foot">ventas menos egresos</div><div class="mini-ch" id="mc-net"></div></div>
     </div>
     <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;">
       <div class="panel"><h2>Ingresos por día</h2><div class="psub" id="r-range-lbl"></div><div id="r-bars"></div></div>
-      <div class="panel"><h2>Métodos de pago</h2><div class="psub">Distribución por tipo</div><div id="r-donut"></div></div>
+      <div class="panel"><h2>Métodos de pago</h2><div class="psub">Distribución por tipo</div><div id="r-donut"></div>
+        <div style="margin-top:14px"><span style="font-size:12px;color:var(--muted);font-weight:600;margin-right:10px">Gráficas de tarjetas:</span><span class="chart-toggle"><button id="ct-bars" class="${(this.repChart||'bars')==='bars'?'on':''}" onclick="Pos.repChart='bars';Pos.go('reports')">Barras</button><button id="ct-donut" class="${this.repChart==='donut'?'on':''}" onclick="Pos.repChart='donut';Pos.go('reports')">Círculo</button></span></div>
+      </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
       <div class="panel"><h2>Asistencia por hora</h2><div class="psub">Para conocer tus horas pico</div><div id="r-hours"></div></div>
@@ -2506,6 +2513,43 @@ const Pos={
       MV=data||[];
     }catch(e){}
     this._repSales=S;this._repShifts=SH;
+    // ── Series diarias por métrica → mini-gráfica en cada tarjeta ──
+    const nB=days===1?12:Math.min(days,31);
+    const mkSeries=()=>Array(nB).fill(0);
+    const bIdx=(iso)=>{const d=new Date(iso);return days===1?Math.min(11,Math.floor(d.getHours()/2)):Math.max(0,Math.min(nB-1,Math.floor((d-from)/((days*864e5)/nB))));};
+    const sTot=mkSeries(),sCnt=mkSeries(),sVis=mkSeries(),sIn=mkSeries(),sOut=mkSeries(),sSub=mkSeries();
+    S.forEach(x=>{const i=bIdx(x.created_at);sTot[i]+=Number(x.total||0);sCnt[i]++;});
+    CI.forEach(x=>{sVis[bIdx(x.created_at)]++;});
+    MV.forEach(x=>{const i=bIdx(x.created_at);if(x.type==='in')sIn[i]+=Number(x.amount||0);else sOut[i]+=Number(x.amount||0);});
+    this.subs.filter(s2=>s2.start_date>=dISO(from)&&(!bId||s2.branch_id===bId)).forEach(x=>{sSub[bIdx(x.start_date+'T12:00:00')]++;});
+    const sAvg=sTot.map((v,i)=>sCnt[i]?v/sCnt[i]:0);
+    const sNet=sTot.map((v,i)=>v-sOut[i]);
+    const mini=(id,vals)=>{
+      const el=$(id);if(!el)return;
+      const mode=this.repChart||'bars';
+      if(!vals.some(v=>v>0)){el.innerHTML='<div style="font-size:11px;color:#D1D5DB;font-weight:600;padding-top:16px">sin movimiento</div>';return;}
+      if(mode==='bars'){
+        const mx2=Math.max(...vals);const bw=100/vals.length;
+        el.innerHTML='<svg viewBox="0 0 100 46" preserveAspectRatio="none">'+vals.map((v,i)=>{
+          const h=v>0?Math.max(3,v/mx2*40):1.5;
+          return '<rect x="'+(i*bw+bw*0.15).toFixed(1)+'" y="'+(44-h).toFixed(1)+'" width="'+(bw*0.7).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1.5" fill="'+(v>0?'#F97316':'#EFEFEF')+'"/>';
+        }).join('')+'</svg>';
+      }else{
+        // círculo: dona con el reparto del período en 4 tramos (semanas o cuartos)
+        const q=4,qs=Array(q).fill(0),per=Math.ceil(vals.length/q);
+        vals.forEach((v,i)=>{qs[Math.min(q-1,Math.floor(i/per))]+=v;});
+        const tot2=qs.reduce((a,b)=>a+b,0)||1;
+        const cols=['#F97316','#FDBA74','#111111','#D1D5DB'];
+        let off=0;
+        el.innerHTML='<svg viewBox="0 0 46 46"><g transform="rotate(-90 23 23)">'+qs.map((v,i)=>{
+          const frac=v/tot2,C=2*Math.PI*17;
+          const seg='<circle cx="23" cy="23" r="17" fill="none" stroke="'+cols[i]+'" stroke-width="7" stroke-dasharray="'+(frac*C).toFixed(1)+' '+C.toFixed(1)+'" stroke-dashoffset="'+(-off*C).toFixed(1)+'"/>';
+          off+=frac;return frac>0?seg:'';
+        }).join('')+'</g></svg>';
+      }
+    };
+    this._miniData={total:sTot,count:sCnt,subs:sSub,visits:sVis,avg:sAvg,movin:sIn,movout:sOut,net:sNet};
+    Object.keys(this._miniData).forEach(k=>mini('mc-'+k,this._miniData[k]));
     const total=S.reduce((a,x)=>a+Number(x.total||0),0);
     const subsN=this.subs.filter(s=>s.start_date>=dISO(from)&&(!bId||s.branch_id===bId)).length;
     $('r-total').textContent=money(total);

@@ -1045,6 +1045,7 @@
               <!-- Chips de grupo muscular -->
               <div style="overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-bottom:12px;">
                 <div style="display:flex;gap:6px;width:max-content;">
+                  <button onclick="{{ cpGrpMios }}" style="{{ cpGrpChipMios }}">★ Míos</button>
                   <button onclick="{{ cpGrpPecho }}" style="{{ cpGrpChipPecho }}">Pecho</button>
                   <button onclick="{{ cpGrpEspalda }}" style="{{ cpGrpChipEspalda }}">Espalda</button>
                   <button onclick="{{ cpGrpPierna }}" style="{{ cpGrpChipPierna }}">Pierna</button>
@@ -1297,6 +1298,13 @@
               <div><div style="font-size:17px;font-weight:800;color:#0A0A0A;margin-bottom:2px;">Flexible</div><div style="font-size:13px;color:#9CA3AF;">Cualquier horario</div></div>
             </div>
           </div>
+          <div style="margin-top:20px;">
+            <div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">¿En qué sucursal entrenas?</div>
+            <div style="display:flex;gap:10px;">
+              <div onclick="{{ pickBranch1 }}" class="vg-press" style="{{ branch1BtnStyle }}">{{ branch1Label }}</div>
+              <div onclick="{{ pickBranch2 }}" class="vg-press" style="{{ branch2BtnStyle }}">{{ branch2Label }}</div>
+            </div>
+          </div>
           <div style="margin-top:16px;background:#F3F4F6;border-radius:16px;padding:18px;">
             <div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">Datos físicos (opcional)</div>
             <div style="display:flex;gap:10px;">
@@ -1316,7 +1324,7 @@
               </div>
             </div>
           </div>
-          <button onclick="{{ skipCoach }}" style="background:#F97316;color:#FFFFFF;border:none;padding:18px 0;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;margin-top:16px;width:100%;">Continuar</button>
+          <button onclick="{{ nextStep }}" style="background:#F97316;color:#FFFFFF;border:none;padding:18px 0;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;margin-top:16px;width:100%;">Continuar</button>
         </div>
       </div>
 
@@ -1329,7 +1337,7 @@
             <span onclick="{{ skipCoach }}" style="font-size:12px;color:#9CA3AF;font-weight:600;cursor:pointer;padding:5px 12px;background:#F3F4F6;border-radius:100px;">Saltar</span>
           </div>
           <h2 style="font-size:32px;font-weight:800;color:#0A0A0A;line-height:1.1;letter-spacing:-0.025em;margin-bottom:6px;">Elige tu<br>entrenador</h2>
-          <p style="font-size:14px;color:#9CA3AF;margin-bottom:20px;">Opcional — estos son los coaches de tu sucursal.</p>
+          <p style="font-size:14px;color:#9CA3AF;margin-bottom:20px;">Opcional — coaches de tu sucursal. Al elegir uno, lo pagas en recepción y queda activo.</p>
 
           <div style="display:flex;justify-content:center;align-items:flex-start;gap:10px;margin:18px 0 24px;flex:1;">
             <div onclick="{{ pickCoach1 }}" class="vg-press" style="{{ coach1ItemStyle }}">
@@ -1486,33 +1494,39 @@
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
           <div style="{{ sessionEx1Style }}">
             <div onclick="{{ toggleEx1 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck1 }}</div>
-            <div onclick="{{ toggleEx1 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex1Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex1SetsReps }}</div></div>
-            <input type="number" placeholder="kg" onchange="{{ setWeight1 }}" value="{{ exWeight1 }}" style="width:54px;padding:8px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <div onclick="{{ toggleEx1 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex1Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex1SetsReps }}</div><div style="{{ ex1PrevStyle }}">{{ ex1Prev }}</div></div>
+            <input type="number" placeholder="kg" onchange="{{ setWeight1 }}" value="{{ exWeight1 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <input type="number" placeholder="reps" onchange="{{ setReps1 }}" value="{{ exReps1 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx2Style }}">
             <div onclick="{{ toggleEx2 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck2 }}</div>
-            <div onclick="{{ toggleEx2 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex2Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex2SetsReps }}</div></div>
-            <input type="number" placeholder="kg" onchange="{{ setWeight2 }}" value="{{ exWeight2 }}" style="width:54px;padding:8px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <div onclick="{{ toggleEx2 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex2Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex2SetsReps }}</div><div style="{{ ex2PrevStyle }}">{{ ex2Prev }}</div></div>
+            <input type="number" placeholder="kg" onchange="{{ setWeight2 }}" value="{{ exWeight2 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <input type="number" placeholder="reps" onchange="{{ setReps2 }}" value="{{ exReps2 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx3Style }}">
             <div onclick="{{ toggleEx3 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck3 }}</div>
-            <div onclick="{{ toggleEx3 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex3Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex3SetsReps }}</div></div>
-            <input type="number" placeholder="kg" onchange="{{ setWeight3 }}" value="{{ exWeight3 }}" style="width:54px;padding:8px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <div onclick="{{ toggleEx3 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex3Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex3SetsReps }}</div><div style="{{ ex3PrevStyle }}">{{ ex3Prev }}</div></div>
+            <input type="number" placeholder="kg" onchange="{{ setWeight3 }}" value="{{ exWeight3 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <input type="number" placeholder="reps" onchange="{{ setReps3 }}" value="{{ exReps3 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx4Style }}">
             <div onclick="{{ toggleEx4 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck4 }}</div>
-            <div onclick="{{ toggleEx4 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex4Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex4SetsReps }}</div></div>
-            <input type="number" placeholder="kg" onchange="{{ setWeight4 }}" value="{{ exWeight4 }}" style="width:54px;padding:8px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <div onclick="{{ toggleEx4 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex4Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex4SetsReps }}</div><div style="{{ ex4PrevStyle }}">{{ ex4Prev }}</div></div>
+            <input type="number" placeholder="kg" onchange="{{ setWeight4 }}" value="{{ exWeight4 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <input type="number" placeholder="reps" onchange="{{ setReps4 }}" value="{{ exReps4 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx5Style }}">
             <div onclick="{{ toggleEx5 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck5 }}</div>
-            <div onclick="{{ toggleEx5 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex5Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex5SetsReps }}</div></div>
-            <input type="number" placeholder="kg" onchange="{{ setWeight5 }}" value="{{ exWeight5 }}" style="width:54px;padding:8px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <div onclick="{{ toggleEx5 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex5Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex5SetsReps }}</div><div style="{{ ex5PrevStyle }}">{{ ex5Prev }}</div></div>
+            <input type="number" placeholder="kg" onchange="{{ setWeight5 }}" value="{{ exWeight5 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <input type="number" placeholder="reps" onchange="{{ setReps5 }}" value="{{ exReps5 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx6Style }}">
             <div onclick="{{ toggleEx6 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck6 }}</div>
-            <div onclick="{{ toggleEx6 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex6Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex6SetsReps }}</div></div>
-            <input type="number" placeholder="kg" onchange="{{ setWeight6 }}" value="{{ exWeight6 }}" style="width:54px;padding:8px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <div onclick="{{ toggleEx6 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex6Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex6SetsReps }}</div><div style="{{ ex6PrevStyle }}">{{ ex6Prev }}</div></div>
+            <input type="number" placeholder="kg" onchange="{{ setWeight6 }}" value="{{ exWeight6 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
+            <input type="number" placeholder="reps" onchange="{{ setReps6 }}" value="{{ exReps6 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
         </div>
       </div>
@@ -2927,6 +2941,7 @@ class Component extends DCLogic {
     subscriptionActive: false,
     recordingExIdx: 0,
     exWeights: {},
+    exReps: {},
     currentWorkoutLogId: null,
     restSeconds: null,
     stats: { totalWorkouts: 0, totalHours: 0, totalHoursUnit: 'h', streak: 0, thisWeekCount: 0 },
@@ -4440,7 +4455,7 @@ class Component extends DCLogic {
     }, 1000);
     this.setState({
       workoutOpen: false, workoutSessionOpen: true, workoutElapsed: 0, completedEx: [],
-      exWeights: {}, logError: '', currentWorkoutLogId: null,
+      exWeights: {}, exReps: {}, logError: '', currentWorkoutLogId: null,
       restSeconds: null,
     });
     if (this.state.session) {
@@ -4477,6 +4492,10 @@ class Component extends DCLogic {
 
   setExWeight(idx, value) {
     this.setState(s => ({ exWeights: { ...s.exWeights, [idx]: value } }));
+  }
+
+  setExReps(idx, value) {
+    this.setState(s => ({ exReps: { ...s.exReps, [idx]: value } }));
   }
 
   // Báscula inteligente por Web Bluetooth: busca el servicio estándar de
@@ -4699,12 +4718,28 @@ class Component extends DCLogic {
       const _prog = _rp[_pid] || _rp['assigned'] || _rp['fuerza'];
       const _exList = (_prog && _prog.exerciseList) || [];
       const _pairs = [];
+      // Historial local por ejercicio: la próxima vez que le toque este entreno
+      // verá "Anterior: 40kg × 10" para comparar y superarse.
+      try {
+        const histKey = this.lsKey('vg_exhist');
+        const hist = JSON.parse(localStorage.getItem(histKey) || '{}');
+        const _exl = _exList;
+        _exl.forEach((ex, i) => {
+          const w2 = (this.state.exWeights || {})[i];
+          const r2 = (this.state.exReps || {})[i];
+          if (ex && ex.name && (w2 || r2)) hist[ex.name] = { w: w2 || '', r: r2 || '', d: Date.now() };
+        });
+        localStorage.setItem(histKey, JSON.stringify(hist));
+      } catch (_) {}
       Object.keys(this.state.exWeights || {}).forEach(k => {
         const w = this.state.exWeights[k];
         const ex = _exList[k];
         if (w && ex && ex.name) _pairs.push(ex.name + ': ' + w + 'kg');
       });
-      if (_pairs.length) weightNote = '__pesos:' + _pairs.join(' · ');
+      if (_pairs.length) weightNote = '__pesos:' + _pairs.map((p, _pi) => {
+        const _rr = (this.state.exReps || {})[Object.keys(this.state.exWeights || {})[_pi]];
+        return _rr ? p + ' × ' + _rr : p;
+      }).join(' · ');
     } catch (_) {}
     if (this.state.session && this.state.currentWorkoutLogId) {
       await waitForSupabase();
@@ -6548,7 +6583,27 @@ class Component extends DCLogic {
         let _wmap = {};
         try { _wmap = JSON.parse(localStorage.getItem('vg_weights') || '{}'); } catch (_) {}
         const _w = (i) => this.state.exWeights[i] !== undefined ? this.state.exWeights[i] : (_wmap[(exList[i] || {}).name] || '');
-        return { exWeight1: _w(0), exWeight2: _w(1), exWeight3: _w(2), exWeight4: _w(3), exWeight5: _w(4), exWeight6: _w(5) };
+        // Historial del ejercicio: lo que hizo la última vez (peso × reps + fecha)
+        let _hist = {};
+        try { _hist = JSON.parse(localStorage.getItem(this.lsKey('vg_exhist')) || '{}'); } catch (_) {}
+        const _r = (i) => this.state.exReps[i] !== undefined ? this.state.exReps[i] : '';
+        const _prev = (i) => {
+          const nm = (exList[i] || {}).name;
+          const h = nm && _hist[nm];
+          if (!h || (!h.w && !h.r)) return '';
+          const dd = h.d ? new Date(h.d) : null;
+          const when = dd ? dd.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '';
+          return 'Anterior' + (when ? ' (' + when + ')' : '') + ': ' + (h.w ? h.w + 'kg' : '') + (h.w && h.r ? ' × ' : '') + (h.r ? h.r + ' reps' : '');
+        };
+        const out2 = { exWeight1: _w(0), exWeight2: _w(1), exWeight3: _w(2), exWeight4: _w(3), exWeight5: _w(4), exWeight6: _w(5) };
+        for (let _i = 0; _i < 6; _i++) {
+          out2['exReps' + (_i + 1)] = _r(_i);
+          out2['setReps' + (_i + 1)] = ((j) => (e) => this.setExReps(j, e.target.value))(_i);
+          const pv = _prev(_i);
+          out2['ex' + (_i + 1) + 'Prev'] = pv;
+          out2['ex' + (_i + 1) + 'PrevStyle'] = pv ? { fontSize: '11px', fontWeight: '700', color: '#F97316', marginTop: '2px' } : { display: 'none' };
+        }
+        return out2;
       })()),
       cameraErrorStyle: { display: this.state.cameraError ? 'block' : 'none', color: '#FCA5A5', fontSize: '13px', textAlign: 'center', padding: '12px' },
       cameraErrorText: this.state.cameraError,
@@ -6824,6 +6879,10 @@ class Component extends DCLogic {
           core:    [{n:'Plancha',r:'3 × 45s'},{n:'Crunch Bicicleta',r:'3 × 20'},{n:'Elevación de Piernas',r:'3 × 15'},{n:'Russian Twist',r:'3 × 20'},{n:'Mountain Climbers',r:'3 × 30s'},{n:'Ab Wheel',r:'3 × 10'},{n:'Plancha Lateral',r:'3 × 30s'},{n:'Crunch en Polea',r:'3 × 15'}],
           cardio:  [{n:'Caminadora',r:'20 min'},{n:'Bicicleta Estática',r:'20 min'},{n:'Elíptica',r:'15 min'},{n:'Remo Ergómetro',r:'10 min'},{n:'Saltar Cuerda',r:'3 × 2 min'},{n:'Escaladora',r:'10 min'},{n:'Sprints',r:'6 × 30s'},{n:'Burpees',r:'3 × 12'}],
         };
+        // "Míos": ejercicios que este usuario/coach ya usó en rutinas anteriores
+        let _mine = [];
+        try { _mine = JSON.parse(localStorage.getItem(this.lsKey('vg_exlib')) || '[]'); } catch (_) {}
+        catalog.mios = _mine.slice(0, 8).map(x => ({ n: x.n, r: x.r || '3 × 12' }));
         const grp = this.state.cpExGroup || 'pecho';
         const list = catalog[grp] || [];
         const chip = (g, label) => ({
@@ -6832,6 +6891,7 @@ class Component extends DCLogic {
           background: grp === g ? '#0A0A0A' : '#F3F4F6', color: grp === g ? '#FFFFFF' : '#6B7280',
         });
         const out = {
+          cpGrpChipMios: chip('mios'), cpGrpMios: () => this.setState({ cpExGroup: 'mios' }),
           cpGrpChipPecho: chip('pecho'), cpGrpPecho: () => this.setState({ cpExGroup: 'pecho' }),
           cpGrpChipEspalda: chip('espalda'), cpGrpEspalda: () => this.setState({ cpExGroup: 'espalda' }),
           cpGrpChipPierna: chip('pierna'), cpGrpPierna: () => this.setState({ cpExGroup: 'pierna' }),
@@ -6869,6 +6929,13 @@ class Component extends DCLogic {
       addCpExercise: () => {
         const name = (this.state.cpExName || '').trim();
         if (!name) return;
+        // Biblioteca personal: se guarda para reusarlo en la próxima rutina (chip ★ Míos)
+        try {
+          const k = this.lsKey('vg_exlib');
+          const lib = JSON.parse(localStorage.getItem(k) || '[]').filter(x => x.n !== name);
+          lib.unshift({ n: name, r: (this.state.cpExSets && this.state.cpExReps) ? this.state.cpExSets + ' × ' + this.state.cpExReps : '' });
+          localStorage.setItem(k, JSON.stringify(lib.slice(0, 30)));
+        } catch (_) {}
         this.setState(s => ({ cpExercises: [...s.cpExercises, { name, sets: s.cpExSets, reps: s.cpExReps }], cpAddingEx: false, cpExName: '', cpExSets: '', cpExReps: '' }));
       },
       cpSaveLabel: this.state.cpSaving ? 'Guardando...' : 'Guardar mi rutina',
