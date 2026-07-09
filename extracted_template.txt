@@ -1511,6 +1511,22 @@
         <div style="width:38px;height:38px;"></div>
       </div>
       <div style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 20px;">
+        <!-- Duo de cards estilo home (Racha / Esta semana): Tiempo + Siguiente -->
+        <div style="display:flex;gap:10px;margin-bottom:16px;">
+          <div style="flex:1;background:#0A0A0A;border-radius:18px;padding:16px 16px 14px;">
+            <p style="font-size:8px;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px;">Tiempo</p>
+            <div style="display:flex;align-items:baseline;gap:3px;">
+              <span style="font-size:36px;font-weight:800;color:#FFFFFF;letter-spacing:-0.03em;line-height:0.9;font-variant-numeric:tabular-nums;">{{ sessMinutes }}</span>
+              <span style="font-size:13px;font-weight:400;color:rgba(255,255,255,0.35);">min</span>
+              <span style="font-size:18px;font-weight:700;color:rgba(255,255,255,0.55);margin-left:2px;font-variant-numeric:tabular-nums;">{{ sessSeconds }}</span>
+            </div>
+          </div>
+          <div style="flex:1;background:#F5F5F5;border-radius:18px;padding:16px 16px 14px;">
+            <p style="font-size:8px;font-weight:700;color:#BBBBBB;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px;">Siguiente</p>
+            <div style="font-size:15px;font-weight:800;color:#0A0A0A;letter-spacing:-0.01em;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ sessNextName }}</div>
+            <div style="font-size:11px;font-weight:600;color:#F97316;margin-top:4px;">{{ sessNextSub }}</div>
+          </div>
+        </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
           <div style="{{ sessionEx1Style }}">
             <div onclick="{{ toggleEx1 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck1 }}</div>
@@ -1613,20 +1629,14 @@
                 <div onclick="{{ navToProfile }}" class="vg-press" style="position:relative;width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#F97316,#EA580C);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#FFFFFF;flex-shrink:0;overflow:hidden;">{{ userInitial }}<div style="{{ homeAvatarImgStyle }}"></div></div>
                 <div onclick="{{ toggleNotifications }}" class="vg-press" style="width:40px;height:40px;border-radius:50%;background:#F5F5F5;display:flex;align-items:center;justify-content:center;position:relative;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="1.6" stroke-linecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 01-3.46 0"></path></svg>
-                  <div style="position:absolute;top:8px;right:8px;width:7px;height:7px;border-radius:50%;background:#F97316;border:2px solid #F5F5F5;"></div>
+                  <div style="{{ notifDotStyle }}"></div>
                 </div>
                 <div style="{{ notifPanelStyle }}">
                   <div style="padding:16px 20px 14px;border-bottom:1px solid #F2F2F2;display:flex;align-items:center;justify-content:space-between;">
                     <span style="font-size:15px;font-weight:700;color:#111111;letter-spacing:-0.01em;">Notificaciones</span>
                     <span onclick="{{ toggleNotifications }}" style="font-size:12px;color:#BBBBBB;cursor:pointer;font-weight:500;">Cerrar</span>
                   </div>
-                  <div style="padding:14px 20px;display:flex;align-items:center;gap:14px;">
-                    <div style="width:36px;height:36px;border-radius:12px;background:#0A0A0A;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></div>
-                    <div>
-                      <div style="font-size:13px;font-weight:600;color:#111111;letter-spacing:-0.01em;">Entrenamiento listo</div>
-                      <div style="font-size:11px;color:#BBBBBB;margin-top:3px;">{{ workoutName }} · {{ workoutDuration }} min</div>
-                    </div>
-                  </div>
+                  <div style="max-height:360px;overflow-y:auto;">{{ notifListHtml }}</div>
                 </div>
               </div>
             </div>
@@ -6613,6 +6623,61 @@ class Component extends DCLogic {
         const s = this.state.workoutElapsed || 0;
         return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
       })(),
+      // Franja de sesión estilo home (mismas cards oscura/clara con número
+      // grande que "Racha" / "Esta semana") — minutos transcurridos + qué sigue.
+      sessMinutes: String(Math.floor((this.state.workoutElapsed || 0) / 60)),
+      sessSeconds: String((this.state.workoutElapsed || 0) % 60).padStart(2, '0'),
+      sessNextName: (() => {
+        const done = this.state.completedEx || [];
+        const idx = [0, 1, 2, 3, 4, 5].find(i => exList[i] && !done.includes(i));
+        return idx !== undefined ? exList[idx].name : '¡Ya casi terminas!';
+      })(),
+      sessNextSub: (() => {
+        const done = this.state.completedEx || [];
+        const total = exList.filter(Boolean).length;
+        const doneCount = done.length;
+        return doneCount >= total ? 'Todo listo' : (doneCount + 1) + ' de ' + total;
+      })(),
+      // Centro de notificaciones REAL — construido con tus datos actuales
+      // (membresía, dieta, coach, anuncios), nada de texto genérico fijo.
+      ...((() => {
+        const items = [];
+        const iconBox = (bg, svg) => '<div style="width:36px;height:36px;border-radius:12px;background:' + bg + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + svg + '</div>';
+        const clockSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
+        const dietSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"><path d="M18 8h1a4 4 0 010 8h-1"></path><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"></path></svg>';
+        const coachSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>';
+        const megaSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>';
+        // Membresía por vencer o vencida
+        if (this.state.subscriptionStatus !== null && this.state.subscriptionEndDate) {
+          const dd = new Date(this.state.subscriptionEndDate + 'T12:00:00');
+          const diff = Math.ceil((dd - new Date()) / 86400000);
+          if (diff < 0) items.push({ id: 'memb_v_' + this.state.subscriptionEndDate, bg: '#EF4444', icon: clockSvg, title: 'Tu membresía venció', sub: 'Pásate a recepción para renovarla' });
+          else if (diff <= 7) items.push({ id: 'memb_p_' + this.state.subscriptionEndDate, bg: '#F97316', icon: clockSvg, title: 'Tu membresía vence pronto', sub: diff === 0 ? 'Vence hoy' : 'Vence en ' + diff + ' día' + (diff === 1 ? '' : 's') });
+        }
+        // Dieta más reciente
+        if (this.state.memberDiet) {
+          items.push({ id: 'diet_' + (this.state.memberDiet.updated_at || this.state.memberDiet.title), bg: '#0A0A0A', icon: dietSvg, title: 'Tu dieta: ' + (this.state.memberDiet.title || 'Plan de alimentación'), sub: 'De ' + (this.state.dietCoachName || 'tu coach') });
+        }
+        // Coach asignado
+        if (this.state.assignedCoach) {
+          items.push({ id: 'coach_' + this.state.assignedCoach.id, bg: '#0A0A0A', icon: coachSvg, title: 'Tu entrenador: ' + this.state.assignedCoach.name, sub: 'Disponible para guiarte' });
+        }
+        // Anuncio del gym
+        if (this.state.gymAnnouncement) {
+          items.push({ id: 'ann_' + (this.state.gymAnnouncement.id || this.state.gymAnnouncement.title), bg: '#F97316', icon: megaSvg, title: this.state.gymAnnouncement.title || 'Anuncio de Volten Gym', sub: (this.state.gymAnnouncement.body || '').slice(0, 60) });
+        }
+        let seen = [];
+        try { seen = JSON.parse(localStorage.getItem(this.lsKey('vg_notif_seen')) || '[]'); } catch (_) {}
+        const hasUnseen = items.some(it => !seen.includes(it.id));
+        this._lastNotifIds = items.map(it => it.id); // para marcarlas vistas al abrir el panel
+        const html = items.length
+          ? items.map(it => '<div style="padding:14px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F7F7F7;">'
+              + iconBox(it.bg, it.icon)
+              + '<div style="min-width:0;"><div style="font-size:13px;font-weight:600;color:#111111;letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.title.replace(/</g, '&lt;') + '</div>'
+              + '<div style="font-size:11px;color:#BBBBBB;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.sub.replace(/</g, '&lt;') + '</div></div></div>').join('')
+          : '<div style="padding:34px 20px;text-align:center;"><div style="font-size:13px;color:#BBBBBB;font-weight:500;">Sin novedades por ahora</div></div>';
+        return { notifListHtml: html, notifDotStyle: hasUnseen ? { position: 'absolute', top: '8px', right: '8px', width: '7px', height: '7px', borderRadius: '50%', background: '#F97316', border: '2px solid #F5F5F5' } : { display: 'none' } };
+      })()),
       todayIsTrainingDay: (() => {
         const sched = this.state.memberScheduledDays || [];
         if (!sched.length) return false;
@@ -6913,7 +6978,13 @@ class Component extends DCLogic {
         }
       },
       runScrollDiag: () => this.runScrollDiag(),
-      toggleNotifications: () => this.setState(s => ({ showNotifications: !s.showNotifications })),
+      toggleNotifications: () => this.setState(s => {
+        // Al abrir el panel, se marcan como vistas — el punto rojo desaparece.
+        if (!s.showNotifications) {
+          try { localStorage.setItem(this.lsKey('vg_notif_seen'), JSON.stringify(this._lastNotifIds || [])); } catch (_) {}
+        }
+        return { showNotifications: !s.showNotifications };
+      }),
       setSignup: () => this.setState({ authMode: 'signup' }),
       setLogin: () => this.setState({ authMode: 'login' }),
       setMember: () => this.setState({ userType: 'member' }),
