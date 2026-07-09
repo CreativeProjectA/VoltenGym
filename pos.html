@@ -916,6 +916,11 @@ const Pos={
           <div class="psub">Clientes para recordarles renovar</div>
           <div id="d-expiring-list"></div>
         </div>
+        <div class="panel">
+          <h2 style="font-size:18px">🎂 Cumpleaños</h2>
+          <div class="psub">Hoy y mañana — mándales una felicitación</div>
+          <div id="d-birthdays"></div>
+        </div>
       </div>
     </div>`;
   },
@@ -962,6 +967,21 @@ const Pos={
       <div class="row-line"><div><div style="font-weight:700;font-size:14px">${esc(x.c.full_name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">vence ${fdate(x.s.end_date)}</div></div>
       ${x.c.phone?`<a class="btn btn-xs" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(x.c.phone,'Hola '+x.c.full_name.split(' ')[0]+' 💪 Te recordamos que tu membresía de Volten Gym vence el '+fdate(x.s.end_date)+'. ¡Renueva a tiempo para no perder tu racha!')}">WhatsApp</a>`:''}</div>`).join('')
       :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Nadie por vencer esta semana.</div>';
+    // cumpleaños — hoy y mañana (mes/día, sin importar el año de nacimiento)
+    const bEl=$('d-birthdays');
+    if(bEl){
+      const now=new Date(),tom=new Date(Date.now()+864e5);
+      const mmdd=(d)=>String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      const todayKey=mmdd(now),tomKey=mmdd(tom);
+      const bdays=this.customers.filter(c=>c.birth_date&&(mmdd(new Date(c.birth_date+'T12:00:00'))===todayKey||mmdd(new Date(c.birth_date+'T12:00:00'))===tomKey));
+      bEl.innerHTML=bdays.length?bdays.map(c=>{
+        const isToday=mmdd(new Date(c.birth_date+'T12:00:00'))===todayKey;
+        const msg='¡Feliz cumpleaños, '+c.full_name.split(' ')[0]+'! 🎉🎂 Todo el equipo de Volten Gym te desea un excelente día. ¡Que este nuevo año esté lleno de logros dentro y fuera del gym!';
+        return `<div class="row-line"><div><div style="font-weight:700;font-size:14px">${esc(c.full_name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${isToday?'🎂 Hoy':'Mañana'}</div></div>
+        ${c.phone?`<a class="btn btn-xs" style="background:#FEF3C7;color:#B45309;text-decoration:none" target="_blank" href="${waLink(c.phone,msg)}">WhatsApp</a>`:'<span class="tag tag-gray">sin teléfono</span>'}</div>`;
+      }).join('')+'<p style="font-size:11px;color:var(--muted);font-weight:500;margin-top:8px">El mensaje ya va escrito — si quieres mandar también la imagen de felicitación, adjúntala manualmente en el chat de WhatsApp (esa parte no se puede automatizar sin WhatsApp Business API).</p>'
+      :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Nadie cumple años hoy ni mañana.</div>';
+    }
     // solicitudes hechas desde la app del cliente
     try{
       const {data:rq}=await sb.from('pos_requests').select('*').eq('status','pendiente').order('created_at',{ascending:false});
@@ -2708,6 +2728,7 @@ const Pos={
       <div><h1>Reportes</h1><div class="sub">Rendimiento del negocio</div></div>
       <div style="display:flex;gap:12px;align-items:center;">
         ${this.branchSelector()}
+        ${['admin','contador'].includes(this.role)&&this.branches.length>1?`<span class="chart-toggle"><button class="${this.reportAllBranches?'':'on'}" onclick="Pos.reportAllBranches=false;Pos.go('reports')">Esta sucursal</button><button class="${this.reportAllBranches?'on':''}" onclick="Pos.reportAllBranches=true;Pos.go('reports')">Todas juntas</button></span>`:''}
         <div class="range-pills">
           <button class="range-pill ${this.reportRange==='today'?'on':''}" onclick="Pos.reportRange='today';Pos.go('reports')">HOY</button>
           <button class="range-pill ${this.reportRange==='7d'?'on':''}" onclick="Pos.reportRange='7d';Pos.go('reports')">7 DÍAS</button>
@@ -2762,7 +2783,9 @@ const Pos={
   async after_reports(){
     const days=this.reportRange==='today'?1:(this.reportRange==='7d'?7:30);
     const from=new Date();from.setHours(0,0,0,0);from.setDate(from.getDate()-(days-1));
-    const bId=this.branch?this.branch.id:null;
+    // El dueño/admin puede ver los reportes de UNA sucursal o de TODAS juntas
+    // (sin afectar en qué sucursal está trabajando el turno/venta activos).
+    const bId=(this.reportAllBranches&&['admin','contador'].includes(this.role))?null:(this.branch?this.branch.id:null);
     let S=[],CI=[],SH=[];
     try{
       let q=sb.from('sales').select('*').gte('created_at',from.toISOString()).order('created_at');

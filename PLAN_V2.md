@@ -79,3 +79,39 @@
 ## Pendientes que ya quedaron de la sesión anterior (van dentro de Fase 1-2)
 - Colores de gráficas + membresía por sucursal + coach con vigencia (quedó a medias cuando se acabaron los tokens).
 - Prueba end-to-end: cuenta coach de demo, dieta coach→cliente verificada, ejercicios ★ Míos.
+
+---
+
+## ESTADO REAL AL 2026-07-09 (noche) — qué está hecho y qué falta
+
+### ✅ Terminado y verificado en vivo
+- Fase 1 completa (bugs críticos).
+- Fase 2 completa (reglas de sucursal exclusiva, coach con vigencia, campos obligatorios, efectivo obligatorio, fondo $400, cortesías, login offline).
+- Fase 3 completa y PROBADA end-to-end (cuenta de app automática al pagar, gate de membresía activa).
+- Racha por cuota semanal (no por día exacto).
+- Biblioteca de ejercicios con video (POS sube, cliente ve botón ▶).
+- Notificaciones in-app reales (membresía/dieta/coach/anuncios, no genéricas).
+- Sesión de entreno con duo de cards estilo home (tiempo + siguiente ejercicio).
+- Gráfica Hombres vs Mujeres en Reportes.
+- Cierre automático de accesos al cerrar turno + estimado inteligente de "adentro ahora" (3h genérico, o la hora de salida programada si es personal).
+- Horario de entrada/salida programable para coach/encargados (pos_migration9.sql).
+- Ficha del cliente con gráficas: asistencia por semana + línea de tiempo de pagos.
+
+### ⏳ Pendiente — Fase 4 (Stripe)
+- Pausado a petición de Armando, se agrupa con Fase 6. Falta: edge functions stripe-checkout + stripe-webhook, botón de pago en la app, que el dueño active su cuenta de Stripe con datos reales del negocio.
+
+### ⏳ Pendiente — Fase 5 (resto)
+- **Push notifications reales** (que lleguen con la app cerrada/pantalla apagada) — requiere VAPID keys + service worker con push listener. Lo que ya existe es el centro de notificaciones DENTRO de la app, no push del sistema operativo.
+- **Cumpleaños automático por WhatsApp** — falta: capturar fecha de nacimiento ya se puede (customers.birth_date existe), falta la vista en el POS que avise "mañana cumple X" + botón WhatsApp con imagen.
+- **Tarjeta de regalo** — no iniciado.
+- **Analíticas de horas pico ya existen**; falta comparativo entre sucursales lado a lado en una sola vista (hoy se ve una sucursal a la vez con el selector).
+
+### ⏳ Pendiente — Fase 6 (Stripe real + Hardware)
+- Activar cuenta de Stripe con datos del dueño del gym (no de Armando).
+- Facial AI07F + torniquete ZKTeco: falta el puente local (programa en la PC de recepción) — se hace cuando el equipo esté físicamente conectado en el gym y Armando pueda darme acceso a su configuración de red.
+- Báscula FitMe Wise: confirmado que es un sistema cerrado, no se integra — se mantiene la captura manual de peso ya existente en la app.
+
+### Otros pendientes menores (no estaban en las 6 fases originales pero salieron en el camino)
+- Logos reales de la marca en POS y app (Armando debe pasar el archivo en buena calidad).
+- Comprimir más las fotos del bundle de la app si sigue creciendo de tamaño.
+- Reporte comparativo entre sucursales en una sola pantalla (hoy es una a la vez).
