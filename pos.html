@@ -1623,6 +1623,10 @@ const Pos={
           <div id="link-res" style="margin-top:8px;font-size:13px;color:var(--muted);font-weight:500">El cliente abre su app → Perfil → "Mi código QR" y lo escaneas con el lector USB, o búscalo por correo.</div>
         `}
       </div>
+      <div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px">Asistencia — últimas 8 semanas</div>
+        <div id="cust-attendance">Cargando...</div>
+      </div>
       ${this.familyBlock(c)}
       <div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:16px;">
         <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">Accesos del cliente</div>
@@ -1630,6 +1634,20 @@ const Pos={
         <div class="row-line"><span class="k">Huella dactilar</span>${c.fingerprint_id?'<span class="tag tag-green">Registrada</span>':`<button class="btn-xs btn btn-ghost" onclick="Pos.enrollBio('${c.id}','huella')">Registrar</button>`}</div>
         <div class="row-line"><span class="k">Reconocimiento facial</span>${c.face_id?'<span class="tag tag-green">Registrado</span>':`<button class="btn-xs btn btn-ghost" onclick="Pos.enrollBio('${c.id}','rostro')">Registrar</button>`}</div>
       </div>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Historial de pagos</div>
+      ${subs.filter(s=>s.price_paid).length?`<div style="display:flex;flex-direction:column;margin-bottom:16px;">${
+        subs.filter(s=>s.price_paid).slice().sort((a,b)=>a.start_date<b.start_date?1:-1).map((s,i,arr)=>`
+        <div style="display:flex;gap:12px;">
+          <div style="display:flex;flex-direction:column;align-items:center;width:12px;flex-shrink:0;">
+            <div style="width:9px;height:9px;border-radius:50%;background:var(--orange);flex-shrink:0;margin-top:4px;"></div>
+            ${i<arr.length-1?'<div style="width:2px;flex:1;background:#EFEFEF;margin:2px 0;"></div>':''}
+          </div>
+          <div style="padding-bottom:16px;">
+            <div style="font-size:13px;font-weight:700">${esc(this.planName(s.plan_id))} · ${money(s.price_paid)}</div>
+            <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:1px">${fdate(s.start_date)} · ${PAY_LABEL[s.payment_method]||s.payment_method||''}</div>
+          </div>
+        </div>`).join('')
+      }</div>`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin pagos registrados todavía.</div>'}
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Historial de membresías</div>
       ${subs.length?`<table><thead><tr><th>Plan</th><th>Vigencia</th><th>Pagó</th><th>Estado</th></tr></thead><tbody>${
         subs.map(s=>`<tr><td style="font-weight:700">${esc(this.planName(s.plan_id))}</td><td>${fdate(s.start_date)} → ${fdate(s.end_date)}</td><td>${s.price_paid!=null?money(s.price_paid):'—'}</td><td>${daysLeft(s.end_date)>=0&&s.status!=='canceled'?'<span class="tag tag-green">Vigente</span>':'<span class="tag tag-gray">Vencida</span>'}</td></tr>`).join('')
@@ -1643,6 +1661,22 @@ const Pos={
       const el=$('cust-visits');
       if(el)el.innerHTML=(data&&data.length)?'<table><thead><tr><th>Fecha</th><th>Método</th><th>Entrada</th><th>Salida</th><th></th></tr></thead><tbody>'+data.map(v=>`<tr><td>${fdate(v.created_at)}</td><td>${METHOD_LABEL[v.method]||v.method}</td><td>${ftime(v.created_at)}</td><td>${v.checked_out_at?ftime(v.checked_out_at):'—'}</td><td>${v.granted?'<span class="tag tag-green">OK</span>':'<span class="tag tag-red">Rechazado</span>'}</td></tr>`).join('')+'</tbody></table>':'Sin visitas registradas.';
     }catch(e){const el=$('cust-visits');if(el)el.textContent='Sin conexión — no se pudo cargar el historial.';}
+    // asistencia (8 semanas) async
+    try{
+      const since=new Date();since.setDate(since.getDate()-56);
+      const {data:vis}=await sb.from('checkins').select('created_at').eq('granted',true).or('customer_id.eq.'+c.id+(c.profile_id?',member_id.eq.'+c.profile_id:'')).gte('created_at',since.toISOString());
+      const el=$('cust-attendance');if(!el)return;
+      const weeks=Array(8).fill(0);
+      (vis||[]).forEach(v=>{const days=Math.floor((Date.now()-new Date(v.created_at).getTime())/864e5);const wi=7-Math.min(7,Math.floor(days/7));weeks[wi]++;});
+      const mx=Math.max(1,...weeks);
+      const totalVisits=(vis||[]).length;
+      const avgWeek=(totalVisits/8).toFixed(1);
+      el.innerHTML='<div style="display:flex;align-items:flex-end;gap:6px;height:70px;margin-bottom:8px;">'+
+        weeks.map((v,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;" title="${v} visita${v===1?'':'s'}">
+          <div style="width:100%;background:${v?'var(--orange)':'#EFEFEF'};border-radius:4px;height:${Math.max(3,Math.round(v/mx*54))}px;"></div>
+        </div>`).join('')+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);font-weight:600">'+totalVisits+' visitas en 8 semanas · promedio '+avgWeek+'/semana</div>';
+    }catch(e){const el=$('cust-attendance');if(el)el.textContent='Sin conexión.';}
   },
   changeBranchModal(custId){
     const c=this.customers.find(x=>x.id===custId);if(!c)return;
