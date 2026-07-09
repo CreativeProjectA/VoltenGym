@@ -2667,8 +2667,9 @@ const Pos={
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
       <div class="panel"><h2>Asistencia por hora</h2><div class="psub">Para conocer tus horas pico</div><div id="r-hours"></div></div>
-      <div class="panel"><h2>Ventas por empleado</h2><div class="psub">Órdenes y membresías del período</div><div id="r-staff"></div></div>
+      <div class="panel"><h2>Hombres vs Mujeres</h2><div class="psub">Clientes registrados con acceso en el período</div><div id="r-gender"></div></div>
     </div>
+    <div class="panel"><h2>Ventas por empleado</h2><div class="psub">Órdenes y membresías del período</div><div id="r-staff"></div></div>
     <div class="panel">
       <div><h2>Reporte por empleado</h2><div class="psub">Elige quién y el período — verás todo lo que vendió: órdenes, membresías y totales</div></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
@@ -2803,6 +2804,26 @@ const Pos={
         <div style="width:100%;background:${v?'var(--orange)':'#EFEFEF'};border-radius:4px;height:${Math.max(3,Math.round(v/hmax*90))}px;"></div>
         <div style="font-size:8.5px;font-weight:700;color:var(--muted)">${hlbl(h)}</div>
       </div>`;}).join('')+'</div>';
+    // hombres vs mujeres — cruza los accesos del período con el género de la ficha
+    const genderEl=$('r-gender');
+    if(genderEl){
+      const seenCust=new Set();let men=0,women=0,unknown=0;
+      CI.forEach(ci=>{
+        const cust=this.customers.find(x=>x.id===ci.customer_id||(ci.member_id&&x.profile_id===ci.member_id));
+        if(!cust||seenCust.has(cust.id))return;seenCust.add(cust.id);
+        if(cust.gender==='M')men++;else if(cust.gender==='F')women++;else unknown++;
+      });
+      const totG=men+women+unknown;
+      if(!totG){genderEl.innerHTML='<div class="stub" style="padding:26px"><p>Sin accesos en el período.</p></div>';}
+      else{
+        const pct=(n)=>Math.round(n/totG*100);
+        genderEl.innerHTML=`<div style="display:flex;flex-direction:column;gap:10px;padding-top:6px;">
+          <div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:5px"><span>Hombres</span><span>${men} · ${pct(men)}%</span></div><div style="height:10px;background:#EFEFEF;border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct(men)}%;background:#3B82F6;border-radius:100px"></div></div></div>
+          <div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:5px"><span>Mujeres</span><span>${women} · ${pct(women)}%</span></div><div style="height:10px;background:#EFEFEF;border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct(women)}%;background:#EC4899;border-radius:100px"></div></div></div>
+          ${unknown?`<div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:5px;color:var(--muted)"><span>Sin dato</span><span>${unknown} · ${pct(unknown)}%</span></div><div style="height:10px;background:#EFEFEF;border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct(unknown)}%;background:#D1D5DB;border-radius:100px"></div></div></div>`:''}
+        </div>`;
+      }
+    }
     // por empleado
     const byStaff={};
     S.forEach(s=>{const k=s.sold_by||s.staff_id;if(!k)return;byStaff[k]=byStaff[k]||{n:0,t:0,m:0};byStaff[k].n++;byStaff[k].t+=Number(s.total||0);});
