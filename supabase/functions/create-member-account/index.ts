@@ -108,7 +108,30 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ member_id: profileId }),
     });
 
-    return new Response(JSON.stringify({ ok: true, profile_id: profileId, email, password }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+    // 8) correo de bienvenida con sus credenciales (si Resend ya está
+    // configurado — mismo servicio que usa el corte de caja). Si no está
+    // configurado, no pasa nada: la cajera igual ve las credenciales en
+    // pantalla y las puede mandar por WhatsApp.
+    let emailSent = false;
+    const RESEND_KEY = Deno.env.get('RESEND_API_KEY');
+    const FROM = Deno.env.get('CORTE_FROM') || 'Volten Gym <onboarding@resend.dev>';
+    if (RESEND_KEY) {
+      try {
+        const html = '<div style="font-family:sans-serif;max-width:480px">'
+          + '<h2 style="color:#F97316">¡Bienvenido a Volten Gym!</h2>'
+          + '<p>Ya puedes descargar la app y entrar con estos datos:</p>'
+          + '<p><b>Usuario:</b> ' + email.replace(/</g, '&lt;') + '<br><b>Contraseña:</b> ' + password + '</p>'
+          + '<p style="color:#888;font-size:13px">Puedes cambiar tu contraseña luego desde Perfil dentro de la app.</p></div>';
+        const mailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + RESEND_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: FROM, to: [email], subject: 'Tu cuenta de Volten Gym ya está lista', html }),
+        });
+        emailSent = mailRes.ok;
+      } catch (_) { /* no bloquea la creación de la cuenta si el correo falla */ }
+    }
+
+    return new Response(JSON.stringify({ ok: true, profile_id: profileId, email, password, emailSent }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } });
   }
