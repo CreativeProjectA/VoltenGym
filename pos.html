@@ -257,8 +257,18 @@
     <div class="gate-card">
       <h1>Iniciar turno</h1>
       <div class="who" id="gate-hello">Bienvenido, <b>—</b></div>
-      <label class="lab-up">Fondo inicial</label>
-      <div class="money-inp"><span class="pre">$</span><input type="number" id="open-cash" value="500"><span class="suf">MXN</span></div>
+      <label class="lab-up">Fondo fijo de caja</label>
+      <div style="background:#FFF;border-radius:16px;padding:16px 18px;margin-bottom:18px;">
+        <div style="font-size:32px;font-weight:800;color:var(--ink);letter-spacing:-0.02em;">$400.00 <span style="font-size:13px;font-weight:600;color:var(--muted)">MXN</span></div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;">
+          <input type="checkbox" id="fund-ok" checked style="width:18px;height:18px;" onchange="document.getElementById('fund-shortage-box').style.display=this.checked?'none':'block'"> Confirmo que hay $400 en caja
+        </label>
+      </div>
+      <div id="fund-shortage-box" style="display:none;margin-bottom:14px;">
+        <label class="lab-up">¿Cuánto hay realmente?</label>
+        <div class="money-inp"><span class="pre">$</span><input type="number" id="fund-real" placeholder="0.00"><span class="suf">MXN</span></div>
+        <p style="font-size:12px;color:#DC2626;font-weight:600;">Se guardará el aviso para que el administrador lo vea.</p>
+      </div>
       <label class="lab-up">Tipo de cambio USD → MXN</label>
       <div class="money-inp"><span class="pre">$</span><input type="number" id="open-fx" value="17.5"><span class="suf">MXN</span></div>
       <button class="btn btn-primary btn-block" onclick="Pos.openShift()">Abrir caja e iniciar turno →</button>
@@ -477,11 +487,22 @@ const Pos={
 
   async afterLogin(session){
     this.user=session.user;
-    const {data:prof}=await sb.from('profiles').select('role,full_name,avatar_url').eq('id',this.user.id).single();
+    // Sin internet: la sesión SÍ se restaura sola (Supabase la guarda en el
+    // dispositivo), pero la consulta del perfil es de red — si falla aquí,
+    // se usa el perfil guardado la última vez que sí hubo internet, en vez
+    // de cerrar la sesión y dejar a la cajera sin poder ni entrar.
+    const pk='cached_profile_'+this.user.id;
+    let prof=null;
+    try{
+      const r=await sb.from('profiles').select('role,full_name,avatar_url').eq('id',this.user.id).single();
+      if(r.data){prof=r.data;cset(pk,prof);}
+      else if(isNetErr(r.error))prof=cget(pk);
+    }catch(e){prof=cget(pk);}
     this.role=(prof&&prof.role)||'';
     if(!['admin','encargado','cajera','contador'].includes(this.role)){
-      $('login-err').textContent='Esta cuenta no tiene acceso al POS.';
-      await sb.auth.signOut();return;
+      $('login-err').textContent=navigator.onLine?'Esta cuenta no tiene acceso al POS.':'Sin internet y sin sesión guardada en este dispositivo — conéctate una vez para poder entrar offline después.';
+      if(navigator.onLine)await sb.auth.signOut();
+      return;
     }
     this.profileName=(prof&&prof.full_name)||this.user.email.split('@')[0];
     $('su-name').textContent=this.profileName;
@@ -569,12 +590,23 @@ const Pos={
     }
   },
   async openShift(){
-    const cash=Number($('open-cash').value)||0,fx=Number($('open-fx').value)||0;
+    // Fondo fijo $400 — ya no se captura libremente. Si falta, se guarda el
+    // aviso (fund_shortage) para que el administrador lo vea.
+    const fundOk=$('fund-ok')&&$('fund-ok').checked;
+    const cash=fundOk?400:(Number($('fund-real')&&$('fund-real').value)||0);
+    const shortage=!fundOk;
+    const fx=Number($('open-fx').value)||0;
     const bId=this.branch?this.branch.id:null;
     // id generado aquí para que las ventas puedan referenciar el turno aunque no haya internet
     const payload={id:uuid(),branch_id:bId,staff_id:this.user.id,opening_cash:cash,fx_rate:fx,status:'open',opened_at:new Date().toISOString()};
+    if(shortage){payload.fund_shortage=true;payload.fund_shortage_note='Fondo real al abrir: '+money(cash)+' (faltan '+money(400-cash)+')';}
     if(navigator.onLine){
-      const {error}=await sb.from('cash_shifts').insert(payload);
+      let {error}=await sb.from('cash_shifts').insert(payload);
+      if(error&&shortage&&/fund_shortage/i.test(error.message||'')){
+        // Falta pos_migration7.sql — reintenta sin esas columnas para no bloquear el turno.
+        const p2={...payload};delete p2.fund_shortage;delete p2.fund_shortage_note;
+        const r2=await sb.from('cash_shifts').insert(p2);error=r2.error;
+      }
       if(error&&!isNetErr(error)){toast('No se pudo abrir el turno: '+error.message,true);return;}
       if(error)Q.push({t:'insert',table:'cash_shifts',payload});
     }else{
@@ -590,7 +622,7 @@ const Pos={
   async shiftTotals(){
     let sales=[];let movs=[];
     try{
-      const {data:sv}=await sb.from('sales').select('id,total,payment_method,created_at,customer_id').eq('shift_id',this.shift.id).order('created_at',{ascending:false});
+      const {data:sv}=await sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy').eq('shift_id',this.shift.id).order('created_at',{ascending:false});
       sales=sv||[];cset('shift_sales',sales);
     }catch(e){sales=cget('shift_sales')||[];}
     try{
@@ -601,7 +633,8 @@ const Pos={
     const movIn=movs.filter(m=>m.type==='in').reduce((s,x)=>s+Number(x.amount),0);
     const movOut=movs.filter(m=>m.type==='out').reduce((s,x)=>s+Number(x.amount),0);
     const cash=by('cash'),card=by('card'),transfer=by('transfer');
-    return{sales,movs,cash,card,transfer,movIn,movOut,
+    const courtesies=sales.filter(x=>x.is_courtesy).length;
+    return{sales,movs,cash,card,transfer,movIn,movOut,courtesies,
       total:cash+card+transfer,
       expected:Number(this.shift.opening_cash)+cash+movIn-movOut};
   },
@@ -653,6 +686,7 @@ const Pos={
       +new Date().toLocaleString('es-MX')+'\nCajero: '+this.profileName
       +'\n────────────────'
       +'\nÓrdenes: '+t.sales.length
+      +(t.courtesies?'\nCortesías otorgadas: '+t.courtesies:'')
       +'\nEfectivo: '+money(t.cash)+'\nTarjeta: '+money(t.card)+'\nTransferencia: '+money(t.transfer)
       +'\nTotal ventas: '+money(t.total)
       +'\n────────────────'
@@ -716,8 +750,8 @@ const Pos={
     if(r.type==='plan'){this.startSale(c.id,r.ref_id);}
     else{
       this.startSale(c.id);
-      this.sale.cart.push({kind:'coach',id:r.ref_id,name:'Coach — '+(r.ref_name||''),price:Number(r.price)||0,qty:1});
       this.sale.step=2;this.go('sale');
+      this.addCoachToCart(r.ref_id); // pregunta semana/mes antes de meterlo al carrito
     }
   },
   async descartarRequest(id){
@@ -783,6 +817,19 @@ const Pos={
   },
   bestSub(c){
     const list=this.subsOf(c).filter(s=>s.status!=='canceled');
+    if(!list.length)return null;
+    return list.reduce((a,b)=>a.end_date>b.end_date?a:b);
+  },
+  // Membresía SOLO válida en la sucursal donde se compró — un cliente que pagó
+  // en Gómez Morín no puede entrar con esa membresía en Tres Cantos.
+  bestSubForBranch(c,branchId){
+    const list=this.subsOf(c).filter(s=>s.status!=='canceled'&&s.branch_id===branchId);
+    if(!list.length)return null;
+    return list.reduce((a,b)=>a.end_date>b.end_date?a:b);
+  },
+  // ¿Tiene membresía vigente en OTRA sucursal? (para el mensaje de rechazo)
+  bestSubOtherBranch(c,branchId){
+    const list=this.subsOf(c).filter(s=>s.status!=='canceled'&&s.branch_id&&s.branch_id!==branchId&&daysLeft(s.end_date)>=0);
     if(!list.length)return null;
     return list.reduce((a,b)=>a.end_date>b.end_date?a:b);
   },
@@ -994,10 +1041,11 @@ const Pos={
     if(s.quick)s.tab='products'; // venta rápida = solo productos (las membresías siempre llevan cliente)
     const who=s.quick?'Venta rápida (sin cliente)':(s.customer?esc(s.customer.full_name):'—');
     const plansHtml=this.plansForBranch().map(p=>`
-      <button class="prod-card" onclick="Pos.addToCart('plan','${p.id}')">
+      <button class="prod-card" onclick="Pos.addToCart('plan','${p.id}')" style="position:relative">
         <div class="pn">Membresía ${esc(p.name)}</div>
         <div class="pp">${money(p.price)}</div>
         <div class="ps">${p.duration_days} día${p.duration_days===1?'':'s'}${p.is_family?' · familiar':''}</div>
+        ${Number(p.duration_days)===1&&s.customer?`<span onclick="event.stopPropagation();Pos.addToCart('plan','${p.id}',true)" style="position:absolute;top:8px;right:8px;font-size:10px;font-weight:700;color:#16A34A;background:#DCFCE7;padding:3px 8px;border-radius:100px;">Cortesía</span>`:''}
       </button>`).join('')||'<div class="stub"><p>No hay planes en esta sucursal. El admin los crea en Membresías.</p></div>';
     const coachesHtml=this.coachesForBranch().map(p=>{
       const cp=this.coachProfiles.find(x=>x.profile_id===p.id);
@@ -1057,12 +1105,21 @@ const Pos={
       ${withNext?`<button class="btn btn-primary btn-block" style="margin-top:14px" ${s.cart.length?'':'disabled'} onclick="Pos.toPay()">Continuar al pago →</button>`:''}
     </div>`;
   },
-  addToCart(kind,id){
+  addToCart(kind,id,courtesy){
     const s=this.sale;
     if(kind==='plan'){
       if(s.quick||!s.customer){toast('Para vender membresía primero elige al cliente.',true);return;}
       const p=this.plans.find(x=>x.id===id);if(!p)return;
-      const ex=s.cart.find(x=>x.kind==='plan'&&x.id===id);
+      if(courtesy){
+        // Cortesía: solo planes de 1 día, datos completos y máximo 1 vez por persona.
+        if(Number(p.duration_days)!==1){toast('La cortesía solo aplica al plan de Día.',true);return;}
+        const c=s.customer;
+        if(!c.phone||!c.email||!c.gender){toast('Faltan datos del cliente (teléfono/correo/género) para dar la cortesía.',true);return;}
+        if(c.courtesy_used_at){toast('Este cliente ya usó su día de cortesía el '+fdate(c.courtesy_used_at)+'.',true);return;}
+        s.cart.push({kind:'plan',id,name:'Membresía '+p.name+' (Cortesía)',price:0,qty:1,courtesy:true});
+        this.go('sale');return;
+      }
+      const ex=s.cart.find(x=>x.kind==='plan'&&x.id===id&&!x.courtesy);
       if(ex)ex.qty++;else s.cart.push({kind:'plan',id,name:'Membresía '+p.name,price:Number(p.price),qty:1});
     }else{
       const p=this.products.find(x=>x.id===id);if(!p)return;
@@ -1078,10 +1135,24 @@ const Pos={
     if(s.quick||!s.customer){toast('Para cobrar un coach primero elige al cliente.',true);return;}
     const p=this.appProfiles.find(x=>x.id===id);
     const cp=this.coachProfiles.find(x=>x.profile_id===id);
-    const price=cp&&cp.monthly_price?Number(cp.monthly_price):0;
-    if(!price){toast('Este coach no tiene precio mensual definido todavía.',true);return;}
-    if(!s.cart.find(x=>x.kind==='coach'&&x.id===id))s.cart.push({kind:'coach',id,name:'Coach — '+((p&&p.full_name)||''),price,qty:1});
-    this.go('sale');
+    const monthly=cp&&cp.monthly_price?Number(cp.monthly_price):0;
+    if(!monthly){toast('Este coach no tiene precio mensual definido todavía.',true);return;}
+    if(s.cart.find(x=>x.kind==='coach'&&x.id===id)){toast('Ya está en el carrito.',true);return;}
+    // El coach es POR TIEMPO (semana o mes) — no es de por vida, se pregunta la duración aquí.
+    openModal(`
+      <h3>¿Por cuánto tiempo?</h3><p class="msub">Coach — ${esc((p&&p.full_name)||'')}</p>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" style="flex:1" onclick="Pos.confirmCoachDuration('${id}','week',${Math.round(monthly/4)})">1 semana<br><span style="font-weight:400;font-size:12px">${money(Math.round(monthly/4))}</span></button>
+        <button class="btn btn-primary" style="flex:1" onclick="Pos.confirmCoachDuration('${id}','month',${monthly})">1 mes<br><span style="font-weight:400;font-size:12px">${money(monthly)}</span></button>
+      </div>
+    `);
+  },
+  confirmCoachDuration(id,period,price){
+    const s=this.sale;
+    const p=this.appProfiles.find(x=>x.id===id);
+    const days=period==='week'?7:30;
+    s.cart.push({kind:'coach',id,name:'Coach — '+((p&&p.full_name)||'')+' ('+(period==='week'?'1 semana':'1 mes')+')',price:Number(price),qty:1,coachDays:days});
+    closeModal();this.go('sale');
   },
   async ensureCoachProduct(it,put){
     const sku='coach_'+it.id;
@@ -1161,7 +1232,8 @@ const Pos={
           </div>
           ${fx?`<div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:14px">Si paga en dólares: total ≈ <b>USD ${(t.total/fx).toFixed(2)}</b> (TC ${fx})</div>`:''}
         `:''}
-        <button class="btn btn-primary btn-block" style="height:56px;font-size:16px;margin-top:8px" ${s.method?'':'disabled'} onclick="Pos.checkout()" id="btn-cobrar">Cobrar ${money(t.total)}</button>
+        <button class="btn btn-primary btn-block" style="height:56px;font-size:16px;margin-top:8px" ${(s.method&&(s.method!=='cash'||Number(s.received)>0))?'':'disabled'} onclick="Pos.checkout()" id="btn-cobrar">Cobrar ${money(t.total)}</button>
+        ${s.method==='cash'&&!Number(s.received)?'<p style="font-size:12px;color:var(--red);font-weight:600;margin-top:6px">Captura cuánto recibiste en efectivo para poder cobrar.</p>':''}
         <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" onclick="Pos.sale.step=2;Pos.go('sale')">← Volver a artículos</button>
       </div>
       ${this.cartPanel(false)}
@@ -1171,12 +1243,14 @@ const Pos={
     const t=this.saleTotals();const r=Number(this.sale.received)||0;const el=$('pay-change');
     if(!el)return;const ch=r-t.total;
     el.textContent=r?money(ch):'—';el.style.color=ch<0?'var(--red)':'#16A34A';
+    const bc=$('btn-cobrar');if(bc)bc.disabled=!(r>0);
   },
 
   async checkout(){
     if(this._checkingOut)return; this._checkingOut=true;   // candado: un solo cobro aunque piquen doble
     const s=this.sale;const t=this.saleTotals();
     if(!s.method||!s.cart.length){this._checkingOut=false;return;}
+    if(s.method==='cash'&&!(Number(s.received)>0)){toast('Captura cuánto recibiste en efectivo antes de cobrar.',true);this._checkingOut=false;return;}
     const bc=$('btn-cobrar');if(bc){bc.disabled=true;bc.textContent='Cobrando...';}
     const c=s.customer;const bId=this.branch?this.branch.id:null;
     const saleId=uuid();const nowIso=new Date().toISOString();
@@ -1191,7 +1265,8 @@ const Pos={
     const concept=s.cart.map(it=>it.name+(it.qty>1?' x'+it.qty:'')).join(', ');
     const salePayload={id:saleId,branch_id:bId,shift_id:this.shift.id,customer_id:c?c.id:null,
       member_id:(c&&c.profile_id)||null,staff_id:this.user.id,sold_by:this.user.id,
-      payment_method:s.method,total:t.total,promo_id:s.promoId||null,concept,created_at:nowIso};
+      payment_method:s.method,total:t.total,promo_id:s.promoId||null,concept,created_at:nowIso,
+      is_courtesy:s.cart.some(it=>it.courtesy)};
     let r=await this.insertSale(salePayload);
     if(r.error){toast('No se pudo cobrar: '+r.error.message,true);this._checkingOut=false;if(bc){bc.disabled=false;bc.textContent='Cobrar '+money(t.total);}return;}
     if(r.queued)qd=true;
@@ -1203,18 +1278,28 @@ const Pos={
         productId=await this.ensureMembershipProduct(plan,put);
         const rs=await this.sellMembership(c,plan,it.qty,it.price,s.method,put);
         if(rs&&rs.error){toast('Venta cobrada pero la membresía falló: '+rs.error.message+' — ¿ya corriste pos_migration2.sql?',true);}
+        if(it.courtesy&&c){
+          // Marca el uso de la cortesía — 1 sola vez por persona.
+          try{await Q.update('customers',{id:c.id},{courtesy_used_at:new Date().toISOString()});}catch(e){}
+          c.courtesy_used_at=new Date().toISOString();cset('customers',this.customers);
+        }
       }else if(it.kind==='coach'){
         productId=await this.ensureCoachProduct(it,put);
+        // El coach es POR TIEMPO — se le calcula fecha de vencimiento (coach_until)
+        // según lo que se cobró (semana/mes); vencido, desaparece de la app del
+        // cliente y de "Mis atletas" del coach.
+        const days=it.coachDays||30;
+        const until=dISO(new Date(Date.now()+days*864e5));
         // AL PAGAR se asigna el coach Y la sucursal al perfil del cliente (si ya tiene app)
         // → en su teléfono aparece el mismo entrenador y su sucursal.
         if(c&&c.profile_id){
-          const mp={profile_id:c.profile_id,coach_id:it.id};
+          const mp={profile_id:c.profile_id,coach_id:it.id,coach_until:until};
           if(c.branch_id)mp.branch_id=c.branch_id;
           try{await sb.from('member_profiles').upsert(mp,{onConflict:'profile_id'});}catch(e){}
         }
         // guarda el coach en la ficha para que se transfiera si vincula la app después
-        try{await Q.update('customers',{id:c.id},{coach_id:it.id});}catch(e){}
-        c.coach_id=it.id;cset('customers',this.customers);
+        try{await Q.update('customers',{id:c.id},{coach_id:it.id,coach_until:until});}catch(e){}
+        c.coach_id=it.id;c.coach_until=until;cset('customers',this.customers);
       }
       await put('sale_items',{id:uuid(),sale_id:saleId,product_id:productId,quantity:it.qty,unit_price:it.price});
       if(it.kind==='product'&&!it.service){
@@ -1276,9 +1361,9 @@ const Pos={
     if(navigator.onLine){
       try{
         let {error}=await sb.from('sales').insert(payload);
-        // si falta la columna concept (migración 6 no corrida), reintenta sin ella
-        if(error&&/concept/i.test(error.message||'')){
-          const p2=Object.assign({},payload);delete p2.concept;
+        // si falta la columna concept/is_courtesy (migraciones 6/7 no corridas), reintenta sin ellas
+        if(error&&/concept|is_courtesy/i.test(error.message||'')){
+          const p2=Object.assign({},payload);delete p2.concept;delete p2.is_courtesy;
           const r=await sb.from('sales').insert(p2);error=r.error;
         }
         if(error&&/register_id/i.test(error.message||'')){
@@ -1403,11 +1488,16 @@ const Pos={
     openModal(`
       <h3>Nuevo cliente</h3>
       <p class="msub">Ficha del cliente en el gimnasio</p>
-      <div class="field"><label>Nombre completo *</label><input class="inp" id="nc-name" placeholder="Nombre y apellido"></div>
+      <div class="field"><label>Nombre completo * <span style="color:var(--muted);font-weight:500">(nombre + 2 apellidos)</span></label><input class="inp" id="nc-name" placeholder="Ej. Juan Pérez López"></div>
       <div class="frow">
-        <div class="field"><label>Teléfono / WhatsApp</label><input class="inp" id="nc-phone" placeholder="656..."></div>
-        <div class="field"><label>Correo</label><input class="inp" id="nc-email" placeholder="opcional"></div>
+        <div class="field"><label>Teléfono / WhatsApp *</label><input class="inp" id="nc-phone" placeholder="656..."></div>
+        <div class="field"><label>Correo *</label><input class="inp" id="nc-email" placeholder="correo@ejemplo.com"></div>
       </div>
+      <div class="frow">
+        <div class="field"><label>Género *</label><select class="inp" id="nc-gender"><option value="">Selecciona...</option><option value="M">Hombre</option><option value="F">Mujer</option></select></div>
+        <div class="field"><label>Fecha de nacimiento</label><input class="inp" type="date" id="nc-birth"></div>
+      </div>
+      <div class="field"><label>Dirección <span style="color:var(--muted);font-weight:500">(opcional)</span></label><input class="inp" id="nc-address" placeholder="opcional"></div>
       <div class="field"><label>¿Ya tiene la app? Teclea su Nº de cuenta (opcional)</label>
         <input class="inp" id="nc-app-q" placeholder="Nº de cuenta que ve en su app (Perfil → Mi código QR)" oninput="Pos.ncSearchApp(this.value)">
         <div id="nc-app-res" style="margin-top:8px;font-size:13px;color:var(--muted);font-weight:500">Si no tiene app, déjalo vacío.</div>
@@ -1439,12 +1529,26 @@ const Pos={
   },
   async saveNewCustomer(fromSale){
     const name=$('nc-name').value.trim();
-    if(!name){toast('El nombre es obligatorio.',true);return;}
+    const phone=$('nc-phone').value.trim();
+    const email=$('nc-email').value.trim();
+    const gender=$('nc-gender')?$('nc-gender').value:'';
+    // Campos obligatorios (pedido explícito del dueño): nombre completo (3+
+    // palabras = nombre y 2 apellidos), teléfono, correo y género.
+    if(name.split(/\s+/).filter(Boolean).length<3){toast('Escribe nombre y los dos apellidos completos.',true);return;}
+    if(!phone){toast('El teléfono es obligatorio.',true);return;}
+    if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Escribe un correo válido, es obligatorio.',true);return;}
+    if(!gender){toast('Selecciona el género, es obligatorio.',true);return;}
     const famSel=$('nc-family')?$('nc-family').value||null:null;
-    const payload={id:uuid(),full_name:name,phone:$('nc-phone').value.trim()||null,email:$('nc-email').value.trim()||null,
+    const payload={id:uuid(),full_name:name,phone,email,gender,
+      birth_date:($('nc-birth')&&$('nc-birth').value)||null,address:($('nc-address')&&$('nc-address').value.trim())||null,
       notes:$('nc-notes').value.trim()||null,profile_id:this._newCustLink||null,family_id:famSel,
       branch_id:this.branch?this.branch.id:null,suspended:false,created_at:new Date().toISOString()};
-    const r=await Q.insert('customers',payload);
+    let r=await Q.insert('customers',payload);
+    if(r.error&&/gender|birth_date|address/i.test(r.error.message||'')){
+      // Falta correr pos_migration7.sql — reintenta sin esas columnas para no bloquear la venta.
+      const p2={...payload};delete p2.gender;delete p2.birth_date;delete p2.address;
+      r=await Q.insert('customers',p2);
+    }
     if(r.error){toast('Error: '+r.error.message,true);return;}
     this.customers.unshift(payload);cset('customers',this.customers);
     closeModal();toast(r.queued?'Cliente guardado local — sincroniza al volver internet':'Cliente creado ✓');
@@ -1470,7 +1574,9 @@ const Pos={
         ${c.phone?`<a class="btn btn-sm" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(c.phone,'Hola '+(c.full_name||'').split(' ')[0]+' 💪 Te saludamos de Volten Gym.')}">WhatsApp</a>`:''}
         <button class="btn btn-sm btn-ghost" onclick="Pos.editCustomerModal('${c.id}')">Editar datos</button>
         <button class="btn btn-sm ${c.suspended?'btn-dark':'btn-danger'}" onclick="Pos.toggleSuspend('${c.id}')">${c.suspended?'Reactivar acceso':'Suspender acceso'}</button>
+        <button class="btn btn-sm btn-ghost" onclick="Pos.changeBranchModal('${c.id}')">Cambiar de sucursal</button>
       </div>
+      ${c.coach_id?`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:14px;padding:12px 16px;margin-bottom:16px;font-size:13px;font-weight:600;color:#9A3412;">Coach activo${c.coach_until?' hasta el '+fdate(c.coach_until)+(daysLeft(c.coach_until)<0?' <span class="tag tag-red">vencido</span>':''):''}</div>`:''}
       <div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:16px;">
         <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Cuenta de la app</div>
         ${appProf?`
@@ -1503,6 +1609,32 @@ const Pos={
       const el=$('cust-visits');
       if(el)el.innerHTML=(data&&data.length)?'<table><thead><tr><th>Fecha</th><th>Método</th><th>Entrada</th><th>Salida</th><th></th></tr></thead><tbody>'+data.map(v=>`<tr><td>${fdate(v.created_at)}</td><td>${METHOD_LABEL[v.method]||v.method}</td><td>${ftime(v.created_at)}</td><td>${v.checked_out_at?ftime(v.checked_out_at):'—'}</td><td>${v.granted?'<span class="tag tag-green">OK</span>':'<span class="tag tag-red">Rechazado</span>'}</td></tr>`).join('')+'</tbody></table>':'Sin visitas registradas.';
     }catch(e){const el=$('cust-visits');if(el)el.textContent='Sin conexión — no se pudo cargar el historial.';}
+  },
+  changeBranchModal(custId){
+    const c=this.customers.find(x=>x.id===custId);if(!c)return;
+    const cur=this.branches.find(b=>b.id===c.branch_id);
+    openModal(`
+      <h3>Cambiar de sucursal</h3><p class="msub">${esc(c.full_name)} — actualmente en ${esc(cur?cur.name:'sin sucursal')}</p>
+      <div style="background:#FEF3C7;color:#92400E;border-radius:12px;padding:12px 14px;font-size:13px;font-weight:600;margin-bottom:14px;">
+        Al cambiarlo, su membresía y coach actuales quedan sin efecto en la sucursal nueva (los pagó en la sucursal anterior). Tendrá que comprar su membresía otra vez ahí.
+      </div>
+      <div class="field"><label>Nueva sucursal</label>
+        <select class="inp" id="cb-branch">${this.branches.filter(b=>b.id!==c.branch_id).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="Pos.doChangeBranch('${custId}')">Confirmar cambio</button>
+    `);
+  },
+  async doChangeBranch(custId){
+    const c=this.customers.find(x=>x.id===custId);if(!c)return;
+    const newBranch=$('cb-branch').value;
+    // Deja al cliente EN CERO en la sucursal nueva: sin coach activo (su
+    // membresía histórica queda intacta pero ya no valida acceso porque el
+    // check de entrada es por sucursal — bestSubForBranch la ignora sola).
+    const r=await Q.update('customers',{id:custId},{branch_id:newBranch,coach_id:null,coach_until:null});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    c.branch_id=newBranch;c.coach_id=null;c.coach_until=null;cset('customers',this.customers);
+    if(c.profile_id){try{await sb.from('member_profiles').update({branch_id:newBranch,coach_id:null,coach_until:null}).eq('profile_id',c.profile_id);}catch(e){}}
+    closeModal();toast('Sucursal actualizada ✓ — puede comprar su membresía aquí');this.go('customers');
   },
   linkSearch(custId,q,enter){
     q=(q||'').trim();
@@ -2113,9 +2245,12 @@ const Pos={
       return;
     }
     let granted=true,why='';
-    const s=this.bestSub(c);
+    const bId=this.branch?this.branch.id:null;
+    const s=this.bestSubForBranch(c,bId);
+    const other=!s?this.bestSubOtherBranch(c,bId):null;
     if(c.suspended){granted=false;why='Acceso suspendido por administración';}
-    else if(!s){granted=false;why='Sin membresía — véndele una en Nueva venta';}
+    else if(other){granted=false;why='Su membresía es de '+(this.branches.find(b=>b.id===other.branch_id)||{}).name+' — no válida aquí. Puede cambiar de sucursal en su ficha.';}
+    else if(!s){granted=false;why='Sin membresía en esta sucursal — véndele una en Nueva venta';}
     else if(daysLeft(s.end_date)<0){granted=false;why='Membresía vencida el '+fdate(s.end_date);}
     else why='Membresía al corriente · le quedan '+daysLeft(s.end_date)+' día'+(daysLeft(s.end_date)===1?'':'s')+' ('+fdate(s.end_date)+')';
     const now=new Date().toISOString();
@@ -2663,9 +2798,9 @@ const Pos={
       staffRows.map(([id,v])=>`<tr><td style="font-weight:700">${esc(this.profName(id))}</td><td>${v.n}</td><td>${v.m}</td><td style="font-weight:800;color:var(--orange)">${money(v.t)}</td></tr>`).join('')
     }</tbody></table>`:'<div class="stub" style="padding:26px"><p>Sin ventas en el período.</p></div>';
     // turnos
-    $('r-shifts').innerHTML=SH.length?`<table><thead><tr><th>Abrió</th><th>Empleado</th><th>Cerró</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr></thead><tbody>${
+    $('r-shifts').innerHTML=SH.length?`<table><thead><tr><th>Abrió</th><th>Empleado</th><th>Cerró</th><th>Esperado</th><th>Contado</th><th>Diferencia</th><th>Fondo</th></tr></thead><tbody>${
       SH.map(s=>{const d=s.counted_cash!=null&&s.expected_cash!=null?Number(s.counted_cash)-Number(s.expected_cash):null;
-      return `<tr><td>${fdate(s.opened_at)} ${ftime(s.opened_at)}</td><td style="font-weight:700">${esc(this.profName(s.staff_id))}</td><td>${s.closed_at?ftime(s.closed_at):'<span class="tag tag-green">Abierto</span>'}</td><td>${s.expected_cash!=null?money(s.expected_cash):'—'}</td><td>${s.counted_cash!=null?money(s.counted_cash):'—'}</td><td>${d==null?'—':(d===0?'<span class="tag tag-green">Cuadró</span>':(d>0?'<span class="tag tag-orange">+'+money(d)+'</span>':'<span class="tag tag-red">'+money(d)+'</span>'))}</td></tr>`;}).join('')
+      return `<tr><td>${fdate(s.opened_at)} ${ftime(s.opened_at)}</td><td style="font-weight:700">${esc(this.profName(s.staff_id))}</td><td>${s.closed_at?ftime(s.closed_at):'<span class="tag tag-green">Abierto</span>'}</td><td>${s.expected_cash!=null?money(s.expected_cash):'—'}</td><td>${s.counted_cash!=null?money(s.counted_cash):'—'}</td><td>${d==null?'—':(d===0?'<span class="tag tag-green">Cuadró</span>':(d>0?'<span class="tag tag-orange">+'+money(d)+'</span>':'<span class="tag tag-red">'+money(d)+'</span>'))}</td><td>${s.fund_shortage?'<span class="tag tag-red" title="'+esc(s.fund_shortage_note||'')+'">Faltante al abrir</span>':'<span class="tag tag-green">$400 ✓</span>'}</td></tr>`;}).join('')
     }</tbody></table>`:'<div class="stub" style="padding:20px"><p>Sin turnos registrados.</p></div>';
   },
   _empSales:[],_empSubs:[],

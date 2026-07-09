@@ -3246,12 +3246,20 @@ class Component extends DCLogic {
     this.fetchGymAnnouncements();
     this.fetchBranches();
     await waitForSupabase();
-    const { data } = await getSupabase()
+    let res = await getSupabase()
+      .from('member_profiles')
+      .select('goal, level, training_days, coach_id, coach_until, weight_kg, height_cm, branch_id')
+      .eq('profile_id', this.state.session.user.id)
+      .single();
+    if (res.error) res = await getSupabase()
       .from('member_profiles')
       .select('goal, level, training_days, coach_id, weight_kg, height_cm, branch_id')
       .eq('profile_id', this.state.session.user.id)
       .single();
+    const { data } = res;
     if (!data) return;
+    // Coach por tiempo: si venció, ya no cuenta como coach asignado.
+    const coachExpired = data.coach_until && new Date(data.coach_until + 'T23:59:59') < new Date();
     const goalMap = { muscle: 'Ganar músculo', fat_loss: 'Perder grasa', health: 'Mejorar salud', performance: 'Rendimiento atlético' };
     const levelMap = { beginner: 'Principiante', intermediate: 'Intermedio', advanced: 'Avanzado' };
     this.setState({
@@ -3267,7 +3275,7 @@ class Component extends DCLogic {
     if (data.branch_id) this.fetchCoaches();
     // Restore the assigned coach on login — without this, the coach card and
     // the chat button silently disappear on every session after onboarding.
-    if (data.coach_id) {
+    if (data.coach_id && !coachExpired) {
       this.fetchCoachTip(data.coach_id);
       // El perfil del coach no es legible por RLS — usar el directorio público
       const { data: cp } = await getSupabase()
@@ -3402,7 +3410,7 @@ class Component extends DCLogic {
     // mensaje de presentación (__intro) que el miembro envía al elegir coach.
     let clientsRes = await sb
       .from('member_profiles')
-      .select('profile_id, goal, level, training_days, profiles!member_profiles_profile_id_fkey(full_name, email, avatar_url)')
+      .select('profile_id, goal, level, training_days, coach_until, profiles!member_profiles_profile_id_fkey(full_name, email, avatar_url)')
       .eq('coach_id', coachId);
     if (clientsRes.error) {
       clientsRes = await sb
@@ -3410,8 +3418,11 @@ class Component extends DCLogic {
         .select('profile_id, goal, level, training_days')
         .eq('coach_id', coachId);
     }
-    const clients = clientsRes.data;
-    if (!clients) return;
+    // Coach por tiempo: un atleta cuyo coach_until ya pasó deja de contar como
+    // "atleta activo" de este coach (venció su semana/mes de coaching).
+    const _now = new Date();
+    const clients = (clientsRes.data || []).filter(c => !c.coach_until || new Date(c.coach_until + 'T23:59:59') >= _now);
+    if (!clients.length && !(clientsRes.data || []).length) return;
     const { count: workoutCount } = await sb
       .from('workout_logs')
       .select('id', { count: 'exact', head: true })
