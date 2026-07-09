@@ -682,6 +682,20 @@ const Pos={
     const r=await Q.update('cash_shifts',{id:this.shift.id},{status:'closed',closed_at:new Date().toISOString(),expected_cash:expected,counted_cash:counted});
     if(r.error){toast('Error: '+r.error.message,true);return;}
     cset('shift_'+(this.branch?this.branch.id:null),null);
+    // Cierre automático de accesos: quien entró y no marcó su salida (se le
+    // olvidó escanear, o fue el último de la huella/facial) queda registrado
+    // como salido a la hora de cerrar el gym en esta sucursal.
+    if(navigator.onLine){
+      try{
+        const bId=this.branch?this.branch.id:null;
+        let q=sb.from('checkins').select('id').eq('granted',true).is('checked_out_at',null).gte('created_at',todayISO()+'T00:00:00');
+        if(bId)q=q.eq('branch_id',bId);
+        const {data:openOnes}=await q;
+        if(openOnes&&openOnes.length){
+          await sb.from('checkins').update({checked_out_at:new Date().toISOString()}).in('id',openOnes.map(x=>x.id));
+        }
+      }catch(e){}
+    }
     const resumen='CORTE DE CAJA — VOLTEN GYM\n'
       +(this.branch?this.branch.name+'\n':'')
       +new Date().toLocaleString('es-MX')+'\nCajero: '+this.profileName
