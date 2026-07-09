@@ -1515,36 +1515,42 @@
           <div style="{{ sessionEx1Style }}">
             <div onclick="{{ toggleEx1 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck1 }}</div>
             <div onclick="{{ toggleEx1 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex1Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex1SetsReps }}</div><div style="{{ ex1PrevStyle }}">{{ ex1Prev }}</div></div>
+            <button onclick="{{ openExVideo1 }}" style="{{ exVideo1Style }}" title="Ver video"><svg width="14" height="14" viewBox="0 0 24 24" fill="#F97316"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></button>
             <input type="number" placeholder="kg" onchange="{{ setWeight1 }}" value="{{ exWeight1 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
             <input type="number" placeholder="reps" onchange="{{ setReps1 }}" value="{{ exReps1 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx2Style }}">
             <div onclick="{{ toggleEx2 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck2 }}</div>
             <div onclick="{{ toggleEx2 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex2Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex2SetsReps }}</div><div style="{{ ex2PrevStyle }}">{{ ex2Prev }}</div></div>
+            <button onclick="{{ openExVideo2 }}" style="{{ exVideo2Style }}" title="Ver video"><svg width="14" height="14" viewBox="0 0 24 24" fill="#F97316"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></button>
             <input type="number" placeholder="kg" onchange="{{ setWeight2 }}" value="{{ exWeight2 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
             <input type="number" placeholder="reps" onchange="{{ setReps2 }}" value="{{ exReps2 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx3Style }}">
             <div onclick="{{ toggleEx3 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck3 }}</div>
             <div onclick="{{ toggleEx3 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex3Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex3SetsReps }}</div><div style="{{ ex3PrevStyle }}">{{ ex3Prev }}</div></div>
+            <button onclick="{{ openExVideo3 }}" style="{{ exVideo3Style }}" title="Ver video"><svg width="14" height="14" viewBox="0 0 24 24" fill="#F97316"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></button>
             <input type="number" placeholder="kg" onchange="{{ setWeight3 }}" value="{{ exWeight3 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
             <input type="number" placeholder="reps" onchange="{{ setReps3 }}" value="{{ exReps3 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx4Style }}">
             <div onclick="{{ toggleEx4 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck4 }}</div>
             <div onclick="{{ toggleEx4 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex4Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex4SetsReps }}</div><div style="{{ ex4PrevStyle }}">{{ ex4Prev }}</div></div>
+            <button onclick="{{ openExVideo4 }}" style="{{ exVideo4Style }}" title="Ver video"><svg width="14" height="14" viewBox="0 0 24 24" fill="#F97316"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></button>
             <input type="number" placeholder="kg" onchange="{{ setWeight4 }}" value="{{ exWeight4 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
             <input type="number" placeholder="reps" onchange="{{ setReps4 }}" value="{{ exReps4 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx5Style }}">
             <div onclick="{{ toggleEx5 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck5 }}</div>
             <div onclick="{{ toggleEx5 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex5Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex5SetsReps }}</div><div style="{{ ex5PrevStyle }}">{{ ex5Prev }}</div></div>
+            <button onclick="{{ openExVideo5 }}" style="{{ exVideo5Style }}" title="Ver video"><svg width="14" height="14" viewBox="0 0 24 24" fill="#F97316"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></button>
             <input type="number" placeholder="kg" onchange="{{ setWeight5 }}" value="{{ exWeight5 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
             <input type="number" placeholder="reps" onchange="{{ setReps5 }}" value="{{ exReps5 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
           <div style="{{ sessionEx6Style }}">
             <div onclick="{{ toggleEx6 }}" style="width:26px;height:26px;border-radius:50%;border:2px solid #F97316;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F97316;font-weight:800;font-size:14px;cursor:pointer;">{{ sessionCheck6 }}</div>
             <div onclick="{{ toggleEx6 }}" style="flex:1;cursor:pointer;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">{{ ex6Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ ex6SetsReps }}</div><div style="{{ ex6PrevStyle }}">{{ ex6Prev }}</div></div>
+            <button onclick="{{ openExVideo6 }}" style="{{ exVideo6Style }}" title="Ver video"><svg width="14" height="14" viewBox="0 0 24 24" fill="#F97316"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></button>
             <input type="number" placeholder="kg" onchange="{{ setWeight6 }}" value="{{ exWeight6 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;">
             <input type="number" placeholder="reps" onchange="{{ setReps6 }}" value="{{ exReps6 }}" style="width:50px;padding:8px 4px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:13px;text-align:center;margin-left:5px;">
           </div>
@@ -1570,6 +1576,11 @@
         </div>
         <div style="{{ cameraErrorStyle }}">{{ cameraErrorText }}</div>
         <div style="{{ restTimerStyle }}">Descanso: {{ restSecondsLabel }}</div>
+        <!-- Video de referencia del ejercicio -->
+        <div style="{{ exVideoPanelStyle }}">
+          <video src="{{ exVideoOpen }}" style="width:100%;max-height:70vh;" controls autoplay playsinline></video>
+          <button onclick="{{ closeExVideo }}" style="margin-top:20px;background:rgba(255,255,255,0.1);color:#FFFFFF;border:none;padding:12px 28px;border-radius:100px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
+        </div>
         <div style="padding:16px 20px 20px;flex-shrink:0;">
           <p style="font-size:12px;color:rgba(255,255,255,0.5);text-align:center;margin-bottom:12px;">Esto solo graba el video — no analiza tu técnica automáticamente. Tu coach lo revisa después y te da retroalimentación.</p>
           <video id="workout-recorded-video" style="{{ recordedVideoStyle }}" controls playsinline></video>
@@ -1649,7 +1660,7 @@
                 <p style="font-size:8px;font-weight:700;color:#BBBBBB;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:10px;">Racha</p>
                 <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:14px;">
                   <span style="font-size:44px;font-weight:800;color:#0A0A0A;letter-spacing:-0.04em;line-height:0.9;">{{ statStreak }}</span>
-                  <span style="font-size:13px;font-weight:400;color:#BBBBBB;">días</span>
+                  <span style="font-size:13px;font-weight:400;color:#BBBBBB;">{{ statStreakUnit }}</span>
                 </div>
                 <div style="display:flex;gap:3px;">
                   <div style="{{ dotLunOuter }}"><div style="{{ dotLun }}"><svg style="{{ dotLunCheckStyle }}" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="3.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div><span style="{{ dotLunLabel }}">L</span></div>
@@ -2195,7 +2206,7 @@
               <div style="background:#F5F5F5;border-radius:20px;padding:18px;">
                 <p style="font-size:9px;font-weight:700;color:#BBBBBB;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;">Racha</p>
                 <div style="font-size:34px;font-weight:800;color:#F97316;letter-spacing:-0.03em;line-height:1;">{{ statStreak }}</div>
-                <div style="font-size:12px;color:#9CA3AF;margin-top:5px;">días seguidos</div>
+                <div style="font-size:12px;color:#9CA3AF;margin-top:5px;">{{ statStreakUnit }} seguidas</div>
               </div>
               <div style="background:#F5F5F5;border-radius:20px;padding:18px;">
                 <p style="font-size:9px;font-weight:700;color:#BBBBBB;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;">Entrenos</p>
@@ -2971,6 +2982,8 @@ class Component extends DCLogic {
     localFavSlugs: [],
     catMuscleFilter: 'todos',
     curatedExercises: {},
+    exerciseVideos: {},
+    exVideoOpen: null,
     progressPhotos: [],
     photoUploading: false,
     chatOpen: false,
@@ -3191,28 +3204,37 @@ class Component extends DCLogic {
       return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
     };
     const dayKey = localDayKey;
-    const daysWithWorkout = new Set(trainedData.map(w => localDayKey(w.completed_at)));
-    const _schedDayNames = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
     const _scheduledDays = this.state.memberScheduledDays || [];
-    const _hasSchedule = _scheduledDays.length > 0;
+    // Racha por CUOTA SEMANAL, no por día exacto: si tu plan pide N días a la
+    // semana y entrenaste esos N días (cualquier día, no importa cuál),
+    // esa semana cuenta. Si te tocaba martes pero fuiste miércoles, sigues
+    // cumpliendo — cambiar de día ya NO rompe la racha.
+    const weeklyGoal = _scheduledDays.length || 3;
+    const mondayOf = (d) => {
+      const dt = new Date(d); const day = dt.getDay();
+      const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
+      const mon = new Date(dt); mon.setDate(diff); mon.setHours(0, 0, 0, 0);
+      return mon;
+    };
+    const weekKey = (d) => localDayKey(mondayOf(d));
+    const workoutsByWeek = {};
+    trainedData.forEach(w => {
+      const wk = weekKey(w.completed_at);
+      (workoutsByWeek[wk] = workoutsByWeek[wk] || new Set()).add(dayKey(w.completed_at));
+    });
     let streak = 0;
-    let cursor = new Date();
-    cursor.setHours(0, 0, 0, 0);
-    // If today has no workout yet, start looking from yesterday
-    if (!daysWithWorkout.has(localDayKey(cursor))) {
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    // Walk back up to 365 days; scheduled days must have a workout, non-scheduled days are skipped
-    for (let _i = 0; _i < 365; _i++) {
-      const _dayName = _schedDayNames[cursor.getDay()];
-      if (!_hasSchedule || _scheduledDays.includes(_dayName)) {
-        if (daysWithWorkout.has(localDayKey(cursor))) {
-          streak++;
-        } else {
-          break;
-        }
+    let wcursor = new Date();
+    for (let _wi = 0; _wi < 104; _wi++) {
+      const wk = weekKey(wcursor);
+      const doneThisWeek = (workoutsByWeek[wk] || new Set()).size;
+      if (doneThisWeek >= weeklyGoal) {
+        streak++;
+      } else if (_wi === 0) {
+        // La semana actual todavía no termina — no rompe la racha, solo no suma aún.
+      } else {
+        break;
       }
-      cursor.setDate(cursor.getDate() - 1);
+      wcursor.setDate(wcursor.getDate() - 7);
     }
 
     const weekStart = new Date();
@@ -3824,15 +3846,19 @@ class Component extends DCLogic {
 
   async fetchCuratedExercises() {
     await waitForSupabase();
-    const { data } = await getSupabase().from('exercise_catalog').select('name, category, muscle_groups, equipment').order('name');
+    let res = await getSupabase().from('exercise_catalog').select('name, category, muscle_groups, equipment, video_url').order('name');
+    if (res.error) res = await getSupabase().from('exercise_catalog').select('name, category, muscle_groups, equipment').order('name');
+    const data = res.data;
     if (!data || !data.length) return;
     const grouped = {};
+    const videoByName = {};
     data.forEach(ex => {
       const cat = ex.category;
       if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push({ name: ex.name, subtitle: ex.muscle_groups || '', setsReps: '3 × 12' });
+      if (ex.video_url) videoByName[ex.name.toLowerCase().trim()] = ex.video_url;
     });
-    this.setState({ curatedExercises: grouped });
+    this.setState({ curatedExercises: grouped, exerciseVideos: videoByName });
   }
 
   async fetchProgressPhotos() {
@@ -5631,6 +5657,7 @@ class Component extends DCLogic {
 
       // Estadísticas reales (workout_logs)
       statStreak: this.state.stats.streak,
+      statStreakUnit: this.state.stats.streak === 1 ? 'semana' : 'semanas',
       statTotalWorkouts: this.state.stats.totalWorkouts,
       statTotalHours: this.state.stats.totalHours,
       statTotalHoursUnit: this.state.stats.totalHoursUnit || 'h',
@@ -6661,9 +6688,20 @@ class Component extends DCLogic {
           const pv = _prev(_i);
           out2['ex' + (_i + 1) + 'Prev'] = pv;
           out2['ex' + (_i + 1) + 'PrevStyle'] = pv ? { fontSize: '11px', fontWeight: '700', color: '#F97316', marginTop: '2px' } : { display: 'none' };
+          // Video de referencia del coach/admin para este ejercicio (si existe)
+          const _vids = this.state.exerciseVideos || {};
+          const _vurl = ((exList[_i] || {}).name || '').toLowerCase().trim();
+          const _hasVideo = !!_vids[_vurl];
+          out2['exVideo' + (_i + 1) + 'Style'] = {
+            width: '30px', height: '30px', borderRadius: '50%', border: 'none', flexShrink: 0,
+            background: '#FFF7ED', display: _hasVideo ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          };
+          out2['openExVideo' + (_i + 1)] = _hasVideo ? (() => this.setState({ exVideoOpen: _vids[_vurl] })) : (() => {});
         }
         return out2;
       })()),
+      exVideoPanelStyle: { display: this.state.exVideoOpen ? 'flex' : 'none', position: 'absolute', inset: 0, zIndex: 270, background: 'rgba(0,0,0,0.92)', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
+      closeExVideo: () => this.setState({ exVideoOpen: null }),
       cameraErrorStyle: { display: this.state.cameraError ? 'block' : 'none', color: '#FCA5A5', fontSize: '13px', textAlign: 'center', padding: '12px' },
       cameraErrorText: this.state.cameraError,
       recordBtnLabel: this.state.isRecording ? 'Detener grabación' : 'Grabar',

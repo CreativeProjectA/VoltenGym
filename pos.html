@@ -293,6 +293,7 @@
     <div class="nav-sep" id="sep-analisis">Análisis</div>
     <button class="nav-item" data-nav="reports" id="nav-reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Reportes</button>
     <button class="nav-item" data-nav="staff" id="nav-staff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87"/></svg>Personal</button>
+    <button class="nav-item" data-nav="exercises" id="nav-exercises"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Ejercicios</button>
     <div class="side-foot">
       <div class="shift-chip" id="shift-chip">
         <div class="t">Efectivo en caja</div>
@@ -510,7 +511,7 @@ const Pos={
     if(prof&&prof.avatar_url)$('su-av').innerHTML='<img src="'+esc(prof.avatar_url)+'" alt="">';
     else $('su-av').textContent=(this.profileName[0]||'A').toUpperCase();
     // permisos de navegación
-    if(this.role!=='admin')$('nav-staff').classList.add('hidden');
+    if(this.role!=='admin'){$('nav-staff').classList.add('hidden');$('nav-exercises').classList.add('hidden');}
     // Análisis/Reportes: SOLO admin y contador (cajeras y encargados ven inicio y gestión)
     if(!['admin','contador'].includes(this.role)){$('nav-reports').classList.add('hidden');$('sep-analisis').classList.add('hidden');}
     if(this.role==='contador'){
@@ -2874,6 +2875,61 @@ const Pos={
 
   /* ═══════ PERSONAL ═══════ */
   staffBranches:[],
+  /* ═══════ EJERCICIOS (biblioteca global con video) ═══════ */
+  exCat:[],exCatQ:'',
+  view_exercises(){
+    if(this.role!=='admin')return '<div class="panel"><div class="stub"><div class="st">Solo el administrador</div></div></div>';
+    return `
+    <div class="topbar">
+      <div><h1>Ejercicios</h1><div class="sub">Video de referencia — lo ven todos los clientes en su rutina</div></div>
+      <input class="inp" style="width:260px" placeholder="Buscar ejercicio..." oninput="Pos.exCatQ=this.value;Pos.renderExCat()">
+    </div>
+    <div class="panel"><div id="ex-cat-list">Cargando...</div></div>`;
+  },
+  async after_exercises(){
+    if(this.role!=='admin')return;
+    try{
+      const {data}=await sb.from('exercise_catalog').select('id,name,category,muscle_groups,video_url').order('name');
+      this.exCat=data||[];
+    }catch(e){}
+    this.renderExCat();
+  },
+  renderExCat(){
+    const el=$('ex-cat-list');if(!el)return;
+    const q=(this.exCatQ||'').toLowerCase();
+    const list=q?this.exCat.filter(x=>(x.name||'').toLowerCase().includes(q)):this.exCat;
+    el.innerHTML=list.length?`<table><thead><tr><th>Ejercicio</th><th>Categoría</th><th>Video</th><th></th></tr></thead><tbody>${
+      list.map(x=>`<tr><td style="font-weight:700">${esc(x.name)}</td><td>${esc(x.muscle_groups||x.category||'—')}</td>
+        <td>${x.video_url?'<span class="tag tag-green">Con video</span>':'<span class="tag tag-gray">Sin video</span>'}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <input type="file" accept="video/*" id="exvid-${x.id}" style="display:none" onchange="Pos.uploadExVideo('${x.id}')">
+          <button class="btn-xs btn" style="background:var(--gray)" onclick="document.getElementById('exvid-${x.id}').click()">${x.video_url?'Reemplazar':'+ Subir video'}</button>
+          ${x.video_url?`<button class="btn-xs btn btn-ghost" onclick="Pos.removeExVideo('${x.id}')">Quitar</button>`:''}
+        </td></tr>`).join('')
+    }</tbody></table>`:'<div class="stub"><div class="st">Sin ejercicios</div><p>El catálogo se siembra desde Supabase (exercise_catalog).</p></div>';
+  },
+  async uploadExVideo(id){
+    const inp=$('exvid-'+id);const f=inp&&inp.files[0];if(!f)return;
+    if(!navigator.onLine){toast('Para subir video necesitas internet.',true);return;}
+    toast('Subiendo video...');
+    const ext=(f.name.split('.').pop()||'mp4').toLowerCase();
+    const path='exercises/'+id+'.'+ext;
+    const {error:upErr}=await sb.storage.from('avatars').upload(path,f,{upsert:true});
+    if(upErr){toast(/bucket|not found/i.test(upErr.message||'')?'Corre pos_migration3.sql (bucket avatars).':'Error: '+upErr.message,true);return;}
+    const {data:pub}=sb.storage.from('avatars').getPublicUrl(path);
+    const video_url=pub&&pub.publicUrl;
+    const r=await Q.update('exercise_catalog',{id},{video_url});
+    if(r.error){toast(/video_url/i.test(r.error.message||'')?'Corre pos_migration8.sql primero.':'Error: '+r.error.message,true);return;}
+    const ex=this.exCat.find(x=>x.id===id);if(ex)ex.video_url=video_url;
+    toast('Video guardado ✓ — ya lo ven los clientes en su rutina');this.renderExCat();
+  },
+  async removeExVideo(id){
+    const r=await Q.update('exercise_catalog',{id},{video_url:null});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    const ex=this.exCat.find(x=>x.id===id);if(ex)ex.video_url=null;
+    this.renderExCat();
+  },
+
   view_staff(){
     if(this.role!=='admin')return '<div class="panel"><div class="stub"><div class="st">Solo el administrador</div></div></div>';
     return `
