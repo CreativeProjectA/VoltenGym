@@ -661,6 +661,18 @@ const Pos={
       +'\nContado: '+money(counted)
       +'\nDiferencia: '+money(counted-expected);
     this._corte=resumen;
+    // SEGURIDAD: el turno YA quedó cerrado en la base arriba (status:'closed').
+    // La sesión se invalida de inmediato aquí mismo — sin esperar a que el
+    // usuario le dé clic a "Terminar". Si cierra el modal con la tachita (o
+    // cualquier otra forma), ya no puede seguir vendiendo con este turno:
+    // el candado real es que this.shift deja de existir y checkShiftGate()
+    // vuelve a pedir abrir turno.
+    this.shift=null;
+    cset('shift_'+(this.branch?this.branch.id:null),null);
+    // La pantalla de fondo YA vuelve a "Iniciar turno" antes de abrir el modal
+    // del corte — así, cierres el modal como lo cierres (tachita o Terminar),
+    // detrás ya no hay acceso al POS, solo el gate de turno.
+    await this.checkShiftGate();
     // El corte queda GUARDADO en cash_shifts (fondo, esperado, contado, diferencia,
     // hora de apertura/cierre). El admin/contador lo ve en Reportes → Historial de turnos.
     openModal(`
@@ -669,7 +681,7 @@ const Pos={
       <pre style="background:var(--gray);border-radius:16px;padding:18px;font-size:13px;font-weight:600;line-height:1.7;white-space:pre-wrap;font-family:inherit;">${esc(resumen)}</pre>
       <div style="display:flex;gap:10px;margin-top:18px;">
         <button class="btn btn-ghost" style="flex:1" onclick="Pos.copyCorte()">Copiar corte</button>
-        <button class="btn btn-primary" style="flex:1" onclick="closeModal();Pos.shift=null;Pos.checkShiftGate();">Terminar</button>
+        <button class="btn btn-primary" style="flex:1" onclick="closeModal();Pos.checkShiftGate();">Terminar</button>
       </div>
     `);
   },
@@ -2430,6 +2442,50 @@ const Pos={
   },
 
   /* ═══════ REPORTES ═══════ */
+  setChartMode(mode){
+    // Instantáneo: repinta con los datos ya cargados, sin volver a pedir a la red.
+    this.repChart=mode;
+    const bb=$('ct-bars'),bd=$('ct-donut');
+    if(bb)bb.className=mode==='bars'?'on':'';
+    if(bd)bd.className=mode==='donut'?'on':'';
+    this.paintMiniCharts();
+  },
+  // Un color de vida distinto por métrica (no todo naranja) — barras Y dona lo usan.
+  MINI_COLORS:{total:'#3B82F6',count:'#8B5CF6',subs:'#22C55E',visits:'#F97316',avg:'#06B6D4',movin:'#22C55E',movout:'#EF4444',net:'#111111'},
+  paintMiniCharts(){
+    if(!this._miniData)return;
+    Object.keys(this._miniData).forEach(k=>this.paintMini('mc-'+k,this._miniData[k],this.MINI_COLORS[k]||'#3B82F6'));
+  },
+  paintMini(id,vals,color){
+    const el=$(id);if(!el)return;
+    const mode=this.repChart||'bars';
+    if(!vals.some(v=>v>0)){el.innerHTML='<div style="font-size:11px;color:#D1D5DB;font-weight:600;padding-top:16px">sin movimiento</div>';return;}
+    if(mode==='bars'){
+      const mx2=Math.max(...vals);const bw=100/vals.length;
+      el.innerHTML='<svg viewBox="0 0 100 46" preserveAspectRatio="none">'+vals.map((v,i)=>{
+        const h=v>0?Math.max(3,v/mx2*40):1.5;
+        return '<rect x="'+(i*bw+bw*0.15).toFixed(1)+'" y="'+(44-h).toFixed(1)+'" width="'+(bw*0.7).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1.5" fill="'+(v>0?color:'#EFEFEF')+'"/>';
+      }).join('')+'</svg>';
+    }else{
+      // círculo: dona con el reparto del período en 4 tramos, en tonos de la métrica
+      const q=4,qs=Array(q).fill(0),per=Math.ceil(vals.length/q);
+      vals.forEach((v,i)=>{qs[Math.min(q-1,Math.floor(i/per))]+=v;});
+      const tot2=qs.reduce((a,b)=>a+b,0)||1;
+      const shades=this.shadesOf(color);
+      let off=0;
+      el.innerHTML='<svg viewBox="0 0 46 46"><g transform="rotate(-90 23 23)">'+qs.map((v,i)=>{
+        const frac=v/tot2,C=2*Math.PI*17;
+        const seg='<circle cx="23" cy="23" r="17" fill="none" stroke="'+shades[i]+'" stroke-width="7" stroke-dasharray="'+(frac*C).toFixed(1)+' '+C.toFixed(1)+'" stroke-dashoffset="'+(-off*C).toFixed(1)+'"/>';
+        off+=frac;return frac>0?seg:'';
+      }).join('')+'</g></svg>';
+    }
+  },
+  // 4 tonos del mismo color (más claro a más oscuro) para que la dona se lea con vida sin ser arcoíris
+  shadesOf(hex){
+    const n=parseInt(hex.slice(1),16),r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+    const mix=(t)=>{const rr=Math.round(r+(255-r)*t),gg=Math.round(g+(255-g)*t),bb2=Math.round(b+(255-b)*t);return '#'+[rr,gg,bb2].map(x=>x.toString(16).padStart(2,'0')).join('');};
+    return [hex,mix(0.3),mix(0.55),mix(0.8)];
+  },
   view_reports(){
     return `
     <div class="topbar">
@@ -2441,6 +2497,7 @@ const Pos={
           <button class="range-pill ${this.reportRange==='7d'?'on':''}" onclick="Pos.reportRange='7d';Pos.go('reports')">7 DÍAS</button>
           <button class="range-pill ${this.reportRange==='30d'?'on':''}" onclick="Pos.reportRange='30d';Pos.go('reports')">30 DÍAS</button>
         </div>
+        <span class="chart-toggle"><button id="ct-bars" class="${(this.repChart||'bars')==='bars'?'on':''}" onclick="Pos.setChartMode('bars')">▊ Barras</button><button id="ct-donut" class="${this.repChart==='donut'?'on':''}" onclick="Pos.setChartMode('donut')">◔ Círculo</button></span>
       </div>
     </div>
     <div class="cards">
@@ -2457,9 +2514,7 @@ const Pos={
     </div>
     <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;">
       <div class="panel"><h2>Ingresos por día</h2><div class="psub" id="r-range-lbl"></div><div id="r-bars"></div></div>
-      <div class="panel"><h2>Métodos de pago</h2><div class="psub">Distribución por tipo</div><div id="r-donut"></div>
-        <div style="margin-top:14px"><span style="font-size:12px;color:var(--muted);font-weight:600;margin-right:10px">Gráficas de tarjetas:</span><span class="chart-toggle"><button id="ct-bars" class="${(this.repChart||'bars')==='bars'?'on':''}" onclick="Pos.repChart='bars';Pos.go('reports')">Barras</button><button id="ct-donut" class="${this.repChart==='donut'?'on':''}" onclick="Pos.repChart='donut';Pos.go('reports')">Círculo</button></span></div>
-      </div>
+      <div class="panel"><h2>Métodos de pago</h2><div class="psub">Distribución por tipo</div><div id="r-donut"></div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
       <div class="panel"><h2>Asistencia por hora</h2><div class="psub">Para conocer tus horas pico</div><div id="r-hours"></div></div>
@@ -2524,32 +2579,8 @@ const Pos={
     this.subs.filter(s2=>s2.start_date>=dISO(from)&&(!bId||s2.branch_id===bId)).forEach(x=>{sSub[bIdx(x.start_date+'T12:00:00')]++;});
     const sAvg=sTot.map((v,i)=>sCnt[i]?v/sCnt[i]:0);
     const sNet=sTot.map((v,i)=>v-sOut[i]);
-    const mini=(id,vals)=>{
-      const el=$(id);if(!el)return;
-      const mode=this.repChart||'bars';
-      if(!vals.some(v=>v>0)){el.innerHTML='<div style="font-size:11px;color:#D1D5DB;font-weight:600;padding-top:16px">sin movimiento</div>';return;}
-      if(mode==='bars'){
-        const mx2=Math.max(...vals);const bw=100/vals.length;
-        el.innerHTML='<svg viewBox="0 0 100 46" preserveAspectRatio="none">'+vals.map((v,i)=>{
-          const h=v>0?Math.max(3,v/mx2*40):1.5;
-          return '<rect x="'+(i*bw+bw*0.15).toFixed(1)+'" y="'+(44-h).toFixed(1)+'" width="'+(bw*0.7).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1.5" fill="'+(v>0?'#F97316':'#EFEFEF')+'"/>';
-        }).join('')+'</svg>';
-      }else{
-        // círculo: dona con el reparto del período en 4 tramos (semanas o cuartos)
-        const q=4,qs=Array(q).fill(0),per=Math.ceil(vals.length/q);
-        vals.forEach((v,i)=>{qs[Math.min(q-1,Math.floor(i/per))]+=v;});
-        const tot2=qs.reduce((a,b)=>a+b,0)||1;
-        const cols=['#F97316','#FDBA74','#111111','#D1D5DB'];
-        let off=0;
-        el.innerHTML='<svg viewBox="0 0 46 46"><g transform="rotate(-90 23 23)">'+qs.map((v,i)=>{
-          const frac=v/tot2,C=2*Math.PI*17;
-          const seg='<circle cx="23" cy="23" r="17" fill="none" stroke="'+cols[i]+'" stroke-width="7" stroke-dasharray="'+(frac*C).toFixed(1)+' '+C.toFixed(1)+'" stroke-dashoffset="'+(-off*C).toFixed(1)+'"/>';
-          off+=frac;return frac>0?seg:'';
-        }).join('')+'</g></svg>';
-      }
-    };
     this._miniData={total:sTot,count:sCnt,subs:sSub,visits:sVis,avg:sAvg,movin:sIn,movout:sOut,net:sNet};
-    Object.keys(this._miniData).forEach(k=>mini('mc-'+k,this._miniData[k]));
+    this.paintMiniCharts();
     const total=S.reduce((a,x)=>a+Number(x.total||0),0);
     const subsN=this.subs.filter(s=>s.start_date>=dISO(from)&&(!bId||s.branch_id===bId)).length;
     $('r-total').textContent=money(total);

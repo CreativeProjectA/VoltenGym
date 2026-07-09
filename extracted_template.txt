@@ -1631,7 +1631,7 @@
                   <span style="font-size:44px;font-weight:800;color:#0A0A0A;letter-spacing:-0.04em;line-height:0.9;">{{ statStreak }}</span>
                   <span style="font-size:13px;font-weight:400;color:#BBBBBB;">días</span>
                 </div>
-                <div style="display:flex;gap:5px;">
+                <div style="display:flex;gap:3px;">
                   <div style="{{ dotLunOuter }}"><div style="{{ dotLun }}"><svg style="{{ dotLunCheckStyle }}" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="3.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div><span style="{{ dotLunLabel }}">L</span></div>
                   <div style="{{ dotMarOuter }}"><div style="{{ dotMar }}"><svg style="{{ dotMarCheckStyle }}" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="3.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div><span style="{{ dotMarLabel }}">M</span></div>
                   <div style="{{ dotMieOuter }}"><div style="{{ dotMie }}"><svg style="{{ dotMieCheckStyle }}" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="3.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div><span style="{{ dotMieLabel }}">Mi</span></div>
@@ -2522,7 +2522,7 @@
               <div style="background:#F2F2F4;border-radius:20px;padding:16px 18px;margin-bottom:12px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
                   <div><div style="font-size:15px;font-weight:600;color:#0A0A0A;">Mi sucursal</div>
-                  <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">La define recepción al registrar tu membresía</div></div>
+                  <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">{{ mySucursalSub }}</div></div>
                   <div style="font-size:13px;font-weight:700;color:#F97316;text-align:right;">{{ memberBranchName }}</div>
                 </div>
               </div>
@@ -3384,6 +3384,19 @@ class Component extends DCLogic {
     await waitForSupabase();
     const sb = getSupabase();
     const coachId = this.state.session.user.id;
+    // La sucursal REAL del coach vive en staff_branches (la asigna el admin
+    // en POS → Personal) — NUNCA en member_profiles.branch_id (eso es de
+    // miembros y quedaba con datos viejos/ajenos, mostrando la sucursal
+    // equivocada en el Perfil del entrenador).
+    try {
+      const { data: sbr } = await sb.from('staff_branches').select('branch_id').eq('staff_id', coachId).limit(1);
+      if (sbr && sbr[0]) {
+        const { data: br } = await sb.from('branches').select('name').eq('id', sbr[0].branch_id).single();
+        this.setState({ coachBranchName: (br && br.name) || 'Sin asignar' });
+      } else {
+        this.setState({ coachBranchName: 'Sin asignar' });
+      }
+    } catch (_) {}
     // Dos FKs a profiles hacían el join ambiguo (error 300) — se desambigua,
     // y si el RLS oculta el perfil del cliente, el nombre llega por el
     // mensaje de presentación (__intro) que el miembro envía al elegir coach.
@@ -4971,12 +4984,15 @@ class Component extends DCLogic {
 
     const weekDots = this.state.stats.weekDots || {};
     const schedDays = this.state.memberScheduledDays || [];
+    // Ancho fijo (28px × 7 + gaps) se salía de la tarjeta y rompía el scroll
+    // horizontal de toda la pantalla de inicio en móvil — ahora es flexible:
+    // cada día ocupa una fracción igual del espacio disponible, nunca desborda.
     const dotOuter = (d) => (schedDays.length === 0 || schedDays.includes(d))
-      ? { display:'flex', flexDirection:'column', alignItems:'center', gap:'7px' }
+      ? { display:'flex', flexDirection:'column', alignItems:'center', gap:'6px', flex:'1 1 0', minWidth:'0' }
       : { display:'none' };
     const dotStyle = (dayKey) => weekDots[dayKey]
-      ? { width:'28px', height:'46px', borderRadius:'7px', background:'#F97316', display:'flex', alignItems:'center', justifyContent:'center' }
-      : { width:'28px', height:'46px', borderRadius:'7px', background:'#EBEBEB', display:'flex', alignItems:'center', justifyContent:'center' };
+      ? { width:'100%', maxWidth:'24px', height:'36px', borderRadius:'6px', background:'#F97316', display:'flex', alignItems:'center', justifyContent:'center' }
+      : { width:'100%', maxWidth:'24px', height:'36px', borderRadius:'6px', background:'#EBEBEB', display:'flex', alignItems:'center', justifyContent:'center' };
     const dotLabel = (dayKey) => ({
       fontSize: '9px', color: weekDots[dayKey] ? '#F97316' : '#CCCCCC',
       textTransform: 'uppercase', fontWeight: '700', textAlign: 'center'
@@ -5790,7 +5806,10 @@ class Component extends DCLogic {
       gymAnnTitle: this.state.gymAnnouncement ? (this.state.gymAnnouncement.title || '') : '',
       gymAnnBody: this.state.gymAnnouncement ? (this.state.gymAnnouncement.body || '') : '',
       gymAnnImgStyle: (this.state.gymAnnouncement && this.state.gymAnnouncement.image_url) ? ('height:150px;border-radius:14px;background-size:cover;background-position:center;margin-bottom:14px;background-image:url("' + this.state.gymAnnouncement.image_url + '")') : 'display:none',
-      memberBranchName: (() => { const b = (this.state.branchesList || []).find(x => x.id === this.state.memberBranchId); return b ? b.name : 'Elegir sucursal'; })(),
+      memberBranchName: userType === 'trainer'
+        ? (this.state.coachBranchName || 'Sin asignar')
+        : (() => { const b = (this.state.branchesList || []).find(x => x.id === this.state.memberBranchId); return b ? b.name : 'Elegir sucursal'; })(),
+      mySucursalSub: userType === 'trainer' ? 'La asignó el administrador al crear tu cuenta' : 'La define recepción al registrar tu membresía',
       cycleMemberBranch: () => this.cycleMemberBranch(),
       ...((() => {
         const bl = this.state.branchesList || [];
