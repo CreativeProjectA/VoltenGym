@@ -2060,7 +2060,15 @@ const Pos={
     try{
       let q2=sb.from('checkins').select('*').gte('created_at',todayISO()+'T00:00:00').eq('granted',true).is('checked_out_at',null).order('created_at',{ascending:false});
       if(bId)q2=q2.eq('branch_id',bId);
-      const {data:d2}=await q2;this.accInside=d2||[];
+      const {data:d2}=await q2;
+      // Sin lector de salida (el torniquete deja salir libre, sin escanear),
+      // el sistema NO sabe la hora exacta en que alguien se fue. Para que
+      // "adentro ahora" no acumule gente que ya se fue hace rato, se asume
+      // que después de 3 horas sin actividad ya no está — es un estimado,
+      // no un dato real (por eso NO se escribe checked_out_at, solo se
+      // oculta de esta lista en vivo; en el corte del día sí se cierra).
+      const STALE_MS=3*60*60*1000;
+      this.accInside=(d2||[]).filter(ci=>(Date.now()-new Date(ci.created_at).getTime())<STALE_MS);
     }catch(e){this.accInside=[];}
     this.renderAccess();
   },
