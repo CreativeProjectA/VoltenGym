@@ -795,8 +795,8 @@
             <div style="font-size:12px;font-weight:700;color:#F97316;text-align:center;">{{ coach3Price }}</div>
           </div>
         </div>
-        <button onclick="{{ confirmCoachFromProfile }}" style="{{ confirmCoachPickBtnStyle }}">Confirmar coach</button>
-        <p style="font-size:12px;color:#B0B0B0;text-align:center;margin-top:12px;">El pago del coach se hace directo en la recepción del gym.</p>
+        <button onclick="{{ confirmCoachFromProfile }}" style="{{ confirmCoachPickBtnStyle }}">Solicitar — pagar en recepción</button>
+        <button onclick="{{ payCoachCard }}" style="{{ payCoachCardStyle }}">💳 Pagar 1 mes con tarjeta</button>
       </div>
     </div>
 
@@ -867,14 +867,14 @@
           <div onclick="{{ closePlanReq }}" class="vg-press" style="width:32px;height:32px;border-radius:50%;background:#F5F5F5;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;color:#9CA3AF;">✕</div>
         </div>
         <p style="font-size:12.5px;color:#9CA3AF;margin-bottom:16px;line-height:1.5;">{{ planReqSub }}</p>
-        <div onclick="{{ reqPlan0 }}" class="vg-press" style="{{ reqPlan0Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan0Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan0Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;">{{ reqPlan0Price }}</div></div>
-        <div onclick="{{ reqPlan1 }}" class="vg-press" style="{{ reqPlan1Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan1Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan1Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;">{{ reqPlan1Price }}</div></div>
-        <div onclick="{{ reqPlan2 }}" class="vg-press" style="{{ reqPlan2Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan2Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan2Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;">{{ reqPlan2Price }}</div></div>
-        <div onclick="{{ reqPlan3 }}" class="vg-press" style="{{ reqPlan3Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan3Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan3Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;">{{ reqPlan3Price }}</div></div>
-        <div onclick="{{ reqPlan4 }}" class="vg-press" style="{{ reqPlan4Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan4Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan4Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;">{{ reqPlan4Price }}</div></div>
-        <div onclick="{{ reqPlan5 }}" class="vg-press" style="{{ reqPlan5Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan5Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan5Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;">{{ reqPlan5Price }}</div></div>
-        <div onclick="{{ reqPlan6 }}" class="vg-press" style="{{ reqPlan6Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan6Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan6Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;">{{ reqPlan6Price }}</div></div>
-        <div onclick="{{ reqPlan7 }}" class="vg-press" style="{{ reqPlan7Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan7Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan7Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;">{{ reqPlan7Price }}</div></div>
+        <div onclick="{{ reqPlan0 }}" class="vg-press" style="{{ reqPlan0Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan0Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan0Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;margin-right:8px;">{{ reqPlan0Price }}</div><button onclick="{{ payCard0 }}" style="{{ payCard0Style }}">💳 Tarjeta</button></div>
+        <div onclick="{{ reqPlan1 }}" class="vg-press" style="{{ reqPlan1Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan1Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan1Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;margin-right:8px;">{{ reqPlan1Price }}</div><button onclick="{{ payCard1 }}" style="{{ payCard1Style }}">💳 Tarjeta</button></div>
+        <div onclick="{{ reqPlan2 }}" class="vg-press" style="{{ reqPlan2Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan2Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan2Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;margin-right:8px;">{{ reqPlan2Price }}</div><button onclick="{{ payCard2 }}" style="{{ payCard2Style }}">💳 Tarjeta</button></div>
+        <div onclick="{{ reqPlan3 }}" class="vg-press" style="{{ reqPlan3Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan3Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan3Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;margin-right:8px;">{{ reqPlan3Price }}</div><button onclick="{{ payCard3 }}" style="{{ payCard3Style }}">💳 Tarjeta</button></div>
+        <div onclick="{{ reqPlan4 }}" class="vg-press" style="{{ reqPlan4Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan4Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan4Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;margin-right:8px;">{{ reqPlan4Price }}</div><button onclick="{{ payCard4 }}" style="{{ payCard4Style }}">💳 Tarjeta</button></div>
+        <div onclick="{{ reqPlan5 }}" class="vg-press" style="{{ reqPlan5Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan5Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan5Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;margin-right:8px;">{{ reqPlan5Price }}</div><button onclick="{{ payCard5 }}" style="{{ payCard5Style }}">💳 Tarjeta</button></div>
+        <div onclick="{{ reqPlan6 }}" class="vg-press" style="{{ reqPlan6Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan6Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan6Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;margin-right:8px;">{{ reqPlan6Price }}</div><button onclick="{{ payCard6 }}" style="{{ payCard6Style }}">💳 Tarjeta</button></div>
+        <div onclick="{{ reqPlan7 }}" class="vg-press" style="{{ reqPlan7Style }}"><div style="flex:1;"><div style="font-size:15px;font-weight:800;color:#0A0A0A;">{{ reqPlan7Name }}</div><div style="font-size:12px;color:#9CA3AF;">{{ reqPlan7Days }}</div></div><div style="font-size:16px;font-weight:800;color:#F97316;margin-right:8px;">{{ reqPlan7Price }}</div><button onclick="{{ payCard7 }}" style="{{ payCard7Style }}">💳 Tarjeta</button></div>
       </div>
     </div>
 
@@ -5046,6 +5046,22 @@ class Component extends DCLogic {
     } finally { this._reqBusy = false; }
   }
 
+  // Pago con tarjeta desde la app (Stripe). Modo TEST mientras el dueño no
+  // active su cuenta real — funciona igual, el dinero es ficticio.
+  async payWithCard(kind, item) {
+    if (!this.state.memberBranchId) { this.showToast('Primero necesitas tu sucursal — pásate a recepción.'); return; }
+    this.showToast('Abriendo pago seguro...');
+    try {
+      await waitForSupabase();
+      const body = kind === 'plan'
+        ? { kind: 'plan', plan_id: item.id, branch_id: this.state.memberBranchId }
+        : { kind: 'coach', coach_id: item.id, coach_days: item.days, branch_id: this.state.memberBranchId };
+      const { data, error } = await getSupabase().functions.invoke('stripe-checkout', { body });
+      if (error || !data || !data.url) { this.showToast('No se pudo abrir el pago: ' + (data?.error || error?.message || 'error')); return; }
+      window.location.href = data.url;
+    } catch (e) { this.showToast('No se pudo conectar con el pago.'); }
+  }
+
   toggleFav(id) {
     this.setState(s => ({
       favPrograms: s.favPrograms.includes(id)
@@ -5989,6 +6005,8 @@ class Component extends DCLogic {
       confirmCoachFromProfile: () => this.saveCoachFromProfile(),
       removeCoach: () => this.removeCoach(),
       confirmCoachPickBtnStyle: { display: (coachList.length && selectedCoachId) ? 'block' : 'none', background: '#0A0A0A', color: '#FFFFFF', border: 'none', padding: '16px 0', borderRadius: '14px', fontSize: '15px', fontWeight: '700', cursor: 'pointer', width: '100%' },
+      payCoachCardStyle: { display: (coachList.length && selectedCoachId) ? 'block' : 'none', background: '#F97316', color: '#FFFFFF', border: 'none', padding: '16px 0', borderRadius: '14px', fontSize: '15px', fontWeight: '700', cursor: 'pointer', width: '100%', marginTop: '10px' },
+      payCoachCard: () => { const coach = coachList.find(c => c.id === selectedCoachId); if (coach) this.payWithCard('coach', { id: coach.id, days: 30 }); },
       noCoachesAvailStyle: { display: coachList.length === 0 ? 'block' : 'none' },
       memberCoachTipStyle: this.state.memberCoachTip ? { padding: '14px 16px 0' } : { display: 'none' },
       memberCoachTipText: this.state.memberCoachTip || '',
@@ -6035,6 +6053,8 @@ class Component extends DCLogic {
           out['reqPlan' + i + 'Price'] = p ? ('$' + p.price) : '';
           out['reqPlan' + i + 'Style'] = p ? { display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', borderRadius: '14px', background: '#F7F7F8', marginBottom: '8px', cursor: 'pointer' } : { display: 'none' };
           out['reqPlan' + i] = p ? (() => this.requestPlan(p)) : (() => {});
+          out['payCard' + i + 'Style'] = p ? { background: '#0A0A0A', color: '#FFFFFF', border: 'none', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flexShrink: 0 } : { display: 'none' };
+          out['payCard' + i] = p ? ((ev) => { ev.stopPropagation(); this.payWithCard('plan', p); }) : (() => {});
         }
         return out;
       })()),
