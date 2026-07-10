@@ -292,6 +292,7 @@
     <button class="nav-item" data-nav="promos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Promociones</button>
     <div class="nav-sep" id="sep-analisis">Análisis</div>
     <button class="nav-item" data-nav="reports" id="nav-reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Reportes</button>
+    <button class="nav-item" data-nav="analytics" id="nav-analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-2.6-2.6L7 14.5"/></svg>Analítica</button>
     <button class="nav-item" data-nav="staff" id="nav-staff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87"/></svg>Personal</button>
     <button class="nav-item" data-nav="exercises" id="nav-exercises"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Ejercicios</button>
     <div class="side-foot">
@@ -519,7 +520,7 @@ const Pos={
     // permisos de navegación
     if(this.role!=='admin'){$('nav-staff').classList.add('hidden');$('nav-exercises').classList.add('hidden');}
     // Análisis/Reportes: SOLO admin y contador (cajeras y encargados ven inicio y gestión)
-    if(!['admin','contador'].includes(this.role)){$('nav-reports').classList.add('hidden');$('sep-analisis').classList.add('hidden');}
+    if(!['admin','contador'].includes(this.role)){$('nav-reports').classList.add('hidden');$('nav-analytics').classList.add('hidden');$('sep-analisis').classList.add('hidden');}
     if(this.role==='contador'){
       // el contador SOLO ve reportes (cuenta para los contadores del dueño)
       document.querySelectorAll('.nav-item').forEach(b=>{if(b.dataset.nav!=='reports')b.classList.add('hidden');});
@@ -2798,6 +2799,154 @@ const Pos={
     const r=await Q.update('announcements',{id},{active:!a.active});
     if(r.error){toast('Error: '+r.error.message,true);return;}
     a.active=!a.active;cset('anns',this.anns);this.go('promos');
+  },
+
+  /* ═══════ ANALÍTICA (KPIs de negocio) ═══════ */
+  view_analytics(){
+    return `
+    <div class="topbar">
+      <div><h1>Analítica</h1><div class="sub">Visión completa del negocio — clientes, ingresos y retención</div></div>
+      ${this.branchSelector()}
+    </div>
+    <div class="cards" id="an-kpis">
+      <div class="card"><div class="lbl">Visitas promedio / cliente</div><div class="val" id="an-avgvisits">—</div><div class="foot">últimos 30 días</div></div>
+      <div class="card"><div class="lbl">Ingreso promedio / cliente</div><div class="val" id="an-arpu">—</div><div class="foot">últimos 30 días (ARPU)</div></div>
+      <div class="card"><div class="lbl">Clientes con membresía activa</div><div class="val" id="an-activeclients">—</div><div class="foot" id="an-totalclients"></div></div>
+      <div class="card"><div class="lbl">Sin venir en 30+ días</div><div class="val" id="an-atrisk">—</div><div class="foot">con membresía vigente aún</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;">
+      <div class="panel"><h2>Clientes nuevos por mes</h2><div class="psub">Últimos 12 meses</div><div id="an-newclients"></div></div>
+      <div class="panel"><h2>Género</h2><div class="psub">Clientes con dato capturado</div><div id="an-gender"></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+      <div class="panel"><h2>Edad</h2><div class="psub">Distribución por rango</div><div id="an-age"></div></div>
+      <div class="panel"><h2>Método de pago</h2><div class="psub">Últimos 30 días, incluye Stripe</div><div id="an-paysource"></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;">
+      <div class="panel"><h2>Ingresos por mes</h2><div class="psub">Últimos 12 meses</div><div id="an-revmonth"></div></div>
+      <div class="panel"><h2>Ingresos por día</h2><div class="psub">Últimos 30 días</div><div id="an-revday"></div></div>
+    </div>
+    <div class="panel">
+      <h2>Recuperación — clientes sin venir</h2><div class="psub">Por días de atraso, sexo y edad — para campañas de reactivación</div>
+      <div class="range-pills" style="margin-bottom:14px;display:inline-flex" id="an-recover-tabs">
+        <button class="range-pill on" onclick="Pos.anRecoverBucket=0;Pos.renderAnRecover()">0–7 días</button>
+        <button class="range-pill" onclick="Pos.anRecoverBucket=1;Pos.renderAnRecover()">8–14 días</button>
+        <button class="range-pill" onclick="Pos.anRecoverBucket=2;Pos.renderAnRecover()">15–30 días</button>
+        <button class="range-pill" onclick="Pos.anRecoverBucket=3;Pos.renderAnRecover()">31–60 días</button>
+        <button class="range-pill" onclick="Pos.anRecoverBucket=4;Pos.renderAnRecover()">60+ días</button>
+      </div>
+      <div id="an-recover-list">Cargando...</div>
+    </div>`;
+  },
+  anRecoverBucket:0,
+  async after_analytics(){
+    const bId=this.branch?this.branch.id:null;
+    const now=new Date();
+    // ── Clientes: edad, género, alta, actividad ──
+    let custs=this.customers;
+    if(bId)custs=custs.filter(c=>c.branch_id===bId);
+    const activeSubs=custs.filter(c=>{const s=this.bestSub(c);return s&&daysLeft(s.end_date)>=0;});
+    $('an-activeclients').textContent=activeSubs.length;
+    $('an-totalclients').textContent=custs.length+' clientes totales en la ficha';
+    // género
+    const genders={M:0,F:0,'—':0};
+    custs.forEach(c=>{genders[c.gender==='M'?'M':(c.gender==='F'?'F':'—')]++;});
+    const gEl=$('an-gender');
+    const gTot=custs.length||1;
+    gEl.innerHTML=`<div style="display:flex;flex-direction:column;gap:10px;padding-top:6px;">
+      <div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:5px"><span>Hombres</span><span>${genders.M} · ${Math.round(genders.M/gTot*100)}%</span></div><div style="height:10px;background:#EFEFEF;border-radius:100px;overflow:hidden"><div style="height:100%;width:${Math.round(genders.M/gTot*100)}%;background:#3B82F6;border-radius:100px"></div></div></div>
+      <div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:5px"><span>Mujeres</span><span>${genders.F} · ${Math.round(genders.F/gTot*100)}%</span></div><div style="height:10px;background:#EFEFEF;border-radius:100px;overflow:hidden"><div style="height:100%;width:${Math.round(genders.F/gTot*100)}%;background:#EC4899;border-radius:100px"></div></div></div>
+      ${genders['—']?`<div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:5px;color:var(--muted)"><span>Sin dato</span><span>${genders['—']} · ${Math.round(genders['—']/gTot*100)}%</span></div><div style="height:10px;background:#EFEFEF;border-radius:100px;overflow:hidden"><div style="height:100%;width:${Math.round(genders['—']/gTot*100)}%;background:#D1D5DB;border-radius:100px"></div></div></div>`:''}
+    </div>`;
+    // edad (buckets)
+    const ageBuckets=[[0,17,'<18'],[18,25,'18-25'],[26,35,'26-35'],[36,45,'36-45'],[46,55,'46-55'],[56,200,'56+']];
+    const ageCounts=ageBuckets.map(()=>0);let noAge=0;
+    custs.forEach(c=>{
+      if(!c.birth_date){noAge++;return;}
+      const age=Math.floor((now-new Date(c.birth_date+'T12:00:00'))/(365.25*864e5));
+      const i=ageBuckets.findIndex(b=>age>=b[0]&&age<=b[1]);
+      if(i>=0)ageCounts[i]++;else noAge++;
+    });
+    const aMax=Math.max(1,...ageCounts);
+    $('an-age').innerHTML='<div style="display:flex;align-items:flex-end;gap:8px;height:120px;margin-bottom:8px;">'+
+      ageBuckets.map((b,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;" title="${ageCounts[i]} clientes">
+        <div style="width:100%;background:${ageCounts[i]?'#8B5CF6':'#EFEFEF'};border-radius:4px;height:${Math.max(3,Math.round(ageCounts[i]/aMax*90))}px;"></div>
+        <div style="font-size:9px;font-weight:700;color:var(--muted)">${b[2]}</div>
+      </div>`).join('')+'</div>'+(noAge?`<div style="font-size:11px;color:var(--muted);font-weight:500">${noAge} sin fecha de nacimiento capturada</div>`:'');
+    // clientes nuevos por mes (12 meses) — por created_at de la ficha
+    const months=[];for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push(d);}
+    const mLabel=(d)=>d.toLocaleDateString('es-MX',{month:'short'});
+    const newByMonth=months.map(m=>custs.filter(c=>{const cd=new Date(c.created_at);return cd.getFullYear()===m.getFullYear()&&cd.getMonth()===m.getMonth();}).length);
+    const nMax=Math.max(1,...newByMonth);
+    $('an-newclients').innerHTML='<div style="display:flex;align-items:flex-end;gap:4px;height:120px;margin-bottom:8px;">'+
+      months.map((m,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;" title="${newByMonth[i]} clientes nuevos">
+        <div style="width:100%;background:${newByMonth[i]?'#3B82F6':'#EFEFEF'};border-radius:3px;height:${Math.max(3,Math.round(newByMonth[i]/nMax*90))}px;"></div>
+        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:capitalize">${mLabel(m)}</div>
+      </div>`).join('')+'</div>';
+
+    // ── Ventas e ingresos (últimos 12 meses para el mes, últimos 30 días para el resto) ──
+    const from12=new Date(now.getFullYear(),now.getMonth()-11,1);
+    let S12=[];
+    try{let q=sb.from('sales').select('total,payment_method,created_at,customer_id').gte('created_at',from12.toISOString());if(bId)q=q.eq('branch_id',bId);const {data}=await q;S12=data||[];}catch(e){}
+    const revByMonth=months.map(m=>S12.filter(s=>{const sd=new Date(s.created_at);return sd.getFullYear()===m.getFullYear()&&sd.getMonth()===m.getMonth();}).reduce((a,x)=>a+Number(x.total||0),0));
+    const rMax=Math.max(1,...revByMonth);
+    $('an-revmonth').innerHTML='<div style="display:flex;align-items:flex-end;gap:4px;height:130px;margin-bottom:8px;">'+
+      months.map((m,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;" title="${money(revByMonth[i])}">
+        <div style="width:100%;background:${revByMonth[i]?'var(--orange)':'#EFEFEF'};border-radius:3px;height:${Math.max(3,Math.round(revByMonth[i]/rMax*100))}px;"></div>
+        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:capitalize">${mLabel(m)}</div>
+      </div>`).join('')+'</div><div style="font-size:12px;color:var(--muted);font-weight:600">Total 12 meses: '+money(revByMonth.reduce((a,b)=>a+b,0))+'</div>';
+
+    const from30=new Date(now.getTime()-30*864e5);
+    const S30=S12.filter(s=>new Date(s.created_at)>=from30);
+    const days30=[];for(let i=29;i>=0;i--)days30.push(new Date(now.getTime()-i*864e5));
+    const revByDay=days30.map(d=>S30.filter(s=>dISO(new Date(s.created_at))===dISO(d)).reduce((a,x)=>a+Number(x.total||0),0));
+    const rdMax=Math.max(1,...revByDay);
+    $('an-revday').innerHTML='<div style="display:flex;align-items:flex-end;gap:2px;height:130px;">'+
+      revByDay.map(v=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;" title="${money(v)}">
+        <div style="width:100%;background:${v?'var(--orange)':'#EFEFEF'};border-radius:2px;height:${Math.max(2,Math.round(v/rdMax*100))}px;"></div>
+      </div>`).join('')+'</div>';
+
+    // método de pago (30 días) — incluye stripe
+    const paySources={cash:0,card:0,transfer:0,stripe:0};
+    S30.forEach(s=>{if(paySources[s.payment_method]!=null)paySources[s.payment_method]+=Number(s.total||0);});
+    const psTot=Object.values(paySources).reduce((a,b)=>a+b,0)||1;
+    const PS_LABEL={cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia',stripe:'Stripe (app)'};
+    const PS_COLOR={cash:'#8B5CF6',card:'#F97316',transfer:'#22C55E',stripe:'#635BFF'};
+    $('an-paysource').innerHTML='<div style="display:flex;flex-direction:column;gap:10px;padding-top:6px;">'+
+      Object.keys(paySources).map(k=>`<div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:5px"><span>${PS_LABEL[k]}</span><span>${money(paySources[k])} · ${Math.round(paySources[k]/psTot*100)}%</span></div><div style="height:10px;background:#EFEFEF;border-radius:100px;overflow:hidden"><div style="height:100%;width:${Math.round(paySources[k]/psTot*100)}%;background:${PS_COLOR[k]};border-radius:100px"></div></div></div>`).join('')+'</div>';
+
+    // ARPU y visitas promedio (30 días)
+    const custIds30=new Set(S30.map(s=>s.customer_id).filter(Boolean));
+    const arpu=custIds30.size?S30.reduce((a,x)=>a+Number(x.total||0),0)/custIds30.size:0;
+    $('an-arpu').textContent=money(arpu);
+    let CI30=[];
+    try{let q=sb.from('checkins').select('customer_id,created_at').eq('granted',true).gte('created_at',from30.toISOString());if(bId)q=q.eq('branch_id',bId);const {data}=await q;CI30=data||[];}catch(e){}
+    const visitsByCust={};CI30.forEach(c=>{if(c.customer_id)visitsByCust[c.customer_id]=(visitsByCust[c.customer_id]||0)+1;});
+    const visitCustIds=Object.keys(visitsByCust);
+    const avgVisits=visitCustIds.length?(CI30.length/visitCustIds.length).toFixed(1):'0';
+    $('an-avgvisits').textContent=avgVisits;
+
+    // sin venir 30+ días (con membresía vigente)
+    const lastVisit={};CI30.forEach(c=>{if(!lastVisit[c.customer_id]||c.created_at>lastVisit[c.customer_id])lastVisit[c.customer_id]=c.created_at;});
+    const atRisk=activeSubs.filter(c=>!lastVisit[c.id]);
+    $('an-atrisk').textContent=atRisk.length;
+
+    this._anCustoms=custs; // para el bloque de recuperación
+    this.renderAnRecover();
+  },
+  renderAnRecover(){
+    const el=$('an-recover-list');if(!el)return;
+    document.querySelectorAll('#an-recover-tabs .range-pill').forEach((b,i)=>b.classList.toggle('on',i===this.anRecoverBucket));
+    const ranges=[[0,7],[8,14],[15,30],[31,60],[61,99999]];
+    const [lo,hi]=ranges[this.anRecoverBucket];
+    const list=(this._anCustoms||[]).map(c=>{const s=this.bestSub(c);if(!s)return null;const d=-daysLeft(s.end_date);return d>=lo&&d<=hi?{c,d}:null;}).filter(Boolean).sort((a,b)=>a.d-b.d);
+    el.innerHTML=list.length?`<table><thead><tr><th>Cliente</th><th>Días de atraso</th><th>Sexo</th><th>Edad</th><th></th></tr></thead><tbody>${
+      list.map(({c,d})=>{
+        const age=c.birth_date?Math.floor((Date.now()-new Date(c.birth_date+'T12:00:00'))/(365.25*864e5)):'—';
+        return `<tr><td style="font-weight:700">${esc(c.full_name)}</td><td><span class="tag ${d>30?'tag-red':'tag-orange'}">${d} días</span></td><td>${c.gender==='M'?'Hombre':(c.gender==='F'?'Mujer':'—')}</td><td>${age}</td>
+        <td>${c.phone?`<a class="btn-xs btn" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(c.phone,'Hola '+(c.full_name||'').split(' ')[0]+', te extrañamos en Volten Gym 🧡 ¿Todo bien? Vuelve esta semana y retoma tu progreso.')}">WhatsApp</a>`:''}</td></tr>`;
+      }).join('')
+    }</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Nadie en este rango.</div>';
   },
 
   /* ═══════ REPORTES ═══════ */
