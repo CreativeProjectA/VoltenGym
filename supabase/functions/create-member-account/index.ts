@@ -22,11 +22,12 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// "VoltenPower" + 4 dígitos al azar — fácil de leer/dictar por WhatsApp,
+// y sigue siendo única por cliente (10,000 combinaciones por intento;
+// si ya existe se reintenta con otra).
 function randomPassword() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  let out = '';
-  for (let i = 0; i < 10; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
+  const n = Math.floor(1000 + Math.random() * 9000);
+  return 'VoltenPower' + n;
 }
 
 Deno.serve(async (req) => {

@@ -333,6 +333,12 @@ const ftime=(d)=>d?new Date(d).toLocaleTimeString('es-MX',{hour:'numeric',minute
 const daysLeft=(end)=>Math.ceil((new Date(end+'T23:59:59')-new Date())/864e5);
 const DOMAINS=['','@volten.pos','@volten.app'];
 const PAY_LABEL={cash:'Efectivo',card:'Tarjeta',transfer:'Transferencia'};
+// Colores con vida por método de pago — efectivo morado, transferencia verde, tarjeta naranja.
+const PAY_COLOR={cash:{bg:'#F3E8FF',fg:'#7E22CE'},card:{bg:'#FFF4EC',fg:'#C2410C'},transfer:{bg:'#DCFCE7',fg:'#15803D'}};
+function payTagHtml(method){
+  const c=PAY_COLOR[method]||{bg:'#F3F4F6',fg:'#6B7280'};
+  return '<span class="tag" style="background:'+c.bg+';color:'+c.fg+'">'+(PAY_LABEL[method]||method||'—')+'</span>';
+}
 const PAY_ICON={
   cash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></svg>',
   card:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>',
@@ -917,7 +923,7 @@ const Pos={
           <div id="d-expiring-list"></div>
         </div>
         <div class="panel">
-          <h2 style="font-size:18px">🎂 Cumpleaños</h2>
+          <h2 style="font-size:18px">Cumpleaños</h2>
           <div class="psub">Hoy y mañana — mándales una felicitación</div>
           <div id="d-birthdays"></div>
         </div>
@@ -955,7 +961,7 @@ const Pos={
     // últimas ventas
     if(t.sales.length){
       $('d-last-sales').innerHTML='<table><thead><tr><th>Cliente</th><th>Total</th><th>Pago</th><th>Hora</th></tr></thead><tbody>'+
-        t.sales.slice(0,6).map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td style="color:#16A34A;font-weight:700">${money(s.total)}</td><td><span class="tag tag-gray">${PAY_LABEL[s.payment_method]||s.payment_method||'—'}</span></td><td>${ftime(s.created_at)}</td></tr>`).join('')+'</tbody></table>';
+        t.sales.slice(0,6).map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td style="color:#16A34A;font-weight:700">${money(s.total)}</td><td>${payTagHtml(s.payment_method)}</td><td>${ftime(s.created_at)}</td></tr>`).join('')+'</tbody></table>';
     }
     // por vencer
     const t7=new Date(Date.now()+7*864e5);
@@ -976,8 +982,8 @@ const Pos={
       const bdays=this.customers.filter(c=>c.birth_date&&(mmdd(new Date(c.birth_date+'T12:00:00'))===todayKey||mmdd(new Date(c.birth_date+'T12:00:00'))===tomKey));
       bEl.innerHTML=bdays.length?bdays.map(c=>{
         const isToday=mmdd(new Date(c.birth_date+'T12:00:00'))===todayKey;
-        const msg='¡Feliz cumpleaños, '+c.full_name.split(' ')[0]+'! 🎉🎂 Todo el equipo de Volten Gym te desea un excelente día. ¡Que este nuevo año esté lleno de logros dentro y fuera del gym!';
-        return `<div class="row-line"><div><div style="font-weight:700;font-size:14px">${esc(c.full_name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${isToday?'🎂 Hoy':'Mañana'}</div></div>
+        const msg='¡Feliz cumpleaños, '+c.full_name.split(' ')[0]+'! Todo el equipo de Volten Gym te desea un excelente día. ¡Que este nuevo año esté lleno de logros dentro y fuera del gym!';
+        return `<div class="row-line"><div><div style="font-weight:700;font-size:14px">${esc(c.full_name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${isToday?'Hoy':'Mañana'}</div></div>
         ${c.phone?`<a class="btn btn-xs" style="background:#FEF3C7;color:#B45309;text-decoration:none" target="_blank" href="${waLink(c.phone,msg)}">WhatsApp</a>`:'<span class="tag tag-gray">sin teléfono</span>'}</div>`;
       }).join('')+'<p style="font-size:11px;color:var(--muted);font-weight:500;margin-top:8px">El mensaje ya va escrito — si quieres mandar también la imagen de felicitación, adjúntala manualmente en el chat de WhatsApp (esa parte no se puede automatizar sin WhatsApp Business API).</p>'
       :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Nadie cumple años hoy ni mañana.</div>';
@@ -1075,13 +1081,18 @@ const Pos={
     const s=this.sale;
     if(s.quick)s.tab='products'; // venta rápida = solo productos (las membresías siempre llevan cliente)
     const who=s.quick?'Venta rápida (sin cliente)':(s.customer?esc(s.customer.full_name):'—');
+    const dayPlan=this.plansForBranch().find(p=>Number(p.duration_days)===1);
     const plansHtml=this.plansForBranch().map(p=>`
-      <button class="prod-card" onclick="Pos.addToCart('plan','${p.id}')" style="position:relative">
+      <button class="prod-card" onclick="Pos.addToCart('plan','${p.id}')">
         <div class="pn">Membresía ${esc(p.name)}</div>
         <div class="pp">${money(p.price)}</div>
         <div class="ps">${p.duration_days} día${p.duration_days===1?'':'s'}${p.is_family?' · familiar':''}</div>
-        ${Number(p.duration_days)===1&&s.customer?`<span onclick="event.stopPropagation();Pos.addToCart('plan','${p.id}',true)" style="position:absolute;top:8px;right:8px;font-size:10px;font-weight:700;color:#16A34A;background:#DCFCE7;padding:3px 8px;border-radius:100px;">Cortesía</span>`:''}
       </button>`).join('')||'<div class="stub"><p>No hay planes en esta sucursal. El admin los crea en Membresías.</p></div>';
+    const courtesyBlock=(dayPlan&&s.customer)?`
+      <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:16px;padding:14px 16px;margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div><div style="font-size:13px;font-weight:700;color:#15803D">Día de cortesía — GRATIS</div><div style="font-size:12px;color:var(--muted);font-weight:500">Solo 1 vez por persona, requiere datos completos</div></div>
+        <button class="btn btn-sm" style="background:#16A34A;color:#FFF" onclick="Pos.addToCart('plan','${dayPlan.id}',true)">Dar cortesía</button>
+      </div>`:'';
     const coachesHtml=this.coachesForBranch().map(p=>{
       const cp=this.coachProfiles.find(x=>x.profile_id===p.id);
       const price=cp&&cp.monthly_price?Number(cp.monthly_price):0;
@@ -1117,6 +1128,7 @@ const Pos={
         </div>
         ${s.tab==='products'?`<div class="search-wrap" style="margin-bottom:14px;max-width:100%"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input class="inp" placeholder="Buscar producto o escanear código..." value="${esc(s.q||'')}" oninput="Pos.sale.q=this.value;Pos.go('sale')"></div>`:''}
         <div class="prod-grid">${s.tab==='plans'?plansHtml:(s.tab==='coaches'?coachesHtml:prodsHtml)}</div>
+        ${s.tab==='plans'?courtesyBlock:''}
         <button class="btn btn-ghost btn-sm" style="margin-top:18px" onclick="Pos.sale.step=1;Pos.go('sale')">← Volver al cliente</button>
       </div>
       ${this.cartPanel(true)}
@@ -1552,10 +1564,7 @@ const Pos={
         <div class="field"><label>Fecha de nacimiento</label><input class="inp" type="date" id="nc-birth"></div>
       </div>
       <div class="field"><label>Dirección <span style="color:var(--muted);font-weight:500">(opcional)</span></label><input class="inp" id="nc-address" placeholder="opcional"></div>
-      <div class="field"><label>¿Ya tiene la app? Teclea su Nº de cuenta (opcional)</label>
-        <input class="inp" id="nc-app-q" placeholder="Nº de cuenta que ve en su app (Perfil → Mi código QR)" oninput="Pos.ncSearchApp(this.value)">
-        <div id="nc-app-res" style="margin-top:8px;font-size:13px;color:var(--muted);font-weight:500">Si no tiene app, déjalo vacío.</div>
-      </div>
+      <p style="font-size:12px;color:var(--muted);font-weight:500;margin:-4px 0 14px">Su cuenta de la app se crea sola en cuanto le cobres su membresía — no hace falta vincularla aquí.</p>
       ${this.families.length?`<div class="field"><label>¿Es parte de una familia? (opcional)</label>
         <select class="inp" id="nc-family"><option value="">No / independiente</option>${this.families.map(f=>`<option value="${f.id}">${esc(f.name||'Familia')}</option>`).join('')}</select></div>`:''}
       <div class="field"><label>Notas</label><input class="inp" id="nc-notes" placeholder="opcional"></div>
@@ -2678,15 +2687,7 @@ const Pos={
   },
 
   /* ═══════ REPORTES ═══════ */
-  setChartMode(mode){
-    // Instantáneo: repinta con los datos ya cargados, sin volver a pedir a la red.
-    this.repChart=mode;
-    const bb=$('ct-bars'),bd=$('ct-donut');
-    if(bb)bb.className=mode==='bars'?'on':'';
-    if(bd)bd.className=mode==='donut'?'on':'';
-    this.paintMiniCharts();
-  },
-  // Un color de vida distinto por métrica (no todo naranja) — barras Y dona lo usan.
+  // Un color de vida distinto por métrica (no todo naranja).
   MINI_COLORS:{total:'#3B82F6',count:'#8B5CF6',subs:'#22C55E',visits:'#F97316',avg:'#06B6D4',movin:'#22C55E',movout:'#EF4444',net:'#111111'},
   paintMiniCharts(){
     if(!this._miniData)return;
@@ -2694,27 +2695,12 @@ const Pos={
   },
   paintMini(id,vals,color){
     const el=$(id);if(!el)return;
-    const mode=this.repChart||'bars';
     if(!vals.some(v=>v>0)){el.innerHTML='<div style="font-size:11px;color:#D1D5DB;font-weight:600;padding-top:16px">sin movimiento</div>';return;}
-    if(mode==='bars'){
-      const mx2=Math.max(...vals);const bw=100/vals.length;
-      el.innerHTML='<svg viewBox="0 0 100 46" preserveAspectRatio="none">'+vals.map((v,i)=>{
-        const h=v>0?Math.max(3,v/mx2*40):1.5;
-        return '<rect x="'+(i*bw+bw*0.15).toFixed(1)+'" y="'+(44-h).toFixed(1)+'" width="'+(bw*0.7).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1.5" fill="'+(v>0?color:'#EFEFEF')+'"/>';
-      }).join('')+'</svg>';
-    }else{
-      // círculo: dona con el reparto del período en 4 tramos, en tonos de la métrica
-      const q=4,qs=Array(q).fill(0),per=Math.ceil(vals.length/q);
-      vals.forEach((v,i)=>{qs[Math.min(q-1,Math.floor(i/per))]+=v;});
-      const tot2=qs.reduce((a,b)=>a+b,0)||1;
-      const shades=this.shadesOf(color);
-      let off=0;
-      el.innerHTML='<svg viewBox="0 0 46 46"><g transform="rotate(-90 23 23)">'+qs.map((v,i)=>{
-        const frac=v/tot2,C=2*Math.PI*17;
-        const seg='<circle cx="23" cy="23" r="17" fill="none" stroke="'+shades[i]+'" stroke-width="7" stroke-dasharray="'+(frac*C).toFixed(1)+' '+C.toFixed(1)+'" stroke-dashoffset="'+(-off*C).toFixed(1)+'"/>';
-        off+=frac;return frac>0?seg:'';
-      }).join('')+'</g></svg>';
-    }
+    const mx2=Math.max(...vals);const bw=100/vals.length;
+    el.innerHTML='<svg viewBox="0 0 100 46" preserveAspectRatio="none">'+vals.map((v,i)=>{
+      const h=v>0?Math.max(3,v/mx2*40):1.5;
+      return '<rect x="'+(i*bw+bw*0.15).toFixed(1)+'" y="'+(44-h).toFixed(1)+'" width="'+(bw*0.7).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1.5" fill="'+(v>0?color:'#EFEFEF')+'"/>';
+    }).join('')+'</svg>';
   },
   // 4 tonos del mismo color (más claro a más oscuro) para que la dona se lea con vida sin ser arcoíris
   shadesOf(hex){
@@ -2734,11 +2720,10 @@ const Pos={
           <button class="range-pill ${this.reportRange==='7d'?'on':''}" onclick="Pos.reportRange='7d';Pos.go('reports')">7 DÍAS</button>
           <button class="range-pill ${this.reportRange==='30d'?'on':''}" onclick="Pos.reportRange='30d';Pos.go('reports')">30 DÍAS</button>
         </div>
-        <span class="chart-toggle"><button id="ct-bars" class="${(this.repChart||'bars')==='bars'?'on':''}" onclick="Pos.setChartMode('bars')">▊ Barras</button><button id="ct-donut" class="${this.repChart==='donut'?'on':''}" onclick="Pos.setChartMode('donut')">◔ Círculo</button></span>
       </div>
     </div>
     <div class="cards">
-      <div class="card"><div class="lbl">Ventas brutas <span class="tag tag-green" id="r-trend" style="display:none"></span></div><div class="val" id="r-total">—</div><div class="foot" id="r-total-f"></div><div class="mini-ch" id="mc-total"></div></div>
+      <div class="card"><div class="lbl">Ventas brutas <span class="tag tag-green" id="r-trend" style="display:none"></span></div><div class="val" id="r-total">—</div><div class="foot" id="r-total-f"></div></div>
       <div class="card"><div class="lbl">Órdenes</div><div class="val" id="r-count">—</div><div class="foot">cobradas en el período</div><div class="mini-ch" id="mc-count"></div></div>
       <div class="card"><div class="lbl">Membresías vendidas</div><div class="val" id="r-subs">—</div><div class="foot">nuevas + renovaciones</div><div class="mini-ch" id="mc-subs"></div></div>
       <div class="card"><div class="lbl">Visitas</div><div class="val" id="r-visits">—</div><div class="foot">accesos permitidos</div><div class="mini-ch" id="mc-visits"></div></div>
@@ -2961,8 +2946,9 @@ const Pos={
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
         <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Membresías que vendió</div>
         ${SU.length?`<table><thead><tr><th>Cliente</th><th>Plan</th><th>Cobró</th><th>Fecha</th></tr></thead><tbody>${SU.map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td>${esc(this.planName(s.plan_id))}</td><td style="font-weight:800;color:var(--orange)">${s.price_paid!=null?money(s.price_paid):'—'}</td><td style="color:var(--muted)">${fdate(s.start_date)}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Ninguna en este período.</div>'}</div>
-        <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Todas sus ventas</div>
-        ${S.length?`<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Qué vendió</th><th>Total</th><th>Pago</th></tr></thead><tbody>${S.slice(0,25).map(v=>`<tr><td style="color:var(--muted)">${fdate(v.created_at)} ${ftime(v.created_at)}</td><td style="font-weight:700">${esc(this.custName(v.customer_id))}</td><td style="font-size:12.5px">${esc(v.concept||'—')}</td><td style="font-weight:800;color:#16A34A">${money(v.total)}</td><td><span class="tag tag-gray">${PAY_LABEL[v.payment_method]||'—'}</span></td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin ventas en este período.</div>'}</div>
+        <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:2px">Todas sus ventas</div>
+        <div style="font-size:11px;color:var(--muted);font-weight:500;margin-bottom:10px">El Total es de todo lo cobrado junto (si vendió membresía + coach en el mismo cobro, el Total los suma) — mira "Qué vendió" para el detalle.</div>
+        ${S.length?`<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Qué vendió</th><th>Total</th><th>Pago</th></tr></thead><tbody>${S.slice(0,25).map(v=>`<tr><td style="color:#3B82F6;font-weight:600">${fdate(v.created_at)} ${ftime(v.created_at)}</td><td style="font-weight:700">${esc(this.custName(v.customer_id))}</td><td style="font-size:12.5px">${esc(v.concept||'—')}</td><td style="font-weight:800;color:#16A34A">${money(v.total)}</td><td>${payTagHtml(v.payment_method)}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin ventas en este período.</div>'}</div>
       </div>
       <div style="margin-top:18px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Sus turnos de caja (${SH.length})</div>
       ${SH.length?`<table><thead><tr><th>Abrió</th><th>Cerró</th><th>Fondo</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr></thead><tbody>${SH.map(s=>{const d=s.counted_cash!=null&&s.expected_cash!=null?Number(s.counted_cash)-Number(s.expected_cash):null;return `<tr><td>${fdate(s.opened_at)} ${ftime(s.opened_at)}</td><td>${s.closed_at?ftime(s.closed_at):'<span class="tag tag-green">Abierto</span>'}</td><td>${money(s.opening_cash)}</td><td>${s.expected_cash!=null?money(s.expected_cash):'—'}</td><td>${s.counted_cash!=null?money(s.counted_cash):'—'}</td><td>${d==null?'—':(d===0?'<span class="tag tag-green">Cuadró</span>':(d>0?'<span class="tag tag-orange">+'+money(d)+'</span>':'<span class="tag tag-red">'+money(d)+'</span>'))}</td></tr>`;}).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin turnos en este período.</div>'}</div>`;
