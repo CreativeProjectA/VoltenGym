@@ -1657,8 +1657,12 @@ const Pos={
         ${appProf?`
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <div style="font-size:14px;font-weight:700">${esc(appProf.full_name||'')} <span style="color:var(--muted);font-weight:500">· ${esc(appProf.email||'')}</span> <span class="tag tag-green">Vinculada</span></div>
-            <button class="btn-xs btn btn-ghost" onclick="Pos.unlinkApp('${c.id}')">Desvincular</button>
-          </div>`
+            <div style="display:flex;gap:6px;">
+              <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.resendCredentials('${c.id}')">Reenviar acceso</button>
+              <button class="btn-xs btn btn-ghost" onclick="Pos.unlinkApp('${c.id}')">Desvincular</button>
+            </div>
+          </div>
+          <p style="font-size:11px;color:var(--muted);font-weight:500;margin-top:8px">"Reenviar acceso" genera una contraseña NUEVA (no se puede recuperar la anterior) y te la muestra para mandarla por WhatsApp — útil si el cliente dice que no le llegó o la perdió.</p>`
         :`
           <input class="inp" id="link-q" placeholder="Escanea el QR del cliente aquí, o busca por nombre/correo..." oninput="Pos.linkSearch('${c.id}',this.value)" onkeydown="if(event.key==='Enter')Pos.linkSearch('${c.id}',this.value,true)">
           <div id="link-res" style="margin-top:8px;font-size:13px;color:var(--muted);font-weight:500">El cliente abre su app → Perfil → "Mi código QR" y lo escaneas con el lector USB, o búscalo por correo.</div>
@@ -1788,6 +1792,25 @@ const Pos={
     if(r.error){toast('Error: '+r.error.message,true);return;}
     c.profile_id=null;cset('customers',this.customers);
     toast('Cuenta desvinculada');this.openCustomer(custId);
+  },
+  async resendCredentials(custId){
+    const c=this.customers.find(x=>x.id===custId);if(!c||!c.profile_id)return;
+    if(!navigator.onLine){toast('Necesitas internet para esto.',true);return;}
+    toast('Generando nueva contraseña...');
+    try{
+      const {data,error}=await sb.functions.invoke('reset-member-password',{body:{profile_id:c.profile_id}});
+      if(error||!data||!data.ok){toast('No se pudo: '+(data?.error||error?.message||'error — ¿desplegaste reset-member-password?'),true);return;}
+      openModal(`
+        <h3>Nueva contraseña generada</h3><p class="msub">${esc(c.full_name)}</p>
+        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:16px;padding:18px 20px;text-align:left;">
+          <div style="font-size:14px;font-weight:600;color:var(--ink);">Usuario: <b>${esc(data.email)}</b></div>
+          <div style="font-size:14px;font-weight:600;color:var(--ink);margin-top:2px;">Contraseña: <b style="font-family:monospace">${esc(data.password)}</b></div>
+          <p style="font-size:12px;color:var(--muted);margin-top:8px">${data.emailSent?'✓ También se le mandó por correo.':'Su contraseña anterior ya NO funciona — dale esta.'}</p>
+          ${c.phone?`<a class="btn btn-sm" style="background:#DCFCE7;color:#16A34A;text-decoration:none;margin-top:10px;display:inline-block" target="_blank" href="${waLink(c.phone,'Hola '+(c.full_name||'').split(' ')[0]+', aquí está tu acceso a la app de Volten Gym. Usuario: '+data.email+' · Contraseña: '+data.password)}">Enviar por WhatsApp</a>`:''}
+        </div>
+        <button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="closeModal()">Cerrar</button>
+      `);
+    }catch(e){toast('No se pudo conectar.',true);}
   },
   enrollBio(custId,tipo){
     const c=this.customers.find(x=>x.id===custId);if(!c)return;
