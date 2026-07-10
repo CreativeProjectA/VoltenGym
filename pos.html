@@ -1769,19 +1769,27 @@ const Pos={
     toast('Cuenta desvinculada');this.openCustomer(custId);
   },
   enrollBio(custId,tipo){
+    const c=this.customers.find(x=>x.id===custId);if(!c)return;
+    const field=tipo==='huella'?'fingerprint_id':'face_id';
     openModal(`
       <h3>Registrar ${tipo==='huella'?'huella dactilar':'rostro'}</h3>
-      <p class="msub">Así funcionará cuando el equipo esté instalado</p>
-      <div style="background:var(--gray);border-radius:16px;padding:18px;font-size:14px;font-weight:500;line-height:1.7;color:#374151;">
-        1. Picas este botón y el lector ${tipo==='huella'?'de huella':'facial'} entra en modo registro.<br>
-        2. El cliente ${tipo==='huella'?'pone su dedo 2–3 veces':'mira a la cámara un momento'}.<br>
-        3. El ID biométrico queda guardado en su ficha — desde ese momento entra y sale solo con ${tipo==='huella'?'el dedo':'la cara'}, y el sistema valida su membresía al instante.
+      <p class="msub">${esc(c.full_name)}</p>
+      <div style="background:var(--gray);border-radius:16px;padding:18px;font-size:14px;font-weight:500;line-height:1.7;color:#374151;margin-bottom:16px;">
+        <b>1.</b> En la pantalla del aparato (facial/huella), das "Nuevo usuario" y el cliente ${tipo==='huella'?'pone su dedo 2–3 veces':'mira a la cámara un momento'}.<br>
+        <b>2.</b> El aparato le asigna un número (ej. 0001, 0002...) — ese número sale en su pantallita.<br>
+        <b>3.</b> Escribe ese número aquí abajo para conectarlo con su ficha. Desde ese momento entra y sale solo con ${tipo==='huella'?'el dedo':'la cara'}, y el sistema valida su membresía al instante.
       </div>
-      <div style="background:#FEF3C7;color:#92400E;border-radius:12px;padding:12px 14px;font-size:13px;font-weight:600;margin-top:14px;">
-        El lector físico aún no está conectado. En cuanto tengan la marca y modelo del equipo, se hace el puente y este botón queda funcionando (la base de datos ya está lista).
-      </div>
-      <button class="btn btn-primary btn-block" style="margin-top:16px" onclick="closeModal()">Entendido</button>
+      <div class="field"><label>Número que asignó el aparato</label><input class="inp" id="bio-id-input" placeholder="ej. 0001" value="${esc(c[field]||'')}"></div>
+      <button class="btn btn-primary btn-block" onclick="Pos.saveBioId('${custId}','${field}')">Guardar</button>
+      <p style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">Si el aparato aún no está conectado, no hay nada que escribir todavía — vuelve aquí cuando lo tengan instalado.</p>
     `);
+  },
+  async saveBioId(custId,field){
+    const val=($('bio-id-input')&&$('bio-id-input').value.trim())||null;
+    const r=await Q.update('customers',{id:custId},{[field]:val});
+    if(r.error){toast(/fingerprint_id|face_id/i.test(r.error.message||'')?'Corre pos_migration4.sql primero.':'Error: '+r.error.message,true);return;}
+    const c=this.customers.find(x=>x.id===custId);if(c)c[field]=val;cset('customers',this.customers);
+    closeModal();toast(val?'Guardado ✓':'Quitado');this.go('customers');
   },
 
   /* ── Familias: un pagador cubre a varios miembros ── */
