@@ -1,10 +1,3 @@
--- VOLTEN GYM - Migracion POS #13 (correr en Supabase -> SQL Editor)
--- 1) Registro en linea: el cliente llena sus datos desde su celular
---    ANTES de ir al gym, y el encargado nada mas lo confirma en el POS.
--- 2) Politicas del gym: el dueno sube/edita el texto de privacidad y
---    reglas desde el POS, y cualquiera lo puede leer en una liga publica.
--- Segura de correr varias veces.
-
 create table if not exists pending_registrations (
   id uuid primary key default gen_random_uuid(),
   full_name text not null,
@@ -16,7 +9,9 @@ create table if not exists pending_registrations (
   branch_id uuid references branches(id),
   status text not null default 'pending',
   converted_customer_id uuid references customers(id),
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  lead_source text,
+  lead_campaign text
 );
 
 create index if not exists idx_pending_reg_status on pending_registrations(status, created_at);
@@ -24,20 +19,16 @@ create index if not exists idx_pending_reg_status on pending_registrations(statu
 alter table pending_registrations enable row level security;
 
 drop policy if exists pending_reg_public_insert on pending_registrations;
-create policy pending_reg_public_insert on pending_registrations
-  for insert with check (true);
+create policy pending_reg_public_insert on pending_registrations for insert with check (true);
 
 drop policy if exists pending_reg_staff on pending_registrations;
-create policy pending_reg_staff on pending_registrations
-  for select using (is_staff());
+create policy pending_reg_staff on pending_registrations for select using (is_staff());
 
 drop policy if exists pending_reg_staff_upd on pending_registrations;
-create policy pending_reg_staff_upd on pending_registrations
-  for update using (is_staff()) with check (is_staff());
+create policy pending_reg_staff_upd on pending_registrations for update using (is_staff()) with check (is_staff());
 
 drop policy if exists pending_reg_staff_del on pending_registrations;
-create policy pending_reg_staff_del on pending_registrations
-  for delete using (is_staff());
+create policy pending_reg_staff_del on pending_registrations for delete using (is_staff());
 
 create table if not exists gym_policies (
   id text primary key,
@@ -46,17 +37,16 @@ create table if not exists gym_policies (
   updated_at timestamptz default now()
 );
 
-insert into gym_policies (id, title, body) values
-  ('privacy', 'Aviso de privacidad', 'Aun no se ha capturado el aviso de privacidad.'),
-  ('rules', 'Reglamento del gimnasio', 'Aun no se han capturado las reglas del gimnasio.')
-on conflict (id) do nothing;
+insert into gym_policies (id, title, body) values ('privacy', 'Aviso de privacidad', 'Aun no se ha capturado el aviso de privacidad.') on conflict (id) do nothing;
+insert into gym_policies (id, title, body) values ('rules', 'Reglamento del gimnasio', 'Aun no se han capturado las reglas del gimnasio.') on conflict (id) do nothing;
 
 alter table gym_policies enable row level security;
 
 drop policy if exists gym_policies_read on gym_policies;
-create policy gym_policies_read on gym_policies
-  for select using (true);
+create policy gym_policies_read on gym_policies for select using (true);
 
 drop policy if exists gym_policies_admin_write on gym_policies;
-create policy gym_policies_admin_write on gym_policies
-  for update using (is_admin()) with check (is_admin());
+create policy gym_policies_admin_write on gym_policies for update using (is_admin()) with check (is_admin());
+
+alter table customers add column if not exists lead_source text;
+alter table customers add column if not exists lead_campaign text;
