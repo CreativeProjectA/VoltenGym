@@ -34,12 +34,29 @@ const BRANCH_ID = process.env.BRANCH_ID || 'PEGA_AQUI_EL_ID_DE_LA_SUCURSAL';
 const app = express();
 app.use(express.text({ type: '*/*', limit: '5mb' })); // ZKTeco manda texto plano, no JSON
 
-// Mapa local: número de empleado/huella del dispositivo → id real del cliente en Supabase.
+// Mapa local: número de empleado/huella/rostro del dispositivo → cliente real en Supabase.
 // Se llena consultando customers.fingerprint_id / customers.face_id (ya existen esas
-// columnas en la base — se le asignan al cliente desde su ficha en el POS).
+// columnas — se le asignan al cliente desde su ficha en el POS).
 async function findCustomerByDeviceId(deviceUserId) {
   const r = await fetch(
     SB_URL + '/rest/v1/customers?or=(fingerprint_id.eq.' + deviceUserId + ',face_id.eq.' + deviceUserId + ')&select=id,profile_id,full_name&limit=1',
+    { headers: { apikey: SB_SERVICE_KEY, Authorization: 'Bearer ' + SB_SERVICE_KEY } }
+  );
+  const rows = await r.json();
+  return rows && rows[0];
+}
+
+// El torniquete TAMBIÉN trae su propio lector de QR (pasas el teléfono por
+// encima). Ese código es el mismo QR que ya usa la app del cliente:
+// "volten-gym:member:<uuid-completo>" — el lector manda el texto completo
+// que lee de la pantalla, así que se busca por coincidencia exacta.
+const QR_PREFIX = 'volten-gym:member:';
+async function findCustomerByQr(raw) {
+  let code = String(raw || '').trim();
+  if (code.toLowerCase().startsWith(QR_PREFIX)) code = code.slice(QR_PREFIX.length);
+  if (!code) return null;
+  const r = await fetch(
+    SB_URL + '/rest/v1/customers?or=(id.eq.' + code + ',profile_id.eq.' + code + ')&select=id,profile_id,full_name&limit=1',
     { headers: { apikey: SB_SERVICE_KEY, Authorization: 'Bearer ' + SB_SERVICE_KEY } }
   );
   const rows = await r.json();
@@ -85,15 +102,17 @@ async function registerCheckin(customer) {
 // Handshake inicial del dispositivo
 app.get('/iclock/cdata', (req, res) => res.send('GET OPTION FROM: ' + req.query.SN + '\nATTLOGStamp=None\nOPERLOGStamp=9999\nATTPHOTOStamp=None\nErrorDelay=30\nDelay=10\nTransTimes=00:00;14:05\nTransInterval=1\nTransFlag=1111000000\nRealtime=1\nEncrypt=None'));
 // El dispositivo sube aquí los registros de asistencia reales (texto: userId\ttimestamp\t...)
+// Un mismo dato (huella, cara, o el QR leído por el lector del torniquete)
+// llega en el mismo campo — se prueban los 3 caminos, el que aplique gana.
 app.post('/iclock/cdata', async (req, res) => {
   try {
     const lines = String(req.body || '').trim().split('\n').filter(Boolean);
     for (const line of lines) {
       const [deviceUserId] = line.split('\t');
       if (!deviceUserId) continue;
-      const customer = await findCustomerByDeviceId(deviceUserId);
+      const customer = (await findCustomerByDeviceId(deviceUserId)) || (await findCustomerByQr(deviceUserId));
       if (customer) await registerCheckin(customer);
-      else console.log('Sin cliente vinculado a ese ID de dispositivo:', deviceUserId);
+      else console.log('Sin cliente vinculado a ese dato:', deviceUserId);
     }
     res.send('OK');
   } catch (e) { console.error(e); res.status(500).send('error'); }

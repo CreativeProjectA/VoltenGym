@@ -1378,13 +1378,6 @@
               <div><div style="font-size:17px;font-weight:800;color:#0A0A0A;margin-bottom:2px;">Flexible</div><div style="font-size:13px;color:#9CA3AF;">Cualquier horario</div></div>
             </div>
           </div>
-          <div style="margin-top:20px;">
-            <div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">¿En qué sucursal entrenas?</div>
-            <div style="display:flex;gap:10px;">
-              <div onclick="{{ pickBranch1 }}" class="vg-press" style="{{ branch1BtnStyle }}">{{ branch1Label }}</div>
-              <div onclick="{{ pickBranch2 }}" class="vg-press" style="{{ branch2BtnStyle }}">{{ branch2Label }}</div>
-            </div>
-          </div>
           <div style="margin-top:16px;background:#F3F4F6;border-radius:16px;padding:18px;">
             <div style="font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">Datos físicos (opcional)</div>
             <div style="display:flex;gap:10px;">
@@ -1404,11 +1397,14 @@
               </div>
             </div>
           </div>
-          <button onclick="{{ nextStep }}" style="background:#F97316;color:#FFFFFF;border:none;padding:18px 0;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;margin-top:16px;width:100%;">Continuar</button>
+          <button onclick="{{ skipCoach }}" style="background:#F97316;color:#FFFFFF;border:none;padding:18px 0;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;margin-top:16px;width:100%;">Continuar</button>
         </div>
       </div>
 
-      <!-- ── STEP 6: ELIGE TU ENTRENADOR ── -->
+      <!-- ── STEP 6: ELIGE TU ENTRENADOR (ya no se usa en el onboarding —
+           el coach se elige después desde Perfil, con Stripe o en
+           recepción. Se deja el markup por si se reactiva, pero el flujo
+           ya no pasa por aquí.) ── -->
       <div style="{{ s6Style }}">
         <div style="position:absolute;inset:0;background:#FFFFFF;"></div>
         <div style="position:relative;z-index:1;height:100%;display:flex;flex-direction:column;padding:60px 24px 24px;overflow-y:auto;min-height:0;">

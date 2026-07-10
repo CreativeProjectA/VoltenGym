@@ -19,11 +19,15 @@ datos — exactamente igual que si alguien lo hubiera tecleado en el POS.
    en el mismo aparato, o una app/página de configuración que traiga).
    Buscar una opción como "Servidor", "ADMS", "Cloud", "Push Server" —
    ahí se le pone la IP de la PC de recepción y el puerto `4370`.
-3. **Vincular cada cliente con su huella/cara**: cuando alguien registra
-   su huella o cara en el dispositivo, éste le asigna un número interno
-   (ID de usuario). Ese número hay que guardarlo en su ficha del POS
-   (ya existen los campos "Huella dactilar" y "Reconocimiento facial"
-   en la ficha del cliente — ahí se captura ese número).
+3. **Vincular cada cliente con su huella/cara** (huella y facial): cuando
+   alguien registra su huella o cara en el dispositivo, éste le asigna
+   un número interno (ID de usuario). Ese número hay que guardarlo en
+   su ficha del POS (ya existen los campos "Huella dactilar" y
+   "Reconocimiento facial" en la ficha del cliente — ahí se captura ese
+   número).
+   **El lector de QR del torniquete NO necesita este paso** — lee
+   directo el mismo código QR que ya trae la app del cliente, así que
+   funciona solo en cuanto el puente esté corriendo.
 4. Correr el puente en esa PC:
    ```
    npm install express node-fetch@2
