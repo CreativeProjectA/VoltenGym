@@ -1,3 +1,11 @@
+create or replace function is_admin() returns boolean language sql stable as $$
+  select exists (select 1 from profiles where id = auth.uid() and role = 'admin');
+$$;
+
+create or replace function is_staff() returns boolean language sql stable as $$
+  select exists (select 1 from profiles where id = auth.uid() and role in ('admin','encargado','cajera','coach'));
+$$;
+
 create table if not exists pending_registrations (
   id uuid primary key default gen_random_uuid(),
   full_name text not null,
