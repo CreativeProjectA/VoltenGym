@@ -3404,6 +3404,7 @@ class Component extends DCLogic {
           name: nameTag ? nameTag.slice(7) : 'Tu Coach',
           avatar: avatarTag && avatarTag.length > 9 ? avatarTag.slice(9) : null,
           bio: cp.bio || 'Tu entrenador asignado',
+          until: data.coach_until || null,
         } });
       }
     }
@@ -5398,7 +5399,9 @@ class Component extends DCLogic {
       selectedCoachName: pickedCoach ? pickedCoach.name : '',
       selectedCoachPrice: pickedCoach ? pickedCoach.price : '',
       assignedCoachName: assignedCoach ? assignedCoach.name : null,
-      assignedCoachBio: assignedCoach ? assignedCoach.bio : null,
+      assignedCoachBio: assignedCoach
+        ? (assignedCoach.until ? 'Activo hasta el ' + new Date(assignedCoach.until + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : assignedCoach.bio)
+        : null,
       assignedCoachInitial: assignedCoach ? assignedCoach.name[0] : '',
       assignedCoachAvatarStyle: (assignedCoach && assignedCoach.avatar)
         ? { position: 'absolute', inset: 0, backgroundImage: 'url("' + assignedCoach.avatar + '")', backgroundSize: 'cover', backgroundPosition: 'center' }

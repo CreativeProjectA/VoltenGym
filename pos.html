@@ -1191,20 +1191,25 @@ const Pos={
     const monthly=cp&&cp.monthly_price?Number(cp.monthly_price):0;
     if(!monthly){toast('Este coach no tiene precio mensual definido todavía.',true);return;}
     if(s.cart.find(x=>x.kind==='coach'&&x.id===id)){toast('Ya está en el carrito.',true);return;}
-    // El coach es POR TIEMPO (semana o mes) — no es de por vida, se pregunta la duración aquí.
+    // El coach es POR TIEMPO — no es de por vida, se pregunta la duración aquí.
+    // Se calcula día/semana/mes/año a partir del precio mensual que puso el admin.
+    const dayPrice=Math.round(monthly/22), weekPrice=Math.round(monthly/4), yearPrice=Math.round(monthly*10.5); // ~2 meses de descuento al año
     openModal(`
       <h3>¿Por cuánto tiempo?</h3><p class="msub">Coach — ${esc((p&&p.full_name)||'')}</p>
-      <div style="display:flex;gap:10px;margin-top:10px;">
-        <button class="btn btn-primary" style="flex:1" onclick="Pos.confirmCoachDuration('${id}','week',${Math.round(monthly/4)})">1 semana<br><span style="font-weight:400;font-size:12px">${money(Math.round(monthly/4))}</span></button>
-        <button class="btn btn-primary" style="flex:1" onclick="Pos.confirmCoachDuration('${id}','month',${monthly})">1 mes<br><span style="font-weight:400;font-size:12px">${money(monthly)}</span></button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" onclick="Pos.confirmCoachDuration('${id}','day',${dayPrice})">1 día<br><span style="font-weight:400;font-size:12px">${money(dayPrice)}</span></button>
+        <button class="btn btn-primary" onclick="Pos.confirmCoachDuration('${id}','week',${weekPrice})">1 semana<br><span style="font-weight:400;font-size:12px">${money(weekPrice)}</span></button>
+        <button class="btn btn-primary" onclick="Pos.confirmCoachDuration('${id}','month',${monthly})">1 mes<br><span style="font-weight:400;font-size:12px">${money(monthly)}</span></button>
+        <button class="btn btn-primary" onclick="Pos.confirmCoachDuration('${id}','year',${yearPrice})">1 año<br><span style="font-weight:400;font-size:12px">${money(yearPrice)}</span></button>
       </div>
     `);
   },
   confirmCoachDuration(id,period,price){
     const s=this.sale;
     const p=this.appProfiles.find(x=>x.id===id);
-    const days=period==='week'?7:30;
-    s.cart.push({kind:'coach',id,name:'Coach — '+((p&&p.full_name)||'')+' ('+(period==='week'?'1 semana':'1 mes')+')',price:Number(price),qty:1,coachDays:days});
+    const days=period==='day'?1:(period==='week'?7:(period==='year'?365:30));
+    const label=period==='day'?'1 día':(period==='week'?'1 semana':(period==='year'?'1 año':'1 mes'));
+    s.cart.push({kind:'coach',id,name:'Coach — '+((p&&p.full_name)||'')+' ('+label+')',price:Number(price),qty:1,coachDays:days});
     closeModal();this.go('sale');
   },
   async ensureCoachProduct(it,put){
@@ -1973,6 +1978,20 @@ const Pos={
           <td>${p.active!==false?'<span class="tag tag-green">Activo</span>':'<span class="tag tag-gray">Inactivo</span>'}</td>
         </tr>`).join('')}</tbody></table>
       </div>
+    </div>
+    <div class="panel">
+      <h2>Catálogo de entrenadores</h2><div class="psub">Precio por día, semana, mes y año — se editan en Personal, con el precio mensual base</div>
+      <table><thead><tr><th>Coach</th><th>Sucursal</th><th>Día</th><th>Semana</th><th>Mes</th><th>Año</th></tr></thead><tbody>
+      ${this.appProfiles.filter(p=>p.role==='coach').map(p=>{
+        const cp=this.coachProfiles.find(x=>x.profile_id===p.id);
+        const monthly=cp&&cp.monthly_price?Number(cp.monthly_price):0;
+        const sbr=this.staffBranches.find(x=>x.staff_id===p.id);
+        const bName=sbr?(this.branches.find(b=>b.id===sbr.branch_id)||{}).name:'—';
+        if(!monthly)return `<tr><td style="font-weight:700">${esc(p.full_name||'')}</td><td>${esc(bName||'—')}</td><td colspan="4" style="color:var(--muted)">Sin precio definido — ponlo en Personal</td></tr>`;
+        return `<tr><td style="font-weight:700">${esc(p.full_name||'')}</td><td>${esc(bName||'—')}</td>
+          <td>${money(Math.round(monthly/22))}</td><td>${money(Math.round(monthly/4))}</td><td style="font-weight:800;color:var(--orange)">${money(monthly)}</td><td>${money(Math.round(monthly*10.5))}</td></tr>`;
+      }).join('')||'<tr><td colspan="6" style="color:var(--muted)">Sin coaches todavía — se dan de alta en Personal.</td></tr>'}
+      </tbody></table>
     </div>`;
   },
   async after_memberships(){
