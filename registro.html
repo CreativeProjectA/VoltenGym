@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regístrate — Volten Gym</title>
+<link rel="icon" type="image/png" href="voltengym.png">
+<meta name="theme-color" content="#F97316">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--orange:#F97316;--orange-dark:#EA580C;--orange-soft:#FFF4EC;--ink:#111111;--muted:#6B7280;--line:#ECECEC;--bg:#FAFAFA;--card:#FFFFFF;--green:#22C55E;}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  body{background:var(--bg);color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;-webkit-font-smoothing:antialiased;}
+  .card{background:var(--card);border-radius:26px;padding:36px 32px;width:100%;max-width:440px;box-shadow:0 24px 70px rgba(0,0,0,.07);}
+  .logo{display:flex;align-items:center;gap:9px;justify-content:center;margin-bottom:22px;}
+  .logo b{font-size:16px;font-weight:800;letter-spacing:.08em;}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.03em;text-align:center;margin-bottom:6px;}
+  .lead{color:var(--muted);font-size:14px;font-weight:500;text-align:center;margin-bottom:26px;line-height:1.5;}
+  .field{margin-bottom:14px;}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;}
+  .inp{width:100%;height:48px;padding:0 15px;border-radius:13px;border:1.5px solid var(--line);font-size:15px;font-weight:500;background:#FFF;outline:none;transition:border .2s;}
+  .inp:focus{border-color:var(--orange);box-shadow:0 0 0 4px rgba(249,115,22,.08);}
+  select.inp{cursor:pointer;}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .btn{width:100%;height:50px;border-radius:100px;background:var(--orange);color:#FFF;font-size:15px;font-weight:700;border:none;cursor:pointer;margin-top:8px;transition:all .2s;}
+  .btn:hover{background:var(--orange-dark);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .err{color:#DC2626;font-size:13px;font-weight:600;margin-top:10px;text-align:center;min-height:0;}
+  .ok{display:none;text-align:center;padding:20px 0;}
+  .ok svg{width:56px;height:56px;color:var(--green);margin-bottom:14px;}
+  .ok h2{font-size:20px;font-weight:800;margin-bottom:8px;}
+  .ok p{color:var(--muted);font-size:14px;font-weight:500;line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="form-wrap">
+    <div class="logo"><b>VOLTEN GYM</b></div>
+    <h1>Regístrate antes de venir</h1>
+    <div class="lead">Llena tus datos aquí y cuando llegues al gym solo tendrás que confirmarlos — así no pierdes tiempo en recepción.</div>
+    <form id="f">
+      <div class="field"><label>Nombre completo</label><input class="inp" id="r-name" required></div>
+      <div class="frow">
+        <div class="field"><label>Teléfono</label><input class="inp" id="r-phone" type="tel" required></div>
+        <div class="field"><label>Correo</label><input class="inp" id="r-email" type="email"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Sexo</label><select class="inp" id="r-gender"><option value="">—</option><option value="M">Hombre</option><option value="F">Mujer</option></select></div>
+        <div class="field"><label>Fecha de nacimiento</label><input class="inp" id="r-birth" type="date"></div>
+      </div>
+      <div class="field"><label>Dirección</label><input class="inp" id="r-address"></div>
+      <div class="field" id="branch-field"><label>Sucursal a la que vas a ir</label><select class="inp" id="r-branch"></select></div>
+      <button class="btn" type="submit" id="r-submit">Enviar registro</button>
+      <div class="err" id="r-err"></div>
+    </form>
+  </div>
+  <div class="ok" id="ok-wrap">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>
+    <h2>¡Listo!</h2>
+    <p>Tus datos ya están enviados. Cuando llegues al gym, solo di tu nombre y el encargado confirmará tu registro en segundos.</p>
+  </div>
+</div>
+<script>
+const SUPABASE_URL='https://mopyslyhjtnmvlksusjr.supabase.co';
+const SUPABASE_KEY='sb_publishable_FAg_UJOAOLwMJCcMBhdj1w_cX37utvu';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const $=(id)=>document.getElementById(id);
+
+(async()=>{
+  const {data}=await sb.from('branches').select('id,name').order('name');
+  const sel=$('r-branch');
+  if(data&&data.length){
+    sel.innerHTML=data.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  }else{
+    $('branch-field').style.display='none';
+  }
+})();
+
+$('f').addEventListener('submit', async(e)=>{
+  e.preventDefault();
+  $('r-err').textContent='';
+  const name=$('r-name').value.trim();
+  const phone=$('r-phone').value.trim();
+  if(!name||!phone){$('r-err').textContent='Falta tu nombre o teléfono.';return;}
+  $('r-submit').disabled=true;$('r-submit').textContent='Enviando...';
+  const payload={
+    full_name:name, phone, email:$('r-email').value.trim()||null,
+    gender:$('r-gender').value||null, birth_date:$('r-birth').value||null,
+    address:$('r-address').value.trim()||null,
+    branch_id:$('r-branch').value||null,
+  };
+  const {error}=await sb.from('pending_registrations').insert(payload);
+  if(error){
+    $('r-err').textContent='No se pudo enviar. Intenta de nuevo en un momento.';
+    $('r-submit').disabled=false;$('r-submit').textContent='Enviar registro';
+    return;
+  }
+  $('form-wrap').style.display='none';
+  $('ok-wrap').style.display='block';
+});
+</script>
+</body>
+</html>

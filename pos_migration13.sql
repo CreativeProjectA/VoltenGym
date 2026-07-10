@@ -1,0 +1,66 @@
+-- ═══════════════════════════════════════════════════════════════════
+--  VOLTEN GYM — Migración POS #13  (correr en Supabase → SQL Editor)
+--  1) Registro en línea: el cliente llena sus datos desde su celular
+--     ANTES de ir al gym, y el encargado nada más lo confirma en el POS
+--     (no vuelve a escribir todo).
+--  2) Políticas del gym: el dueño sube/edita el texto de privacidad y
+--     reglas desde el POS, y cualquiera lo puede leer en una liga pública.
+--  Segura de correr varias veces.
+-- ═══════════════════════════════════════════════════════════════════
+
+create table if not exists pending_registrations (
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  phone text,
+  email text,
+  gender text,               -- M | F
+  birth_date date,
+  address text,
+  branch_id uuid references branches(id),
+  status text not null default 'pending', -- pending | confirmed | discarded
+  converted_customer_id uuid references customers(id),
+  created_at timestamptz default now()
+);
+create index if not exists idx_pending_reg_status on pending_registrations(status, created_at);
+
+alter table pending_registrations enable row level security;
+
+-- Cualquiera (incluso sin sesión) puede MANDAR su registro desde el
+-- formulario público — pero solo puede insertar, nunca leer ni editar.
+drop policy if exists pending_reg_public_insert on pending_registrations;
+create policy pending_reg_public_insert on pending_registrations
+  for insert with check (true);
+
+-- Solo el personal del gym puede ver/editar/confirmar la lista.
+drop policy if exists pending_reg_staff on pending_registrations;
+create policy pending_reg_staff on pending_registrations
+  for select using (is_staff());
+drop policy if exists pending_reg_staff_upd on pending_registrations;
+create policy pending_reg_staff_upd on pending_registrations
+  for update using (is_staff()) with check (is_staff());
+drop policy if exists pending_reg_staff_del on pending_registrations;
+create policy pending_reg_staff_del on pending_registrations
+  for delete using (is_staff());
+
+-- ── Políticas del gym (privacidad y reglas) ──
+create table if not exists gym_policies (
+  id text primary key,        -- 'privacy' | 'rules'
+  title text not null,
+  body text not null default '',
+  updated_at timestamptz default now()
+);
+insert into gym_policies (id, title, body) values
+  ('privacy', 'Aviso de privacidad', 'Aún no se ha capturado el aviso de privacidad.'),
+  ('rules', 'Reglamento del gimnasio', 'Aún no se han capturado las reglas del gimnasio.')
+on conflict (id) do nothing;
+
+alter table gym_policies enable row level security;
+-- Cualquiera puede LEER las políticas (se muestran en una liga pública y
+-- dentro de la app a cualquier usuario con sesión).
+drop policy if exists gym_policies_read on gym_policies;
+create policy gym_policies_read on gym_policies
+  for select using (true);
+-- Solo el dueño/admin puede editarlas.
+drop policy if exists gym_policies_admin_write on gym_policies;
+create policy gym_policies_admin_write on gym_policies
+  for update using (is_admin()) with check (is_admin());

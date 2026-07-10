@@ -287,6 +287,7 @@
     <button class="nav-item" data-nav="access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Accesos</button>
     <div class="nav-sep">Gestión</div>
     <button class="nav-item" data-nav="customers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Clientes</button>
+    <button class="nav-item" data-nav="pendingregs" id="nav-pendingregs" style="position:relative"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>Registros<span class="hidden" id="pendingregs-badge" style="position:absolute;right:10px;background:var(--orange);color:#FFF;font-size:10px;font-weight:800;padding:2px 7px;border-radius:100px;">0</span></button>
     <button class="nav-item" data-nav="memberships"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Membresías</button>
     <button class="nav-item" data-nav="inventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>Inventario</button>
     <button class="nav-item" data-nav="promos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Promociones</button>
@@ -294,6 +295,7 @@
     <button class="nav-item" data-nav="reports" id="nav-reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Reportes</button>
     <button class="nav-item" data-nav="analytics" id="nav-analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-2.6-2.6L7 14.5"/></svg>Analítica</button>
     <button class="nav-item" data-nav="staff" id="nav-staff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87"/></svg>Personal</button>
+    <button class="nav-item" data-nav="policies" id="nav-policies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Políticas</button>
     <button class="nav-item" data-nav="exercises" id="nav-exercises"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Ejercicios</button>
     <div class="side-foot">
       <div class="shift-chip" id="shift-chip">
@@ -518,7 +520,7 @@ const Pos={
     if(prof&&prof.avatar_url)$('su-av').innerHTML='<img src="'+esc(prof.avatar_url)+'" alt="">';
     else $('su-av').textContent=(this.profileName[0]||'A').toUpperCase();
     // permisos de navegación
-    if(this.role!=='admin'){$('nav-staff').classList.add('hidden');$('nav-exercises').classList.add('hidden');}
+    if(this.role!=='admin'){$('nav-staff').classList.add('hidden');$('nav-exercises').classList.add('hidden');$('nav-policies').classList.add('hidden');}
     // Análisis/Reportes: SOLO admin y contador (cajeras y encargados ven inicio y gestión)
     if(!['admin','contador'].includes(this.role)){$('nav-reports').classList.add('hidden');$('nav-analytics').classList.add('hidden');$('sep-analisis').classList.add('hidden');}
     if(this.role==='contador'){
@@ -559,6 +561,7 @@ const Pos={
     this.coachProfiles=await load('coachProfiles',sb.from('coach_profiles').select('profile_id,monthly_price'));
     this.staffBranches=await load('staffBranches',sb.from('staff_branches').select('*'));
     this.requests=await load('requests',sb.from('pos_requests').select('*').eq('status','pendiente').order('created_at',{ascending:false}));
+    this.loadPendingRegs();
   },
   // planes visibles en ESTA sucursal (branch_id null = aplica en ambas)
   plansForBranch(){
@@ -1948,6 +1951,93 @@ const Pos={
     c.suspended=!c.suspended;cset('customers',this.customers);
     toast(c.suspended?'Acceso suspendido — la puerta lo rechazará':'Acceso reactivado ✓');
     this.openCustomer(id);if(this.nav==='customers')this.renderCustTable();
+  },
+
+  /* ═══════ REGISTROS EN LÍNEA (pre-registro desde casa) ═══════ */
+  async loadPendingRegs(){
+    try{
+      const {data}=await sb.from('pending_registrations').select('*').eq('status','pending').order('created_at',{ascending:false});
+      this.pendingRegs=data||[];
+    }catch(e){this.pendingRegs=[];}
+    const badge=$('pendingregs-badge');
+    if(badge){
+      if(this.pendingRegs.length){badge.textContent=this.pendingRegs.length;badge.classList.remove('hidden');}
+      else badge.classList.add('hidden');
+    }
+  },
+  view_pendingregs(){
+    return `
+    <div class="topbar">
+      <div><h1>Registros en línea</h1><div class="sub">Personas que llenaron su registro desde casa — nada más confirma y listo</div></div>
+      <a class="btn btn-ghost" href="registro.html" target="_blank">Ver formulario público ›</a>
+    </div>
+    <div class="panel" id="pendingregs-panel">Cargando...</div>`;
+  },
+  async after_pendingregs(){
+    await this.loadPendingRegs();
+    const el=$('pendingregs-panel');if(!el)return;
+    if(!this.pendingRegs.length){el.innerHTML='<div style="color:var(--muted);font-size:14px;font-weight:500;padding:20px 0">No hay registros pendientes. Comparte la liga <b>registro.html</b> con tus clientes para que se registren antes de venir.</div>';return;}
+    el.innerHTML=this.pendingRegs.map(p=>{
+      const branch=this.branches.find(b=>b.id===p.branch_id);
+      const age=p.birth_date?Math.floor((Date.now()-new Date(p.birth_date+'T12:00:00'))/(365.25*864e5)):null;
+      return `<div class="row-line">
+        <div>
+          <div style="font-weight:700">${esc(p.full_name)}</div>
+          <div style="font-size:12px;color:var(--muted)">${esc(p.phone||'')}${p.email?' · '+esc(p.email):''}${p.gender?' · '+(p.gender==='M'?'Hombre':'Mujer'):''}${age!=null?' · '+age+' años':''}${branch?' · '+esc(branch.name):''}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-xs btn" style="background:#FEE2E2;color:#DC2626" onclick="Pos.discardPendingReg('${p.id}')">Descartar</button>
+          <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.confirmPendingReg('${p.id}')">Confirmar y crear ficha</button>
+        </div>
+      </div>`;
+    }).join('');
+  },
+  async discardPendingReg(id){
+    if(!confirm('¿Descartar este registro? No se creará ficha de cliente.'))return;
+    await sb.from('pending_registrations').update({status:'discarded'}).eq('id',id);
+    toast('Registro descartado');this.after_pendingregs();
+  },
+  async confirmPendingReg(id){
+    const p=this.pendingRegs.find(x=>x.id===id);if(!p)return;
+    const payload={id:uuid(),full_name:p.full_name,phone:p.phone||null,email:p.email||null,
+      gender:p.gender||null,birth_date:p.birth_date||null,address:p.address||null,
+      branch_id:p.branch_id||(this.branch?this.branch.id:null),suspended:false,created_at:new Date().toISOString()};
+    const r=await Q.insert('customers',payload);
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    this.customers.unshift(payload);cset('customers',this.customers);
+    await sb.from('pending_registrations').update({status:'confirmed',converted_customer_id:payload.id}).eq('id',id);
+    toast('Ficha creada ✓');this.after_pendingregs();
+  },
+
+  /* ═══════ POLÍTICAS DEL GYM (privacidad y reglamento) ═══════ */
+  view_policies(){
+    return `
+    <div class="topbar">
+      <div><h1>Políticas</h1><div class="sub">Lo que ven tus clientes en la liga pública de políticas</div></div>
+      <a class="btn btn-ghost" href="politicas.html" target="_blank">Ver liga pública ›</a>
+    </div>
+    <div class="panel" id="pol-privacy">Cargando...</div>
+    <div class="panel" id="pol-rules"></div>`;
+  },
+  async after_policies(){
+    const {data}=await sb.from('gym_policies').select('*');
+    const rows=data||[];
+    const mk=(id,label)=>{
+      const p=rows.find(x=>x.id===id)||{title:label,body:''};
+      return `<h2>${esc(p.title)}</h2><div class="psub">Se muestra en la liga pública de políticas</div>
+      <div class="field"><label>Título</label><input class="inp" id="pol-title-${id}" value="${esc(p.title)}"></div>
+      <div class="field"><label>Texto</label><textarea class="inp" id="pol-body-${id}" rows="8">${esc(p.body)}</textarea></div>
+      <button class="btn btn-primary" onclick="Pos.savePolicy('${id}')">Guardar</button>`;
+    };
+    $('pol-privacy').innerHTML=mk('privacy','Aviso de privacidad');
+    $('pol-rules').innerHTML=mk('rules','Reglamento del gimnasio');
+  },
+  async savePolicy(id){
+    const title=$('pol-title-'+id).value.trim();
+    const body=$('pol-body-'+id).value;
+    const r=await sb.from('gym_policies').update({title,body,updated_at:new Date().toISOString()}).eq('id',id);
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    toast('Política guardada ✓');
   },
 
   /* ═══════ MEMBRESÍAS ═══════ */

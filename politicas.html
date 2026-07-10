@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Políticas — Volten Gym</title>
+<link rel="icon" type="image/png" href="voltengym.png">
+<meta name="theme-color" content="#F97316">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--orange:#F97316;--ink:#111111;--muted:#6B7280;--line:#ECECEC;--bg:#FAFAFA;--card:#FFFFFF;}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',-apple-system,'Segoe UI',sans-serif;}
+  body{background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:640px;margin:0 auto;padding:40px 24px 80px;}
+  .logo{display:flex;align-items:center;gap:9px;justify-content:center;margin-bottom:30px;}
+  .logo b{font-size:16px;font-weight:800;letter-spacing:.08em;}
+  .tabs{display:flex;gap:8px;background:#FFF;border:1px solid var(--line);border-radius:100px;padding:5px;margin-bottom:22px;}
+  .tabs button{flex:1;border:none;background:transparent;padding:10px 0;border-radius:100px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit;}
+  .tabs button.on{background:var(--orange);color:#FFF;}
+  .card{background:var(--card);border-radius:22px;padding:30px;box-shadow:0 1px 3px rgba(0,0,0,.03);}
+  .card h1{font-size:22px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px;}
+  .card .upd{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:20px;}
+  .card .body{font-size:15px;line-height:1.75;color:#333;white-space:pre-wrap;}
+  .loading{text-align:center;color:var(--muted);font-size:14px;font-weight:600;padding:40px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"><b>VOLTEN GYM</b></div>
+  <div class="tabs">
+    <button class="on" id="tab-privacy" onclick="show('privacy')">Aviso de privacidad</button>
+    <button id="tab-rules" onclick="show('rules')">Reglamento</button>
+  </div>
+  <div class="card" id="content"><div class="loading">Cargando...</div></div>
+</div>
+<script>
+const SUPABASE_URL='https://mopyslyhjtnmvlksusjr.supabase.co';
+const SUPABASE_KEY='sb_publishable_FAg_UJOAOLwMJCcMBhdj1w_cX37utvu';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let policies={};
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function show(id){
+  document.getElementById('tab-privacy').classList.toggle('on',id==='privacy');
+  document.getElementById('tab-rules').classList.toggle('on',id==='rules');
+  const p=policies[id];
+  if(!p){document.getElementById('content').innerHTML='<div class="loading">No disponible.</div>';return;}
+  document.getElementById('content').innerHTML=`<h1>${esc(p.title)}</h1><div class="upd">Actualizado: ${new Date(p.updated_at).toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}</div><div class="body">${esc(p.body)}</div>`;
+}
+(async()=>{
+  const {data}=await sb.from('gym_policies').select('*');
+  (data||[]).forEach(p=>policies[p.id]=p);
+  show('privacy');
+})();
+</script>
+</body>
+</html>
