@@ -833,6 +833,13 @@ const Pos={
     }
   },
 
+  // Notificación push real al celular del cliente/coach (llega aunque esté
+  // bloqueado). Si esa persona nunca activó notificaciones, no pasa nada —
+  // nunca debe bloquear el cobro ni ninguna otra acción del POS.
+  async sendPush(profileId,title,body){
+    if(!profileId)return;
+    try{await sb.functions.invoke('send-push',{body:{profile_id:profileId,title,body:body||''}});}catch(e){}
+  },
   branchSelector(){
     if(!['admin','contador'].includes(this.role)||this.branches.length<=1)
       return this.branch?`<span class="tag tag-gray" style="height:44px;display:inline-flex;align-items:center;padding:0 18px;">${esc(this.branch.name)}</span>`:'';
@@ -1341,6 +1348,7 @@ const Pos={
         productId=await this.ensureMembershipProduct(plan,put);
         const rs=await this.sellMembership(c,plan,it.qty,it.price,s.method,put);
         if(rs&&rs.error){toast('Venta cobrada pero la membresía falló: '+rs.error.message+' — ¿ya corriste pos_migration2.sql?',true);}
+        else if(c&&c.profile_id){this.sendPush(c.profile_id,'Membresía activada ✓',(plan?plan.name:'Tu membresía')+' ya está activa');}
         if(it.courtesy&&c){
           // Marca el uso de la cortesía — 1 sola vez por persona.
           try{await Q.update('customers',{id:c.id},{courtesy_used_at:new Date().toISOString()});}catch(e){}
@@ -1373,6 +1381,8 @@ const Pos={
         // guarda el coach en la ficha para que se transfiera si vincula la app después
         try{await Q.update('customers',{id:c.id},{coach_id:it.id,coach_until:until});}catch(e){}
         c.coach_id=it.id;c.coach_until=until;cset('customers',this.customers);
+        if(c.profile_id){this.sendPush(c.profile_id,'Ya tienes coach asignado','Válido hasta el '+fdate(until));}
+        this.sendPush(it.id,'Nuevo atleta asignado',c.full_name+' ya es tu cliente');
       }
       await put('sale_items',{id:uuid(),sale_id:saleId,product_id:productId,quantity:it.qty,unit_price:it.price});
       if(it.kind==='product'&&!it.service){

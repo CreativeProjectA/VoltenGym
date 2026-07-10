@@ -3764,6 +3764,7 @@ class Component extends DCLogic {
     // El mismo programa se asigna a TODOS los atletas seleccionados
     for (const clientId of ids) {
       await sb.from('program_assignments').insert({ program_id: prog.id, member_id: clientId, assigned_by: this.state.session.user.id, status: 'active' });
+      this.sendPush(clientId, 'Nueva rutina de tu coach', name || 'Tienes un programa nuevo asignado', './app.html');
     }
     if (nameEl) nameEl.value = '';
     this.setState({
@@ -3811,6 +3812,7 @@ class Component extends DCLogic {
         updated_at: new Date().toISOString(),
       });
       if (error) lastErr = error;
+      else this.sendPush(clientId, 'Nueva dieta de tu coach', title || 'Revisa tu plan de alimentación', './app.html');
     }
     this.setState({ coachDietSaving: false });
     if (lastErr) { alert('No se pudo enviar: ' + lastErr.message); return; }
@@ -4343,6 +4345,7 @@ class Component extends DCLogic {
       authError: '',
       authLoading: false,
     });
+    this.subscribeToPush(session.user.id);
     try {
       // Migración: datos guardados antes de separar por usuario
       ['vg_favs', 'vg_own_programs', 'vg_recents'].forEach(k => {
@@ -4970,6 +4973,46 @@ class Component extends DCLogic {
       this.sendPosRequest('coach', coach.id, coach.name, parseFloat(String(coach.price || '').replace(/[^0-9.]/g, '')) || null);
       this.showToast('Solicitud enviada. Pásalo a pagar en recepción y quedará activo.');
     }
+  }
+
+  // Notificación push real (llega aunque el celular esté bloqueado). Si el
+  // destinatario no activó notificaciones en ningún dispositivo, la función
+  // simplemente no manda nada -- no truena nada del flujo normal.
+  async sendPush(profileId, title, body, url) {
+    if (!profileId || !this.state.session) return;
+    try {
+      await waitForSupabase();
+      await getSupabase().functions.invoke('send-push', { body: { profile_id: profileId, title, body: body || '', url: url || './app.html' } });
+    } catch (_) { /* silencioso: nunca debe bloquear la acción principal */ }
+  }
+
+  // Activa notificaciones push reales en ESTE dispositivo (no truena nada
+  // si el navegador no soporta push, o si el usuario le da "Bloquear" al
+  // permiso -- simplemente no se activan, el resto de la app sigue igual).
+  // En iPhone solo funciona si la app está instalada en la pantalla de
+  // inicio (limitación de Apple).
+  async subscribeToPush(profileId) {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if (location.protocol.indexOf('http') !== 0) return;
+      const reg = await navigator.serviceWorker.register('./sw.js');
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return;
+      const VAPID_PUBLIC_KEY = 'BBPQ3aA1pqzk5eRwiukOD0yOk9uLzWfZjNYrNTht4DPamvt9Dug40kfR2gxv-28piSjv5Vf_03ozD63JFqzA5gQ';
+      const urlBase64ToUint8Array = (base64) => {
+        const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+        const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const raw = atob(b64);
+        return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+      };
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+      const json = sub.toJSON();
+      await waitForSupabase();
+      await getSupabase().from('push_subscriptions').upsert({
+        profile_id: profileId, endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
+      }, { onConflict: 'endpoint' });
+    } catch (_) { /* silencioso: notificaciones son un plus, no deben romper el login */ }
   }
 
   async sendPosRequest(type, refId, refName, price) {
