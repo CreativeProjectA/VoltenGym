@@ -821,6 +821,12 @@ const Pos={
     el.classList.remove('fade');void el.offsetWidth;el.classList.add('fade');
     el.scrollTop=0;
     if(this['after_'+nav])this['after_'+nav].call(this);
+    // Accesos se refresca sola cada 5s mientras la cajera está ahí — así el
+    // aviso del facial/huella "llega" sin que nadie tenga que darle refrescar.
+    clearInterval(this._accessPoll);
+    if(nav==='access'){
+      this._accessPoll=setInterval(()=>{if(this.nav==='access'){this.loadAccess();this.loadPendingEnrollments();}},5000);
+    }
   },
 
   branchSelector(){
@@ -1496,8 +1502,9 @@ const Pos={
         ${c&&c.phone?`<a class="btn btn-sm" style="background:#DCFCE7;color:#16A34A;text-decoration:none;margin-top:10px;display:inline-block" target="_blank" href="${waLink(c.phone,'¡Bienvenido a Volten Gym! Ya puedes descargar la app. Tu usuario: '+this._acctCreated.email+' · Contraseña: '+this._acctCreated.password)}">Enviar por WhatsApp</a>`:''}
       </div>`:''}
       ${s.queued?'<div class="tag tag-orange" style="margin-top:8px">Guardada localmente — se sincroniza al volver el internet</div>':''}
-      <div style="display:flex;gap:12px;justify-content:center;margin-top:26px;">
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:26px;flex-wrap:wrap;">
         <button class="btn btn-ghost" onclick="Pos.printTicket()"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Imprimir ticket</button>
+        ${c&&c.phone?`<a class="btn btn-ghost" style="text-decoration:none" target="_blank" href="${waLink(c.phone,'Tu ticket de Volten Gym\\n'+s.cart.map(it=>'· '+it.name+(it.qty>1?' x'+it.qty:'')+' — '+money(it.price*it.qty)).join('\\n')+'\\nTotal: '+money(t.total)+'\\nPago: '+(PAY_LABEL[s.method]||'')+'\\n¡Gracias por tu compra! 💪')}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>Enviar ticket por WhatsApp</a>`:''}
         <button class="btn btn-primary" onclick="Pos.startSale()">+ Otra venta</button>
         <button class="btn btn-ghost" onclick="Pos.sale=null;Pos.go('dashboard')">Ir al inicio</button>
       </div>
@@ -1681,9 +1688,18 @@ const Pos={
       ${subs.length?`<table><thead><tr><th>Plan</th><th>Vigencia</th><th>Pagó</th><th>Estado</th></tr></thead><tbody>${
         subs.map(s=>`<tr><td style="font-weight:700">${esc(this.planName(s.plan_id))}</td><td>${fdate(s.start_date)} → ${fdate(s.end_date)}</td><td>${s.price_paid!=null?money(s.price_paid):'—'}</td><td>${daysLeft(s.end_date)>=0&&s.status!=='canceled'?'<span class="tag tag-green">Vigente</span>':'<span class="tag tag-gray">Vencida</span>'}</td></tr>`).join('')
       }</tbody></table>`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin membresías todavía.</div>'}
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 8px">Historial de tickets</div>
+      <div id="cust-tickets" style="font-size:13px;color:var(--muted);font-weight:500">Cargando...</div>
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 8px">Últimas visitas</div>
       <div id="cust-visits" style="font-size:13px;color:var(--muted);font-weight:500">Cargando...</div>
     `,true);
+    // tickets del cliente async
+    try{
+      const {data:tk}=await sb.from('sales').select('id,total,payment_method,concept,created_at').eq('customer_id',c.id).order('created_at',{ascending:false}).limit(15);
+      this._custTickets=tk||[];
+      const el=$('cust-tickets');
+      if(el)el.innerHTML=(tk&&tk.length)?'<table><thead><tr><th>Fecha</th><th>Qué compró</th><th>Total</th><th>Pago</th><th></th></tr></thead><tbody>'+tk.map(t=>`<tr><td style="color:#3B82F6;font-weight:600">${fdate(t.created_at)} ${ftime(t.created_at)}</td><td style="font-size:12.5px">${esc(t.concept||'—')}</td><td style="font-weight:800;color:#16A34A">${money(t.total)}</td><td>${payTagHtml(t.payment_method)}</td><td>${c.phone?`<a class="btn-xs btn btn-ghost" style="text-decoration:none" target="_blank" href="${waLink(c.phone,'Tu ticket de Volten Gym — '+fdate(t.created_at)+'\\n'+(t.concept||'')+'\\nTotal: '+money(t.total)+'\\nPago: '+(PAY_LABEL[t.payment_method]||'')+'\\n¡Gracias por tu compra! 💪')}">WhatsApp</a>`:''}</td></tr>`).join('')+'</tbody></table>':'Sin tickets todavía.';
+    }catch(e){const el=$('cust-tickets');if(el)el.textContent='Sin conexión — no se pudo cargar el historial.';}
     // visitas async
     try{
       const {data}=await sb.from('checkins').select('created_at,method,granted,checked_out_at').or('customer_id.eq.'+c.id+(c.profile_id?',member_id.eq.'+c.profile_id:'')).order('created_at',{ascending:false}).limit(8);
@@ -2134,19 +2150,19 @@ const Pos={
         <h2 style="font-size:15px">Registros nuevos del aparato — sin asignar (${data.length})</h2>
         <div class="psub">El facial/huella detectó a alguien nuevo — dale clic para conectarlo con su ficha, sin teclear ningún número</div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
-          ${data.map(d=>`<div class="row-line"><span class="k">Código ${esc(d.device_user_id)} · ${d.kind==='rostro'?'facial':'huella'} · ${ftime(d.first_seen_at)}</span>
-            <button class="btn-xs btn" style="background:var(--orange);color:#FFF" onclick="Pos.assignEnrollment('${d.id}','${esc(d.device_user_id)}')">Asignar a cliente</button></span></div>`).join('')}
+          ${data.map(d=>`<div class="row-line"><span class="k">Código ${esc(d.device_user_id)} · ${d.kind==='rostro'?'facial':(d.kind==='qr'?'QR':'huella')} · ${ftime(d.first_seen_at)}</span>
+            <button class="btn-xs btn" style="background:var(--orange);color:#FFF" onclick="Pos.assignEnrollment('${d.id}','${esc(d.device_user_id)}','${d.kind||'huella'}')">Asignar a cliente</button></span></div>`).join('')}
         </div>
       </div>`;
     }catch(e){el.innerHTML='';}
   },
-  assignEnrollment(enrollId,deviceUserId){
+  assignEnrollment(enrollId,deviceUserId,kind){
     openModal(`
-      <h3>¿A quién le pertenece?</h3><p class="msub">Código del aparato: ${esc(deviceUserId)}</p>
+      <h3>¿A quién le pertenece?</h3><p class="msub">Código del aparato: ${esc(deviceUserId)} (${kind==='rostro'?'facial':(kind==='qr'?'QR':'huella')})</p>
       <input class="inp" id="assign-enroll-q" placeholder="Busca por nombre..." oninput="Pos.searchAssignEnroll(this.value)">
       <div id="assign-enroll-res" style="margin-top:10px;font-size:13px;color:var(--muted);font-weight:500">Escribe el nombre del cliente.</div>
     `);
-    this._pendingEnrollId=enrollId;this._pendingEnrollDeviceId=deviceUserId;
+    this._pendingEnrollId=enrollId;this._pendingEnrollDeviceId=deviceUserId;this._pendingEnrollKind=kind;
   },
   searchAssignEnroll(q){
     q=(q||'').trim().toLowerCase();
@@ -2160,10 +2176,12 @@ const Pos={
   },
   async confirmAssignEnroll(custId){
     const kindGuess=this._pendingEnrollKind||'huella';
-    const field=kindGuess==='rostro'?'face_id':'fingerprint_id';
-    const r1=await Q.update('customers',{id:custId},{[field]:this._pendingEnrollDeviceId});
-    if(r1.error){toast('Error: '+r1.error.message,true);return;}
-    const c=this.customers.find(x=>x.id===custId);if(c)c[field]=this._pendingEnrollDeviceId;cset('customers',this.customers);
+    if(kindGuess!=='qr'){
+      const field=kindGuess==='rostro'?'face_id':'fingerprint_id';
+      const r1=await Q.update('customers',{id:custId},{[field]:this._pendingEnrollDeviceId});
+      if(r1.error){toast('Error: '+r1.error.message,true);return;}
+      const c=this.customers.find(x=>x.id===custId);if(c)c[field]=this._pendingEnrollDeviceId;cset('customers',this.customers);
+    }
     await sb.from('device_enrollments').update({assigned_to:custId}).eq('id',this._pendingEnrollId);
     closeModal();toast('Vinculado ✓ — ya puede entrar con eso');this.loadPendingEnrollments();
   },

@@ -108,15 +108,22 @@ app.post('/iclock/cdata', async (req, res) => {
   try {
     const lines = String(req.body || '').trim().split('\n').filter(Boolean);
     for (const line of lines) {
-      const [deviceUserId] = line.split('\t');
+      const fields = line.split('\t');
+      const deviceUserId = fields[0];
       if (!deviceUserId) continue;
+      // El protocolo ZKTeco manda un campo "Verify" (modo de verificación)
+      // que casi siempre es la 4ª columna: 1=huella, 15=cara, 2=tarjeta/QR.
+      // Esto es lo típico de esta familia de protocolos — se confirma y
+      // ajusta con el equipo real en mano si el AI07F manda otros números.
+      const verifyCode = fields[3];
+      const kind = verifyCode === '15' ? 'rostro' : (verifyCode === '2' ? 'qr' : 'huella');
       const customer = (await findCustomerByDeviceId(deviceUserId)) || (await findCustomerByQr(deviceUserId));
       if (customer) { await registerCheckin(customer); continue; }
       // Huella/cara nueva que el aparato detectó pero nadie ha vinculado
       // todavía — se anota para que la encargada la asigne con un clic
       // desde el POS (Accesos → "Registros nuevos del aparato"), sin
       // tener que leer el número en la pantallita del aparato.
-      console.log('Sin cliente vinculado — anotado como pendiente:', deviceUserId);
+      console.log('Sin cliente vinculado — anotado como pendiente:', deviceUserId, kind);
       try {
         const exists = await fetch(
           SB_URL + '/rest/v1/device_enrollments?device_user_id=eq.' + encodeURIComponent(deviceUserId) + '&branch_id=eq.' + BRANCH_ID + '&assigned_to=is.null&limit=1',
@@ -127,7 +134,7 @@ app.post('/iclock/cdata', async (req, res) => {
           await fetch(SB_URL + '/rest/v1/device_enrollments', {
             method: 'POST',
             headers: { apikey: SB_SERVICE_KEY, Authorization: 'Bearer ' + SB_SERVICE_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ branch_id: BRANCH_ID, device_user_id: deviceUserId }),
+            body: JSON.stringify({ branch_id: BRANCH_ID, device_user_id: deviceUserId, kind }),
           });
         }
       } catch (_) { /* si falta pos_migration12.sql, no rompe el resto */ }
