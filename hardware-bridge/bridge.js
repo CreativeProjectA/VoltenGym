@@ -111,8 +111,26 @@ app.post('/iclock/cdata', async (req, res) => {
       const [deviceUserId] = line.split('\t');
       if (!deviceUserId) continue;
       const customer = (await findCustomerByDeviceId(deviceUserId)) || (await findCustomerByQr(deviceUserId));
-      if (customer) await registerCheckin(customer);
-      else console.log('Sin cliente vinculado a ese dato:', deviceUserId);
+      if (customer) { await registerCheckin(customer); continue; }
+      // Huella/cara nueva que el aparato detectó pero nadie ha vinculado
+      // todavía — se anota para que la encargada la asigne con un clic
+      // desde el POS (Accesos → "Registros nuevos del aparato"), sin
+      // tener que leer el número en la pantallita del aparato.
+      console.log('Sin cliente vinculado — anotado como pendiente:', deviceUserId);
+      try {
+        const exists = await fetch(
+          SB_URL + '/rest/v1/device_enrollments?device_user_id=eq.' + encodeURIComponent(deviceUserId) + '&branch_id=eq.' + BRANCH_ID + '&assigned_to=is.null&limit=1',
+          { headers: { apikey: SB_SERVICE_KEY, Authorization: 'Bearer ' + SB_SERVICE_KEY } }
+        );
+        const rows = await exists.json();
+        if (!rows || !rows.length) {
+          await fetch(SB_URL + '/rest/v1/device_enrollments', {
+            method: 'POST',
+            headers: { apikey: SB_SERVICE_KEY, Authorization: 'Bearer ' + SB_SERVICE_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ branch_id: BRANCH_ID, device_user_id: deviceUserId }),
+          });
+        }
+      } catch (_) { /* si falta pos_migration12.sql, no rompe el resto */ }
     }
     res.send('OK');
   } catch (e) { console.error(e); res.status(500).send('error'); }

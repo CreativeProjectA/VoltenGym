@@ -2085,6 +2085,7 @@ const Pos={
       <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">Primera vez = entra · segunda vez = sale. Valida la membresía sola. (Con QR/huella/facial cuando esté el equipo, es automático.)</div>
     </div>
     <p style="font-size:12px;color:var(--muted);font-weight:500;margin:-8px 0 16px">La cuenta de la app ya se crea sola al cobrar su membresía. Si un cliente antiguo aún no tiene cuenta, vincúlasela desde su ficha en Clientes.</p>
+    <div id="device-enroll-panel"></div>
     <div id="access-result"></div>
     <div id="scan-picker"></div>
     <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:16px;align-items:start;">
@@ -2114,12 +2115,57 @@ const Pos={
       </div>
     </div>`;
   },
-  async after_access(){const i=$('scan-inp');if(i)i.focus();await this.loadAccess();},
+  async after_access(){const i=$('scan-inp');if(i)i.focus();await this.loadAccess();this.loadPendingEnrollments();},
   accPreset(days){
     const to=new Date();const from=new Date(Date.now()-(days-1)*864e5);
     this.accFrom=dISO(from);this.accTo=dISO(to);
     const f=$('acc-from'),t=$('acc-to');if(f)f.value=this.accFrom;if(t)t.value=this.accTo;
     this.loadAccess();
+  },
+  async loadPendingEnrollments(){
+    const el=$('device-enroll-panel');if(!el)return;
+    const bId=this.branch?this.branch.id:null;
+    try{
+      let q=sb.from('device_enrollments').select('*').is('assigned_to',null).order('first_seen_at',{ascending:false}).limit(10);
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;
+      if(!data||!data.length){el.innerHTML='';return;}
+      el.innerHTML=`<div class="panel" style="background:#FFF7ED;border:1px solid #FED7AA;margin-bottom:16px;">
+        <h2 style="font-size:15px">Registros nuevos del aparato — sin asignar (${data.length})</h2>
+        <div class="psub">El facial/huella detectó a alguien nuevo — dale clic para conectarlo con su ficha, sin teclear ningún número</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+          ${data.map(d=>`<div class="row-line"><span class="k">Código ${esc(d.device_user_id)} · ${d.kind==='rostro'?'facial':'huella'} · ${ftime(d.first_seen_at)}</span>
+            <button class="btn-xs btn" style="background:var(--orange);color:#FFF" onclick="Pos.assignEnrollment('${d.id}','${esc(d.device_user_id)}')">Asignar a cliente</button></span></div>`).join('')}
+        </div>
+      </div>`;
+    }catch(e){el.innerHTML='';}
+  },
+  assignEnrollment(enrollId,deviceUserId){
+    openModal(`
+      <h3>¿A quién le pertenece?</h3><p class="msub">Código del aparato: ${esc(deviceUserId)}</p>
+      <input class="inp" id="assign-enroll-q" placeholder="Busca por nombre..." oninput="Pos.searchAssignEnroll(this.value)">
+      <div id="assign-enroll-res" style="margin-top:10px;font-size:13px;color:var(--muted);font-weight:500">Escribe el nombre del cliente.</div>
+    `);
+    this._pendingEnrollId=enrollId;this._pendingEnrollDeviceId=deviceUserId;
+  },
+  searchAssignEnroll(q){
+    q=(q||'').trim().toLowerCase();
+    const box=$('assign-enroll-res');
+    if(q.length<2){box.innerHTML='Escribe al menos 2 letras.';return;}
+    const res=this.customers.filter(c=>(c.full_name||'').toLowerCase().includes(q)).slice(0,6);
+    box.innerHTML=res.length?res.map(c=>`
+      <button class="cust-row" onclick="Pos.confirmAssignEnroll('${c.id}')">
+        ${this.custAvatar(c,32)}<div class="cd"><b>${esc(c.full_name)}</b><span>${esc(c.phone||'')}</span></div>
+      </button>`).join(''):'Sin coincidencias.';
+  },
+  async confirmAssignEnroll(custId){
+    const kindGuess=this._pendingEnrollKind||'huella';
+    const field=kindGuess==='rostro'?'face_id':'fingerprint_id';
+    const r1=await Q.update('customers',{id:custId},{[field]:this._pendingEnrollDeviceId});
+    if(r1.error){toast('Error: '+r1.error.message,true);return;}
+    const c=this.customers.find(x=>x.id===custId);if(c)c[field]=this._pendingEnrollDeviceId;cset('customers',this.customers);
+    await sb.from('device_enrollments').update({assigned_to:custId}).eq('id',this._pendingEnrollId);
+    closeModal();toast('Vinculado ✓ — ya puede entrar con eso');this.loadPendingEnrollments();
   },
   async loadAccess(){
     const bId=this.branch?this.branch.id:null;
