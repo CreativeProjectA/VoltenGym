@@ -2814,6 +2814,7 @@ const Pos={
   promoModal(id){
     if(this.role==='cajera')return;
     const p=id?this.promos.find(x=>x.id===id):null;
+    const linkedAnn=id?(this.anns||[]).find(a=>a.promo_id===id):null;
     openModal(`
       <h3>${p?'Editar promoción':'Nueva promoción'}</h3><p class="msub">Descuento aplicable al cobrar en el POS</p>
       <div class="field"><label>Nombre *</label><input class="inp" id="pm-name" value="${p?esc(p.name):''}" placeholder="ej. 2x1 Enero, 20% estudiantes..."></div>
@@ -2830,23 +2831,51 @@ const Pos={
         <div class="field"><label>Inicia</label><input class="inp" type="date" id="pm-start" value="${p&&p.starts_at?p.starts_at:todayISO()}"></div>
         <div class="field"><label>Termina</label><input class="inp" type="date" id="pm-end" value="${p&&p.ends_at?p.ends_at:''}"></div>
       </div>
-      <button class="btn btn-primary btn-block" onclick="Pos.savePromo('${p?p.id:''}')">Guardar promoción</button>
-      <p style="font-size:12px;color:var(--muted);font-weight:500;margin-top:12px;text-align:center">Tip: si también quieres que los miembros la vean en su app, crea además un "Anuncio en la app".</p>
+      <div class="frow">
+        <div class="field"><label>Foto para la app (opcional)</label><input class="inp" type="file" id="pm-photo" accept="image/*" style="padding-top:11px"></div>
+        <div class="field"><label>...o pegar URL de imagen</label><input class="inp" id="pm-img" value="${linkedAnn?esc(linkedAnn.image_url||''):''}" placeholder="https://..."></div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);font-weight:500;margin:-8px 0 14px">Si le pones foto, además del descuento en el POS, la promo aparece como banner en el inicio de la app de los miembros.</p>
+      <button class="btn btn-primary btn-block" id="pm-save" onclick="Pos.savePromo('${p?p.id:''}')">Guardar promoción</button>
     `);
   },
   async savePromo(id){
     const payload={name:$('pm-name').value.trim(),discount_type:$('pm-type').value,discount_value:Number($('pm-value').value)||0,
       applies_to:$('pm-applies').value,starts_at:$('pm-start').value||null,ends_at:$('pm-end').value||null,active:true};
     if(!payload.name||!payload.discount_value){toast('Nombre y valor son obligatorios.',true);return;}
+    const btn=$('pm-save');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+    let promoId=id;
     if(id){
       const r=await Q.update('promotions',{id},payload);
-      if(r.error){toast('Error: '+r.error.message,true);return;}
+      if(r.error){toast('Error: '+r.error.message,true);if(btn){btn.disabled=false;btn.textContent='Guardar promoción';}return;}
       Object.assign(this.promos.find(x=>x.id===id)||{},payload);
     }else{
       payload.id=uuid();payload.created_at=new Date().toISOString();
       const r=await Q.insert('promotions',payload);
-      if(r.error){toast('Error: '+r.error.message,true);return;}
+      if(r.error){toast('Error: '+r.error.message,true);if(btn){btn.disabled=false;btn.textContent='Guardar promoción';}return;}
       this.promos.unshift(payload);
+      promoId=payload.id;
+    }
+    // Foto opcional → crea/actualiza el banner ligado en la app (tabla announcements).
+    const f=$('pm-photo')&&$('pm-photo').files[0];
+    let imgUrl=$('pm-img')?$('pm-img').value.trim():'';
+    if(f){
+      const path='promos/'+promoId+'-'+Date.now()+'.'+(f.name.split('.').pop()||'jpg');
+      const up=await sb.storage.from('avatars').upload(path,f,{upsert:true});
+      if(!up.error){const pub=sb.storage.from('avatars').getPublicUrl(path);imgUrl=pub.data.publicUrl;}
+    }
+    if(imgUrl){
+      const annPayload={title:payload.name,body:(payload.discount_type==='percent'?payload.discount_value+'% de descuento':'$'+payload.discount_value+' de descuento'),image_url:imgUrl,active:true,promo_id:promoId};
+      const existing=(this.anns||[]).find(a=>a.promo_id===promoId);
+      if(existing){
+        let r2=await sb.from('announcements').update(annPayload).eq('id',existing.id);
+        if(r2.error&&/promo_id/i.test(r2.error.message||'')){delete annPayload.promo_id;await sb.from('announcements').update(annPayload).eq('id',existing.id);}
+      }else{
+        const annRow={...annPayload,id:uuid(),created_at:new Date().toISOString()};
+        let r2=await sb.from('announcements').insert(annRow);
+        if(r2.error&&/promo_id/i.test(r2.error.message||'')){delete annRow.promo_id;r2=await sb.from('announcements').insert(annRow);}
+        if(!r2.error){this.anns=this.anns||[];this.anns.unshift(annRow);cset('anns',this.anns);}
+      }
     }
     cset('promos',this.promos);closeModal();toast('Promoción guardada ✓');this.go('promos');
   },
