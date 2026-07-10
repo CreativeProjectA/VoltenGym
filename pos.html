@@ -1580,6 +1580,14 @@ const Pos={
         <div class="field"><label>Fecha de nacimiento</label><input class="inp" type="date" id="nc-birth"></div>
       </div>
       <div class="field"><label>Dirección <span style="color:var(--muted);font-weight:500">(opcional)</span></label><input class="inp" id="nc-address" placeholder="opcional"></div>
+      <div class="field"><label>¿Cómo nos conoció? <span style="color:var(--muted);font-weight:500">(opcional)</span></label><select class="inp" id="nc-source">
+        <option value="">—</option>
+        <option value="meta_ads">Anuncio de Facebook/Instagram</option>
+        <option value="referido">Referido</option>
+        <option value="pasaba">Pasaba por ahí</option>
+        <option value="google">Google</option>
+        <option value="otro">Otro</option>
+      </select></div>
       <p style="font-size:12px;color:var(--muted);font-weight:500;margin:-4px 0 14px">Su cuenta de la app se crea sola en cuanto le cobres su membresía — no hace falta vincularla aquí.</p>
       ${this.families.length?`<div class="field"><label>¿Es parte de una familia? (opcional)</label>
         <select class="inp" id="nc-family"><option value="">No / independiente</option>${this.families.map(f=>`<option value="${f.id}">${esc(f.name||'Familia')}</option>`).join('')}</select></div>`:''}
@@ -1620,12 +1628,13 @@ const Pos={
     const famSel=$('nc-family')?$('nc-family').value||null:null;
     const payload={id:uuid(),full_name:name,phone,email,gender,
       birth_date:($('nc-birth')&&$('nc-birth').value)||null,address:($('nc-address')&&$('nc-address').value.trim())||null,
+      lead_source:($('nc-source')&&$('nc-source').value)||null,
       notes:$('nc-notes').value.trim()||null,profile_id:this._newCustLink||null,family_id:famSel,
       branch_id:this.branch?this.branch.id:null,suspended:false,created_at:new Date().toISOString()};
     let r=await Q.insert('customers',payload);
-    if(r.error&&/gender|birth_date|address/i.test(r.error.message||'')){
-      // Falta correr pos_migration7.sql — reintenta sin esas columnas para no bloquear la venta.
-      const p2={...payload};delete p2.gender;delete p2.birth_date;delete p2.address;
+    if(r.error&&/gender|birth_date|address|lead_source/i.test(r.error.message||'')){
+      // Falta correr pos_migration7.sql/14.sql — reintenta sin esas columnas para no bloquear la venta.
+      const p2={...payload};delete p2.gender;delete p2.birth_date;delete p2.address;delete p2.lead_source;
       r=await Q.insert('customers',p2);
     }
     if(r.error){toast('Error: '+r.error.message,true);return;}
@@ -2001,8 +2010,13 @@ const Pos={
     const p=this.pendingRegs.find(x=>x.id===id);if(!p)return;
     const payload={id:uuid(),full_name:p.full_name,phone:p.phone||null,email:p.email||null,
       gender:p.gender||null,birth_date:p.birth_date||null,address:p.address||null,
+      lead_source:p.lead_source||null,
       branch_id:p.branch_id||(this.branch?this.branch.id:null),suspended:false,created_at:new Date().toISOString()};
-    const r=await Q.insert('customers',payload);
+    let r=await Q.insert('customers',payload);
+    if(r.error&&/lead_source/i.test(r.error.message||'')){
+      const p2={...payload};delete p2.lead_source;
+      r=await Q.insert('customers',p2);
+    }
     if(r.error){toast('Error: '+r.error.message,true);return;}
     this.customers.unshift(payload);cset('customers',this.customers);
     await sb.from('pending_registrations').update({status:'confirmed',converted_customer_id:payload.id}).eq('id',id);
@@ -2912,6 +2926,7 @@ const Pos={
       <div class="panel"><h2>Edad</h2><div class="psub">Distribución por rango</div><div id="an-age"></div></div>
       <div class="panel"><h2>Método de pago</h2><div class="psub">Últimos 30 días, incluye Stripe</div><div id="an-paysource"></div></div>
     </div>
+    <div class="panel"><h2>¿De dónde vienen los clientes?</h2><div class="psub">Origen capturado al registrarlos — para saber qué canal está funcionando</div><div id="an-leads"></div></div>
     <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;">
       <div class="panel"><h2>Ingresos por mes</h2><div class="psub">Últimos 12 meses</div><div id="an-revmonth"></div></div>
       <div class="panel"><h2>Ingresos por día</h2><div class="psub">Últimos 30 días</div><div id="an-revday"></div></div>
@@ -3020,6 +3035,20 @@ const Pos={
     const lastVisit={};CI30.forEach(c=>{if(!lastVisit[c.customer_id]||c.created_at>lastVisit[c.customer_id])lastVisit[c.customer_id]=c.created_at;});
     const atRisk=activeSubs.filter(c=>!lastVisit[c.id]);
     $('an-atrisk').textContent=atRisk.length;
+
+    // origen de clientes (captación / leads)
+    const LEAD_LABEL={meta_ads:'Anuncio Facebook/Instagram',referido:'Referido',pasaba:'Pasaba por ahí',google:'Google',otro:'Otro'};
+    const LEAD_COLOR={meta_ads:'#635BFF',referido:'#22C55E',pasaba:'#F97316',google:'#3B82F6',otro:'#8B5CF6'};
+    const withSource=custs.filter(c=>c.lead_source);
+    if(!withSource.length){
+      $('an-leads').innerHTML='<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Aún no hay clientes con origen capturado — se llena solo cuando se registran en <b>registro.html</b> o cuando el personal lo anota al crear la ficha.</div>';
+    }else{
+      const counts={};withSource.forEach(c=>{counts[c.lead_source]=(counts[c.lead_source]||0)+1;});
+      const lTot=withSource.length;
+      $('an-leads').innerHTML='<div style="display:flex;flex-direction:column;gap:10px;padding-top:6px;">'+
+        Object.keys(counts).sort((a,b)=>counts[b]-counts[a]).map(k=>`<div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:5px"><span>${LEAD_LABEL[k]||k}</span><span>${counts[k]} · ${Math.round(counts[k]/lTot*100)}%</span></div><div style="height:10px;background:#EFEFEF;border-radius:100px;overflow:hidden"><div style="height:100%;width:${Math.round(counts[k]/lTot*100)}%;background:${LEAD_COLOR[k]||'#9CA3AF'};border-radius:100px"></div></div></div>`).join('')+
+        `</div><div style="font-size:12px;color:var(--muted);font-weight:600;margin-top:10px">${lTot} de ${custs.length} clientes con origen capturado</div>`;
+    }
 
     this._anCustoms=custs; // para el bloque de recuperación
     this.renderAnRecover();

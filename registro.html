@@ -53,6 +53,14 @@
       </div>
       <div class="field"><label>Dirección</label><input class="inp" id="r-address"></div>
       <div class="field" id="branch-field"><label>Sucursal a la que vas a ir</label><select class="inp" id="r-branch"></select></div>
+      <div class="field"><label>¿Cómo nos conociste?</label><select class="inp" id="r-source">
+        <option value="">—</option>
+        <option value="meta_ads">Anuncio de Facebook/Instagram</option>
+        <option value="referido">Un amigo o familiar me recomendó</option>
+        <option value="pasaba">Pasaba por ahí / vi el local</option>
+        <option value="google">Búsqueda en Google</option>
+        <option value="otro">Otro</option>
+      </select></div>
       <button class="btn" type="submit" id="r-submit">Enviar registro</button>
       <div class="err" id="r-err"></div>
     </form>
@@ -91,6 +99,7 @@ $('f').addEventListener('submit', async(e)=>{
     gender:$('r-gender').value||null, birth_date:$('r-birth').value||null,
     address:$('r-address').value.trim()||null,
     branch_id:$('r-branch').value||null,
+    lead_source:$('r-source').value||null,
   };
   const {error}=await sb.from('pending_registrations').insert(payload);
   if(error){
