@@ -63,7 +63,13 @@ async function findCustomerByQr(raw) {
   return rows && rows[0];
 }
 
-async function registerCheckin(customer) {
+// La base solo acepta method en inglés: qr | fingerprint | face | manual |
+// barcode (restricción real de la tabla checkins — verificado en vivo).
+function toDbMethod(kind) {
+  return kind === 'rostro' ? 'face' : (kind === 'qr' ? 'qr' : 'fingerprint');
+}
+
+async function registerCheckin(customer, kind) {
   // Mismo comportamiento que el POS: si ya está adentro, esto es su salida.
   const openRes = await fetch(
     SB_URL + '/rest/v1/checkins?customer_id=eq.' + customer.id + '&checked_out_at=is.null&granted=eq.true&order=created_at.desc&limit=1',
@@ -92,7 +98,7 @@ async function registerCheckin(customer) {
     headers: { apikey: SB_SERVICE_KEY, Authorization: 'Bearer ' + SB_SERVICE_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       customer_id: customer.id, member_id: customer.profile_id || null, branch_id: BRANCH_ID,
-      method: 'facial', granted, created_at: new Date().toISOString(), checked_in_at: new Date().toISOString(),
+      method: toDbMethod(kind), granted, created_at: new Date().toISOString(), checked_in_at: new Date().toISOString(),
     }),
   });
   console.log((granted ? 'ACCESO PERMITIDO' : 'ACCESO DENEGADO') + ':', customer.full_name);
@@ -118,7 +124,7 @@ app.post('/iclock/cdata', async (req, res) => {
       const verifyCode = fields[3];
       const kind = verifyCode === '15' ? 'rostro' : (verifyCode === '2' ? 'qr' : 'huella');
       const customer = (await findCustomerByDeviceId(deviceUserId)) || (await findCustomerByQr(deviceUserId));
-      if (customer) { await registerCheckin(customer); continue; }
+      if (customer) { await registerCheckin(customer, kind); continue; }
       // Huella/cara nueva que el aparato detectó pero nadie ha vinculado
       // todavía — se anota para que la encargada la asigne con un clic
       // desde el POS (Accesos → "Registros nuevos del aparato"), sin
