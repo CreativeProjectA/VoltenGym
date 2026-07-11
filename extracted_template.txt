@@ -1647,9 +1647,11 @@
         </div>
         <div style="{{ cameraErrorStyle }}">{{ cameraErrorText }}</div>
         <div style="{{ restTimerStyle }}">Descanso: {{ restSecondsLabel }}</div>
-        <!-- Video de referencia del ejercicio -->
+        <!-- Video de referencia del ejercicio (el src se pone por código al
+             abrirlo — con plantilla el <video> intentaba cargar el texto
+             literal y no reproducía nada) -->
         <div style="{{ exVideoPanelStyle }}">
-          <video src="{{ exVideoOpen }}" style="width:100%;max-height:70vh;" controls autoplay playsinline></video>
+          <video id="ex-video-player" style="width:100%;max-height:70vh;" controls playsinline></video>
           <button onclick="{{ closeExVideo }}" style="margin-top:20px;background:rgba(255,255,255,0.1);color:#FFFFFF;border:none;padding:12px 28px;border-radius:100px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
         </div>
         <div style="padding:16px 20px 20px;flex-shrink:0;">
@@ -2271,7 +2273,7 @@
               <div style="background:#F5F5F5;border-radius:20px;padding:18px;">
                 <p style="font-size:9px;font-weight:700;color:#BBBBBB;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;">Racha</p>
                 <div style="font-size:34px;font-weight:800;color:#F97316;letter-spacing:-0.03em;line-height:1;">{{ statStreak }}</div>
-                <div style="font-size:12px;color:#9CA3AF;margin-top:5px;">{{ statStreakUnit }} seguidas</div>
+                <div style="font-size:12px;color:#9CA3AF;margin-top:5px;">{{ statStreakUnit }} seguidos</div>
               </div>
               <div style="background:#F5F5F5;border-radius:20px;padding:18px;">
                 <p style="font-size:9px;font-weight:700;color:#BBBBBB;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;">Entrenos</p>
@@ -3290,36 +3292,24 @@ class Component extends DCLogic {
     };
     const dayKey = localDayKey;
     const _scheduledDays = this.state.memberScheduledDays || [];
-    // Racha por CUOTA SEMANAL, no por día exacto: si tu plan pide N días a la
-    // semana y entrenaste esos N días (cualquier día, no importa cuál),
-    // esa semana cuenta. Si te tocaba martes pero fuiste miércoles, sigues
-    // cumpliendo — cambiar de día ya NO rompe la racha.
-    const weeklyGoal = _scheduledDays.length || 3;
-    const mondayOf = (d) => {
-      const dt = new Date(d); const day = dt.getDay();
-      const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
-      const mon = new Date(dt); mon.setDate(diff); mon.setHours(0, 0, 0, 0);
-      return mon;
-    };
-    const weekKey = (d) => localDayKey(mondayOf(d));
-    const workoutsByWeek = {};
-    trainedData.forEach(w => {
-      const wk = weekKey(w.completed_at);
-      (workoutsByWeek[wk] = workoutsByWeek[wk] || new Set()).add(dayKey(w.completed_at));
-    });
+    // Racha por DÍAS DE RUTINA cumplidos: cuenta hacia atrás desde hoy solo
+    // los días que te tocaba entrenar (según tu rutina) — cada uno que
+    // entrenaste suma 1 y sube el mismo día; el primero que te saltaste la
+    // rompe. Los días de descanso no cuentan ni la rompen. Si aún no tienes
+    // días de rutina, cualquier día entrenado cuenta.
+    const _dayNames = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
+    const _schedSet = new Set(_scheduledDays);
+    const _trainedSet = new Set(trainedData.map(w => dayKey(w.completed_at)));
     let streak = 0;
-    let wcursor = new Date();
-    for (let _wi = 0; _wi < 104; _wi++) {
-      const wk = weekKey(wcursor);
-      const doneThisWeek = (workoutsByWeek[wk] || new Set()).size;
-      if (doneThisWeek >= weeklyGoal) {
-        streak++;
-      } else if (_wi === 0) {
-        // La semana actual todavía no termina — no rompe la racha, solo no suma aún.
-      } else {
-        break;
+    const _cur = new Date();
+    for (let _di = 0; _di < 730; _di++) {
+      const _isSched = !_schedSet.size || _schedSet.has(_dayNames[_cur.getDay()]);
+      if (_isSched) {
+        if (_trainedSet.has(dayKey(_cur))) streak++;
+        else if (_di === 0) { /* hoy todavía no termina — no rompe la racha */ }
+        else break;
       }
-      wcursor.setDate(wcursor.getDate() - 7);
+      _cur.setDate(_cur.getDate() - 1);
     }
 
     const weekStart = new Date();
@@ -5955,7 +5945,7 @@ class Component extends DCLogic {
 
       // Estadísticas reales (workout_logs)
       statStreak: this.state.stats.streak,
-      statStreakUnit: this.state.stats.streak === 1 ? 'semana' : 'semanas',
+      statStreakUnit: this.state.stats.streak === 1 ? 'día' : 'días',
       statTotalWorkouts: this.state.stats.totalWorkouts,
       statTotalHours: this.state.stats.totalHours,
       statTotalHoursUnit: this.state.stats.totalHoursUnit || 'h',
@@ -7088,12 +7078,23 @@ class Component extends DCLogic {
             width: '30px', height: '30px', borderRadius: '50%', border: 'none', flexShrink: 0,
             background: '#FFF7ED', display: _hasVideo ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           };
-          out2['openExVideo' + (_i + 1)] = _hasVideo ? (() => this.setState({ exVideoOpen: _vids[_vurl] })) : (() => {});
+          out2['openExVideo' + (_i + 1)] = _hasVideo ? (() => {
+            const _u = _vids[_vurl];
+            this.setState({ exVideoOpen: _u });
+            setTimeout(() => {
+              const v = document.getElementById('ex-video-player');
+              if (v) { v.src = _u; v.load(); v.play().catch(() => {}); }
+            }, 60);
+          }) : (() => {});
         }
         return out2;
       })()),
       exVideoPanelStyle: { display: this.state.exVideoOpen ? 'flex' : 'none', position: 'absolute', inset: 0, zIndex: 270, background: 'rgba(0,0,0,0.92)', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
-      closeExVideo: () => this.setState({ exVideoOpen: null }),
+      closeExVideo: () => {
+        const v = document.getElementById('ex-video-player');
+        if (v) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (_) {} }
+        this.setState({ exVideoOpen: null });
+      },
       cameraErrorStyle: { display: this.state.cameraError ? 'block' : 'none', color: '#FCA5A5', fontSize: '13px', textAlign: 'center', padding: '12px' },
       cameraErrorText: this.state.cameraError,
       recordBtnLabel: this.state.isRecording ? 'Detener grabación' : 'Grabar',
