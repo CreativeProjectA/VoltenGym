@@ -49,7 +49,7 @@
   #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:100;}
   .login-card{background:var(--card);border-radius:28px;padding:44px;width:430px;box-shadow:0 24px 70px rgba(0,0,0,.07);}
   .login-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:28px;}
-  .login-logo svg,.login-logo img{width:32px;height:32px;object-fit:contain;} .login-logo span{font-size:17px;font-weight:800;letter-spacing:0.08em;}
+  .login-logo img.logo-full{height:64px;width:auto;object-fit:contain;}
   .login-card h1{font-size:30px;font-weight:800;letter-spacing:-0.03em;margin-bottom:6px;text-align:center;}
   .login-card .lead{color:var(--muted);font-size:15px;font-weight:500;margin-bottom:26px;text-align:center;}
   .login-err{color:var(--red);font-size:13px;font-weight:600;margin-bottom:12px;text-align:center;min-height:18px;}
@@ -58,7 +58,7 @@
   #shell{display:none;grid-template-columns:250px 1fr;height:100vh;}
   .sidebar{background:var(--card);border-right:1px solid var(--line);padding:26px 16px;display:flex;flex-direction:column;overflow-y:auto;}
   .side-logo{display:flex;align-items:center;gap:11px;padding:0 10px 24px;}
-  .side-logo svg,.side-logo img{width:30px;height:30px;object-fit:contain;} .side-logo b{font-size:16px;font-weight:800;letter-spacing:0.07em;}
+  .side-logo img.logo-full{height:44px;width:auto;object-fit:contain;}
   .nav-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font-size:14px;font-weight:600;color:var(--muted);margin-bottom:3px;width:100%;text-align:left;}
   .nav-item:hover{background:var(--orange-soft);color:var(--orange-dark);transform:translateX(2px);}
   .nav-item:active{transform:scale(.97);}
@@ -239,7 +239,7 @@
 <!-- LOGIN -->
 <div id="login">
   <div class="login-card fade">
-    <div class="login-logo"><img src="voltengym-logo.png" alt="Volten Gym"><span>VOLTEN GYM</span></div>
+    <div class="login-logo"><img src="voltengym-logo.png" alt="Volten Gym" class="logo-full"></div>
     <h1>Punto de venta</h1>
     <p class="lead">Acceso para personal del gimnasio.</p>
     <div class="login-err" id="login-err"></div>
@@ -253,7 +253,7 @@
 <!-- GATE: INICIAR TURNO -->
 <div id="gate">
   <div style="display:flex;flex-direction:column;align-items:center" class="fade">
-    <div class="login-logo" style="margin-bottom:22px"><img src="voltengym-logo.png" alt="Volten Gym"><span>VOLTEN GYM</span></div>
+    <div class="login-logo" style="margin-bottom:22px"><img src="voltengym-logo.png" alt="Volten Gym" class="logo-full"></div>
     <div class="gate-card">
       <h1>Iniciar turno</h1>
       <div class="who" id="gate-hello">Bienvenido, <b>—</b></div>
@@ -281,7 +281,7 @@
 <!-- SHELL -->
 <div id="shell">
   <aside class="sidebar">
-    <div class="side-logo"><img src="voltengym-logo.png" alt="Volten Gym"><b>VOLTEN</b></div>
+    <div class="side-logo"><img src="voltengym-logo.png" alt="Volten Gym" class="logo-full"></div>
     <button class="nav-item active" data-nav="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>Inicio</button>
     <button class="nav-item" data-nav="sale"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>Nueva venta</button>
     <button class="nav-item" data-nav="access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Accesos</button>
