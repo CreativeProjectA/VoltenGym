@@ -528,6 +528,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </div>
         <div onclick="{{ deleteCpd }}" class="vg-press" style="position:absolute;top:52px;right:20px;padding:9px 14px;border-radius:100px;background:rgba(239,68,68,0.9);backdrop-filter:blur(8px);font-size:12px;font-weight:700;color:#FFFFFF;cursor:pointer;">Eliminar</div>
+        <div onclick="{{ editCpd }}" class="vg-press" style="position:absolute;top:52px;right:106px;padding:9px 14px;border-radius:100px;background:rgba(255,255,255,0.18);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.25);font-size:12px;font-weight:700;color:#FFFFFF;cursor:pointer;">Editar</div>
         <div style="position:absolute;bottom:0;left:0;right:0;padding:20px 22px;">
           <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:5px;">{{ cpdMeta }}</div>
           <h1 style="font-size:30px;font-weight:800;color:#FFFFFF;letter-spacing:-0.02em;line-height:1.05;">{{ cpdTitle }}</h1>
@@ -579,6 +580,7 @@
           <p style="font-size:10px;font-weight:700;color:#F97316;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">{{ cddMeta }}</p>
           <h2 style="font-size:20px;font-weight:800;color:#0A0A0A;letter-spacing:-0.02em;">{{ cddTitle }}</h2>
         </div>
+        <div onclick="{{ editCdd }}" class="vg-press" style="padding:9px 14px;border-radius:100px;background:#F5F5F5;font-size:12px;font-weight:700;color:#0A0A0A;cursor:pointer;flex-shrink:0;margin-right:8px;">Editar</div>
         <div onclick="{{ deleteCdd }}" class="vg-press" style="padding:9px 14px;border-radius:100px;background:#FEF2F2;font-size:12px;font-weight:700;color:#EF4444;cursor:pointer;flex-shrink:0;">Eliminar</div>
       </div>
       <div style="flex:1;min-height:0;overflow-y:auto;background:#FFFFFF;padding:22px 22px 40px;">
@@ -2292,7 +2294,6 @@
             <div class="vg-s3" style="margin:12px 16px 0;background:#F2F2F4;border-radius:20px;padding:20px 18px;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
                 <div style="font-size:17px;font-weight:700;color:#0A0A0A;">Mi cuerpo</div>
-                <span onclick="{{ connectScale }}" class="vg-press" style="font-size:12px;font-weight:700;color:#F97316;cursor:pointer;background:rgba(249,115,22,0.1);border-radius:100px;padding:6px 12px;">Conectar báscula</span>
               </div>
               <p style="font-size:12px;color:#9CA3AF;margin-bottom:16px;">Toca un dato para registrarlo manualmente</p>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
@@ -2344,15 +2345,13 @@
                   <div style="flex:1;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">Código QR</div><div style="font-size:12px;color:#22C55E;font-weight:600;margin-top:1px;">Activo</div></div>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </div>
-                <div onclick="{{ connectFingerprint }}" class="vg-press" style="display:flex;align-items:center;gap:14px;background:#FFFFFF;border-radius:16px;padding:14px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                <div style="display:flex;align-items:center;gap:14px;background:#FFFFFF;border-radius:16px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
                   <div style="width:42px;height:42px;border-radius:12px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round"><path d="M12 11c0 3.5-1 6.5-2.5 9"></path><path d="M8.5 11a3.5 3.5 0 0 1 7 0c0 2.5-.5 5-1.5 7.5"></path><path d="M5 11a7 7 0 0 1 14 0c0 2-.3 4-.8 5.5"></path><path d="M2.5 9.5A9.5 9.5 0 0 1 12 3c2.8 0 5.3 1.2 7 3"></path></svg></div>
-                  <div style="flex:1;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">Huella dactilar</div><div style="font-size:12px;color:#9CA3AF;margin-top:1px;">Conectar por Bluetooth</div></div>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  <div style="flex:1;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">Huella dactilar</div><div style="{{ accessFingerCss }}">{{ accessFingerTxt }}</div></div>
                 </div>
-                <div onclick="{{ connectFace }}" class="vg-press" style="display:flex;align-items:center;gap:14px;background:#FFFFFF;border-radius:16px;padding:14px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                <div style="display:flex;align-items:center;gap:14px;background:#FFFFFF;border-radius:16px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
                   <div style="width:42px;height:42px;border-radius:12px;background:#EFF6FF;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="9" cy="10" r="0.5" fill="#3B82F6"></circle><circle cx="15" cy="10" r="0.5" fill="#3B82F6"></circle><path d="M9 15c.8.7 1.9 1 3 1s2.2-.3 3-1"></path></svg></div>
-                  <div style="flex:1;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">Reconocimiento facial</div><div style="font-size:12px;color:#9CA3AF;margin-top:1px;">Próximamente</div></div>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  <div style="flex:1;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">Reconocimiento facial</div><div style="{{ accessFaceCss }}">{{ accessFaceTxt }}</div></div>
                 </div>
               </div>
             </div>
@@ -2636,21 +2635,18 @@
               <div style="{{ myAccessStyle }}">
                 <div style="font-size:15px;font-weight:600;color:#0A0A0A;margin-bottom:4px;">Mis accesos al gym</div>
                 <div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;">Para registrar tu huella o tu cara, pídelo en recepción — toma un minuto</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-                  <div style="background:#FFFFFF;border-radius:14px;padding:14px 10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-                    <div style="font-size:20px;margin-bottom:4px;">📱</div>
-                    <div style="font-size:12px;font-weight:700;color:#0A0A0A;">Código QR</div>
-                    <div style="font-size:11px;font-weight:700;color:#22C55E;margin-top:3px;">Activo ✓</div>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                  <div style="display:flex;align-items:center;gap:14px;background:#FFFFFF;border-radius:16px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="14" y1="14" x2="14" y2="17"></line><line x1="17" y1="14" x2="21" y2="14"></line><line x1="21" y1="17" x2="21" y2="21"></line><line x1="17" y1="21" x2="17" y2="21"></line></svg></div>
+                    <div style="flex:1;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">Código QR</div><div style="font-size:12px;color:#22C55E;font-weight:600;margin-top:1px;">Activo</div></div>
                   </div>
-                  <div style="background:#FFFFFF;border-radius:14px;padding:14px 10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-                    <div style="font-size:20px;margin-bottom:4px;">👆</div>
-                    <div style="font-size:12px;font-weight:700;color:#0A0A0A;">Huella</div>
-                    <div style="{{ accessFingerStyle }}">{{ accessFingerLabel }}</div>
+                  <div style="display:flex;align-items:center;gap:14px;background:#FFFFFF;border-radius:16px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="width:42px;height:42px;border-radius:12px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round"><path d="M12 11c0 3.5-1 6.5-2.5 9"></path><path d="M8.5 11a3.5 3.5 0 0 1 7 0c0 2.5-.5 5-1.5 7.5"></path><path d="M5 11a7 7 0 0 1 14 0c0 2-.3 4-.8 5.5"></path><path d="M2.5 9.5A9.5 9.5 0 0 1 12 3c2.8 0 5.3 1.2 7 3"></path></svg></div>
+                    <div style="flex:1;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">Huella dactilar</div><div style="{{ accessFingerCss }}">{{ accessFingerTxt }}</div></div>
                   </div>
-                  <div style="background:#FFFFFF;border-radius:14px;padding:14px 10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-                    <div style="font-size:20px;margin-bottom:4px;">😀</div>
-                    <div style="font-size:12px;font-weight:700;color:#0A0A0A;">Rostro</div>
-                    <div style="{{ accessFaceStyle }}">{{ accessFaceLabel }}</div>
+                  <div style="display:flex;align-items:center;gap:14px;background:#FFFFFF;border-radius:16px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="width:42px;height:42px;border-radius:12px;background:#EFF6FF;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="9" cy="10" r="0.5" fill="#3B82F6"></circle><circle cx="15" cy="10" r="0.5" fill="#3B82F6"></circle><path d="M9 15c.8.7 1.9 1 3 1s2.2-.3 3-1"></path></svg></div>
+                    <div style="flex:1;"><div style="font-size:14px;font-weight:700;color:#0A0A0A;">Reconocimiento facial</div><div style="{{ accessFaceCss }}">{{ accessFaceTxt }}</div></div>
                   </div>
                 </div>
               </div>
@@ -3771,16 +3767,35 @@ class Component extends DCLogic {
       duration_minutes: this.state.caDurationMin || 45,
       training_days: JSON.stringify(this.state.coachAssignDays || []),
     };
-    let progRes = await sb.from('programs').insert(progRow).select('id').single();
-    for (let _try = 0; _try < 3 && progRes.error && /column/i.test(progRes.error.message || ''); _try++) {
-      const m = (progRes.error.message || '').match(/'([a-z_]+)' column|column ['"]?([a-z_]+)/i);
-      const badCol = m ? (m[1] || m[2]) : null;
-      if (!badCol || !(badCol in progRow)) break;
-      delete progRow[badCol];
-      progRes = await sb.from('programs').insert(progRow).select('id').single();
+    // Modo edición: si venimos de "Editar" en un programa ya enviado, se
+    // ACTUALIZA ese mismo programa en lugar de crear uno nuevo.
+    const editId = this.state.cwEditProgramId || null;
+    let prog = null;
+    if (editId) {
+      let upd = await sb.from('programs').update(progRow).eq('id', editId).select('id').single();
+      for (let _try = 0; _try < 3 && upd.error && /column/i.test(upd.error.message || ''); _try++) {
+        const m = (upd.error.message || '').match(/'([a-z_]+)' column|column ['"]?([a-z_]+)/i);
+        const badCol = m ? (m[1] || m[2]) : null;
+        if (!badCol || !(badCol in progRow)) break;
+        delete progRow[badCol];
+        upd = await sb.from('programs').update(progRow).eq('id', editId).select('id').single();
+      }
+      if (upd.error) { this.setState({ coachAssignSaving: false }); alert('No se pudo actualizar: ' + upd.error.message); return; }
+      prog = upd.data;
+      await sb.from('program_exercises').delete().eq('program_id', editId);
+      await sb.from('program_assignments').delete().eq('program_id', editId);
+    } else {
+      let progRes = await sb.from('programs').insert(progRow).select('id').single();
+      for (let _try = 0; _try < 3 && progRes.error && /column/i.test(progRes.error.message || ''); _try++) {
+        const m = (progRes.error.message || '').match(/'([a-z_]+)' column|column ['"]?([a-z_]+)/i);
+        const badCol = m ? (m[1] || m[2]) : null;
+        if (!badCol || !(badCol in progRow)) break;
+        delete progRow[badCol];
+        progRes = await sb.from('programs').insert(progRow).select('id').single();
+      }
+      prog = progRes.data;
+      if (!prog) { this.setState({ coachAssignSaving: false }); alert('No se pudo asignar: ' + (progRes.error ? progRes.error.message : 'error desconocido')); return; }
     }
-    const prog = progRes.data;
-    if (!prog) { this.setState({ coachAssignSaving: false }); alert('No se pudo asignar: ' + (progRes.error ? progRes.error.message : 'error desconocido')); return; }
     const picked = this.state.coachAssignPicked || [];
     if (picked.length) {
       const exRows = picked.map((ex, i) => {
@@ -3792,16 +3807,76 @@ class Component extends DCLogic {
     // El mismo programa se asigna a TODOS los atletas seleccionados
     for (const clientId of ids) {
       await sb.from('program_assignments').insert({ program_id: prog.id, member_id: clientId, assigned_by: this.state.session.user.id, status: 'active' });
-      this.sendPush(clientId, 'Nueva rutina de tu coach', name || 'Tienes un programa nuevo asignado', './app.html');
+      this.sendPush(clientId, editId ? 'Tu coach actualizó tu rutina' : 'Nueva rutina de tu coach', name || 'Revisa tu programa', './app.html');
     }
     if (nameEl) nameEl.value = '';
     this.setState({
       coachAssignSaving: false, coachAssignProgramName: '', coachAssignLevel: '',
       coachAssignDays: [], coachAssignPicked: [], caSelectedPhotoIdx: 0, caDurationMin: 45,
-      cwOpen: false, cwClientIds: [],
+      cwOpen: false, cwClientIds: [], cwEditProgramId: null,
     });
-    this.showToast('"' + name + '" asignado a ' + ids.length + ' atleta' + (ids.length > 1 ? 's' : '') + ' ✓');
+    this.showToast('"' + name + '" ' + (editId ? 'actualizado' : 'asignado') + ' ✓');
     this.fetchCoachData();
+  }
+
+  // Abre el wizard de programa PRE-LLENADO con lo ya enviado, para
+  // modificarlo sin volver a capturar todo.
+  async editCoachProgram() {
+    const p = this.state.cpdProgram;
+    if (!p || !p.id) return;
+    await waitForSupabase();
+    const sb = getSupabase();
+    const [{ data: exs }, { data: asg }] = await Promise.all([
+      sb.from('program_exercises').select('name, sets, reps, order_index').eq('program_id', p.id).order('order_index'),
+      sb.from('program_assignments').select('member_id').eq('program_id', p.id),
+    ]);
+    let days = [];
+    try { days = JSON.parse(p.training_days || '[]'); } catch (_) { days = []; }
+    const picked = (exs || []).map(e => ({ n: e.name, r: (e.sets ? e.sets + ' × ' : '') + (e.reps || '') }));
+    this.setState({
+      cpdOpen: false, cwOpen: true, cwType: 'prog', cwStep: 0,
+      cwEditProgramId: p.id,
+      cwClientIds: (asg || []).map(a2 => a2.member_id),
+      coachAssignPicked: picked,
+      coachAssignDays: Array.isArray(days) ? days : [],
+      coachAssignLevel: p.level || 'Intermedio',
+      caDurationMin: p.duration_minutes || 45,
+      caSelectedPhotoIdx: 0,
+    });
+    setTimeout(() => { const el = document.getElementById('cw-name'); if (el) el.value = p.title || ''; }, 250);
+  }
+
+  // Abre el wizard de dieta PRE-LLENADO con la dieta ya enviada. Al guardar
+  // se reemplaza la del mismo atleta (así ya funcionaba el envío).
+  editCoachDiet() {
+    const d = this.state.cddDiet;
+    if (!d) return;
+    const content = String(d.content || '');
+    const dayMap = { lun: 'lun', mar: 'mar', mie: 'mie', 'mié': 'mie', jue: 'jue', vie: 'vie', sab: 'sab', 'sáb': 'sab', dom: 'dom' };
+    const daysM = content.match(/D[ií]as:\s*([^\n]+)/i);
+    const days = daysM ? daysM[1].split(',').map(s => dayMap[s.trim().slice(0, 3).toLowerCase()]).filter(Boolean) : [];
+    const weeksM = content.match(/Duraci[oó]n:\s*(\d+)/i);
+    const weeks = weeksM ? parseInt(weeksM[1]) : 1;
+    const block = (label) => {
+      const m = content.match(new RegExp(label + ':\\s*\\n([\\s\\S]*?)(?=\\n\\s*\\n|$)'));
+      if (!m) return ['', ''];
+      const opts = m[1].split('\n').map(s => s.replace(/^\s*-\s*/, '').trim()).filter(Boolean);
+      return [opts[0] || '', opts[1] || ''];
+    };
+    const b = block('Desayuno'), l = block('Comida'), dn = block('Cena'), s = block('Snacks');
+    this.setState({
+      cddOpen: false, cwOpen: true, cwType: 'diet', cwStep: 0,
+      cwClientIds: d.member_id ? [d.member_id] : [],
+      coachDietDays: days, cdDurationWeeks: weeks === 2 ? 2 : (weeks >= 4 ? 4 : 1),
+    });
+    setTimeout(() => {
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+      set('cw-diet-name', d.title || '');
+      set('cw-m-b1', b[0]); set('cw-m-b2', b[1]);
+      set('cw-m-l1', l[0]); set('cw-m-l2', l[1]);
+      set('cw-m-d1', dn[0]); set('cw-m-d2', dn[1]);
+      set('cw-m-s1', s[0]); set('cw-m-s2', s[1]);
+    }, 250);
   }
 
   async coachSendDiet() {
@@ -5127,7 +5202,11 @@ class Component extends DCLogic {
         : { kind: 'coach', coach_id: item.id, coach_days: item.days, branch_id: this.state.memberBranchId };
       const { data, error } = await getSupabase().functions.invoke('stripe-checkout', { body });
       if (error || !data || !data.url) { this.showToast('No se pudo abrir el pago: ' + (data?.error || error?.message || 'error')); return; }
-      window.location.href = data.url;
+      // En una ventana nueva: si la app está instalada en la pantalla de
+      // inicio, la página de Stripe se veía recortada dentro del marco de
+      // la app — en su propia pestaña se muestra completa.
+      const w = window.open(data.url, '_blank');
+      if (!w) window.location.href = data.url;
     } catch (e) { this.showToast('No se pudo conectar con el pago.'); }
   }
 
@@ -5998,6 +6077,8 @@ class Component extends DCLogic {
       cpdPanelStyle: { display: this.state.cpdOpen ? 'flex' : 'none', position: 'absolute', inset: 0, zIndex: 253, flexDirection: 'column', background: '#FFFFFF' },
       closeCpd: () => this.setState({ cpdOpen: false }),
       deleteCpd: () => this.deleteCoachProgram(),
+      editCpd: () => this.editCoachProgram(),
+      editCdd: () => this.editCoachDiet(),
       ...((() => {
         const p = this.state.cpdProgram || {};
         let pdays = [];
@@ -6124,7 +6205,7 @@ class Component extends DCLogic {
           out['reqPlan' + i + 'Price'] = p ? ('$' + p.price) : '';
           out['reqPlan' + i + 'Style'] = p ? { display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', borderRadius: '14px', background: '#F7F7F8', marginBottom: '8px', cursor: 'pointer' } : { display: 'none' };
           out['reqPlan' + i] = p ? (() => this.requestPlan(p)) : (() => {});
-          out['payCard' + i + 'Style'] = p ? { background: '#0A0A0A', color: '#FFFFFF', border: 'none', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flexShrink: 0 } : { display: 'none' };
+          out['payCard' + i + 'Style'] = p ? { background: '#6B7280', color: '#FFFFFF', border: 'none', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', flexShrink: 0 } : { display: 'none' };
           out['payCard' + i] = p ? ((ev) => { ev.stopPropagation(); this.payWithCard('plan', p); }) : (() => {});
         }
         return out;
@@ -7531,17 +7612,17 @@ class Component extends DCLogic {
         };
       })()),
       trainerAccessStyle: userType === 'trainer' ? { display: 'block' } : { display: 'none' },
-      // Mis accesos al gym (solo miembros con ficha vinculada)
+      // Mis accesos al gym (mismo estado real en Perfil y en Progreso)
       ...((() => {
         const acc = this.state.myCustomerAccess;
-        const on = { fontSize: '11px', fontWeight: '700', color: '#22C55E', marginTop: '3px' };
-        const off = { fontSize: '11px', fontWeight: '700', color: '#C4C4C6', marginTop: '3px' };
+        const onCss = 'font-size:12px;color:#22C55E;font-weight:600;margin-top:1px;';
+        const offCss = 'font-size:12px;color:#9CA3AF;font-weight:600;margin-top:1px;';
         return {
           myAccessStyle: (userType !== 'trainer' && acc) ? { background: '#F2F2F4', borderRadius: '20px', padding: '18px', marginTop: '12px' } : { display: 'none' },
-          accessFingerLabel: acc && acc.fingerprint_id ? 'Activo ✓' : 'Sin registrar',
-          accessFingerStyle: acc && acc.fingerprint_id ? on : off,
-          accessFaceLabel: acc && acc.face_id ? 'Activo ✓' : 'Sin registrar',
-          accessFaceStyle: acc && acc.face_id ? on : off,
+          accessFingerTxt: acc && acc.fingerprint_id ? 'Activo' : 'Pídelo en recepción',
+          accessFingerCss: acc && acc.fingerprint_id ? onCss : offCss,
+          accessFaceTxt: acc && acc.face_id ? 'Activo' : 'Pídelo en recepción',
+          accessFaceCss: acc && acc.face_id ? onCss : offCss,
         };
       })()),
       profStat1: userType === 'trainer' ? this.state.coachStats.sessionCount : this.state.stats.totalWorkouts,
