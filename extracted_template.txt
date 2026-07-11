@@ -681,6 +681,7 @@
           <h3 style="font-size:26px;font-weight:800;color:#0A0A0A;letter-spacing:-0.025em;line-height:1.15;margin-bottom:8px;">Arma la<br>rutina.</h3>
           <p style="font-size:14px;color:#9CA3AF;margin-bottom:20px;">Toca un ejercicio para agregarlo · {{ coachAssignExCount }} agregados</p>
           <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:12px;">
+            <button onclick="{{ caGrpMios }}" style="{{ caGrpChipMios }}">★ Míos</button>
             <button onclick="{{ caGrpPecho }}" style="{{ caGrpChipPecho }}">Pecho</button>
             <button onclick="{{ caGrpEspalda }}" style="{{ caGrpChipEspalda }}">Espalda</button>
             <button onclick="{{ caGrpPierna }}" style="{{ caGrpChipPierna }}">Pierna</button>
@@ -696,6 +697,11 @@
             <div onclick="{{ caPick3Click }}" style="{{ caPick3Style }}">{{ caPick3 }}</div>
             <div onclick="{{ caPick4Click }}" style="{{ caPick4Style }}">{{ caPick4 }}</div>
             <div onclick="{{ caPick5Click }}" style="{{ caPick5Style }}">{{ caPick5 }}</div>
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:16px;">
+            <input type="text" placeholder="O escribe otro ejercicio..." value="{{ caExName }}" onchange="{{ setCaExName }}" style="flex:2;padding:12px 14px;border-radius:12px;border:1.5px solid #EBEBEB;font-size:13px;outline:none;font-family:inherit;background:#FFFFFF;box-sizing:border-box;">
+            <input type="text" placeholder="4 × 10" value="{{ caExReps }}" onchange="{{ setCaExReps }}" style="flex:1;padding:12px 14px;border-radius:12px;border:1.5px solid #EBEBEB;font-size:13px;outline:none;font-family:inherit;background:#FFFFFF;">
+            <button onclick="{{ addCaCustomExercise }}" style="flex-shrink:0;background:#0A0A0A;color:#FFFFFF;border:none;padding:0 18px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;">+</button>
           </div>
           <div style="{{ coachAssignExListStyle }}">
             <div style="{{ caEx0Style }}"><span style="font-size:13px;font-weight:700;color:#0A0A0A;flex:1;">{{ caEx0Name }}</span><span style="font-size:12px;color:#9CA3AF;">{{ caEx0Detail }}</span><span onclick="{{ caEx0Remove }}" style="font-size:16px;color:#D1D5DB;cursor:pointer;padding:0 4px;">×</span></div>
@@ -6450,6 +6456,10 @@ class Component extends DCLogic {
           core:    [{n:'Plancha',r:'3 × 45s'},{n:'Crunch Bicicleta',r:'3 × 20'},{n:'Elevación de Piernas',r:'3 × 15'},{n:'Russian Twist',r:'3 × 20'},{n:'Mountain Climbers',r:'3 × 30s'},{n:'Plancha Lateral',r:'3 × 30s'}],
           cardio:  [{n:'Caminadora',r:'20 min'},{n:'Bicicleta Estática',r:'20 min'},{n:'Elíptica',r:'15 min'},{n:'Remo Ergómetro',r:'10 min'},{n:'Saltar Cuerda',r:'3 × 2 min'},{n:'Sprints',r:'6 × 30s'}],
         };
+        // "Míos": ejercicios personalizados que este coach ya escribió antes en otras rutinas
+        let _mineCoach = [];
+        try { _mineCoach = JSON.parse(localStorage.getItem(this.lsKey('vg_exlib_coach')) || '[]'); } catch (_) {}
+        catalog.mios = _mineCoach.slice(0, 6).map(x => ({ n: x.n, r: x.r || '3 × 12' }));
         const grp = this.state.coachAssignExGroup || 'pecho';
         const list = catalog[grp] || [];
         const chip = (g) => ({
@@ -6458,6 +6468,7 @@ class Component extends DCLogic {
           background: grp === g ? '#0A0A0A' : '#FFFFFF', color: grp === g ? '#FFFFFF' : '#6B7280',
         });
         const out = {
+          caGrpChipMios: chip('mios'), caGrpMios: () => this.setState({ coachAssignExGroup: 'mios' }),
           caGrpChipPecho: chip('pecho'), caGrpPecho: () => this.setState({ coachAssignExGroup: 'pecho' }),
           caGrpChipEspalda: chip('espalda'), caGrpEspalda: () => this.setState({ coachAssignExGroup: 'espalda' }),
           caGrpChipPierna: chip('pierna'), caGrpPierna: () => this.setState({ coachAssignExGroup: 'pierna' }),
@@ -6497,6 +6508,26 @@ class Component extends DCLogic {
         });
         return out;
       })()),
+      caExName: this.state.caExName || '', setCaExName: (e) => this.setState({ caExName: e.target.value }),
+      caExReps: this.state.caExReps || '', setCaExReps: (e) => this.setState({ caExReps: e.target.value }),
+      addCaCustomExercise: () => {
+        const name = (this.state.caExName || '').trim();
+        if (!name) return;
+        const r = (this.state.caExReps || '').trim() || '3 × 12';
+        const ex = { n: name, r };
+        // Biblioteca personal del coach: se guarda para reusarlo después (chip ★ Míos)
+        try {
+          const k = this.lsKey('vg_exlib_coach');
+          const lib = JSON.parse(localStorage.getItem(k) || '[]').filter(x => x.n !== name);
+          lib.unshift({ n: name, r });
+          localStorage.setItem(k, JSON.stringify(lib.slice(0, 30)));
+        } catch (_) {}
+        this.setState(s => {
+          const cur = s.coachAssignPicked || [];
+          if (cur.some(p => p.n === name)) return { caExName: '', caExReps: '' };
+          return { coachAssignPicked: [...cur, ex], caExName: '', caExReps: '' };
+        });
+      },
 
       // "Hoy" — clientes que entrenaron today
       coachTodayEmptyStyle: { display: this.state.coachTodaySessions.length === 0 ? 'block' : 'none' },
