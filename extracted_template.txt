@@ -2632,6 +2632,28 @@
                   </div>
                 </div>
               </div>
+              <!-- Mis formas de acceso al gym (QR siempre; huella/rostro las registra recepción en el aparato) -->
+              <div style="{{ myAccessStyle }}">
+                <div style="font-size:15px;font-weight:600;color:#0A0A0A;margin-bottom:4px;">Mis accesos al gym</div>
+                <div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;">Para registrar tu huella o tu cara, pídelo en recepción — toma un minuto</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                  <div style="background:#FFFFFF;border-radius:14px;padding:14px 10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="font-size:20px;margin-bottom:4px;">📱</div>
+                    <div style="font-size:12px;font-weight:700;color:#0A0A0A;">Código QR</div>
+                    <div style="font-size:11px;font-weight:700;color:#22C55E;margin-top:3px;">Activo ✓</div>
+                  </div>
+                  <div style="background:#FFFFFF;border-radius:14px;padding:14px 10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="font-size:20px;margin-bottom:4px;">👆</div>
+                    <div style="font-size:12px;font-weight:700;color:#0A0A0A;">Huella</div>
+                    <div style="{{ accessFingerStyle }}">{{ accessFingerLabel }}</div>
+                  </div>
+                  <div style="background:#FFFFFF;border-radius:14px;padding:14px 10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="font-size:20px;margin-bottom:4px;">😀</div>
+                    <div style="font-size:12px;font-weight:700;color:#0A0A0A;">Rostro</div>
+                    <div style="{{ accessFaceStyle }}">{{ accessFaceLabel }}</div>
+                  </div>
+                </div>
+              </div>
               <div style="{{ trainerAccessStyle }}">
                 <div style="background:#F2F2F4;border-radius:20px;padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="{{ toggleCoachNotif }}">
                   <div><div style="font-size:15px;font-weight:600;color:#0A0A0A;">Actividad de mis atletas</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Avisarme cuando empiecen o terminen de entrenar</div></div>
@@ -4184,6 +4206,7 @@ class Component extends DCLogic {
       this.fetchSubscription();
       this.fetchAssignedProgram();
       this.fetchMemberDiet();
+      this.fetchMyAccessMethods();
     };
     document.addEventListener('visibilitychange', this._refreshOnReturn);
     window.addEventListener('focus', this._refreshOnReturn);
@@ -4352,6 +4375,7 @@ class Component extends DCLogic {
       authLoading: false,
     });
     this.subscribeToPush(session.user.id);
+    this.fetchMyAccessMethods(session.user.id);
     try {
       // Migración: datos guardados antes de separar por usuario
       ['vg_favs', 'vg_own_programs', 'vg_recents'].forEach(k => {
@@ -5019,6 +5043,35 @@ class Component extends DCLogic {
         profile_id: profileId, endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
       }, { onConflict: 'endpoint' });
     } catch (_) { /* silencioso: notificaciones son un plus, no deben romper el login */ }
+  }
+
+  // Mis accesos: lee la propia ficha de cliente para mostrar si ya tiene
+  // huella/rostro registrados en el aparato (requiere pos_migration18.sql;
+  // si la política aún no existe, simplemente no muestra la tarjeta).
+  async fetchMyAccessMethods(uid) {
+    const id = uid || (this.state.session && this.state.session.user.id);
+    if (!id) return;
+    try {
+      await waitForSupabase();
+      const { data } = await getSupabase().from('customers')
+        .select('fingerprint_id, face_id')
+        .eq('profile_id', id).limit(1);
+      if (data && data[0]) this.setState({ myCustomerAccess: data[0] });
+    } catch (_) {}
+  }
+
+  // Al completar las 4 comidas del día, avisa al coach por el chat privado
+  // que ya existe entre ellos (le aparece en su conversación y su campanita).
+  async notifyCoachDietDone() {
+    try {
+      const coach = this.state.assignedCoach;
+      if (!coach || !coach.id || !this.state.session) return;
+      await waitForSupabase();
+      await getSupabase().from('messages').insert({
+        from_id: this.state.session.user.id, to_id: coach.id,
+        body: '✅ ¡Cumplí mi dieta completa de hoy! Racha: ' + this.state.dietStreak + (this.state.dietStreak === 1 ? ' día' : ' días') + ' seguidos 🔥',
+      });
+    } catch (_) {}
   }
 
   async sendPosRequest(type, refId, refName, price) {
@@ -6615,8 +6668,10 @@ class Component extends DCLogic {
         const _all = _next && this.state.dietMealL && this.state.dietMealD && this.state.dietMealS;
         const _newStreak = (_all && this.state.dietLastFollowDate !== _today) ? this.state.dietStreak + 1 : this.state.dietStreak;
         const _newDate = (_all && this.state.dietLastFollowDate !== _today) ? _today : this.state.dietLastFollowDate;
+        const _notifyCoach = _all && this.state.dietLastFollowDate !== _today;
         this.setState({ dietMealB: _next, dietStreak: _newStreak, dietLastFollowDate: _newDate }, () => {
           try { localStorage.setItem('vg_diet', JSON.stringify({ streak: this.state.dietStreak, lastFollowDate: this.state.dietLastFollowDate, lastMealDate: _today, mealB: this.state.dietMealB, mealL: this.state.dietMealL, mealD: this.state.dietMealD, mealS: this.state.dietMealS })); } catch(_) {}
+          if (_notifyCoach) this.notifyCoachDietDone();
         });
       },
       toggleDietMealL: () => {
@@ -6625,8 +6680,10 @@ class Component extends DCLogic {
         const _all = this.state.dietMealB && _next && this.state.dietMealD && this.state.dietMealS;
         const _newStreak = (_all && this.state.dietLastFollowDate !== _today) ? this.state.dietStreak + 1 : this.state.dietStreak;
         const _newDate = (_all && this.state.dietLastFollowDate !== _today) ? _today : this.state.dietLastFollowDate;
+        const _notifyCoach = _all && this.state.dietLastFollowDate !== _today;
         this.setState({ dietMealL: _next, dietStreak: _newStreak, dietLastFollowDate: _newDate }, () => {
           try { localStorage.setItem('vg_diet', JSON.stringify({ streak: this.state.dietStreak, lastFollowDate: this.state.dietLastFollowDate, lastMealDate: _today, mealB: this.state.dietMealB, mealL: this.state.dietMealL, mealD: this.state.dietMealD, mealS: this.state.dietMealS })); } catch(_) {}
+          if (_notifyCoach) this.notifyCoachDietDone();
         });
       },
       toggleDietMealD: () => {
@@ -6635,8 +6692,10 @@ class Component extends DCLogic {
         const _all = this.state.dietMealB && this.state.dietMealL && _next && this.state.dietMealS;
         const _newStreak = (_all && this.state.dietLastFollowDate !== _today) ? this.state.dietStreak + 1 : this.state.dietStreak;
         const _newDate = (_all && this.state.dietLastFollowDate !== _today) ? _today : this.state.dietLastFollowDate;
+        const _notifyCoach = _all && this.state.dietLastFollowDate !== _today;
         this.setState({ dietMealD: _next, dietStreak: _newStreak, dietLastFollowDate: _newDate }, () => {
           try { localStorage.setItem('vg_diet', JSON.stringify({ streak: this.state.dietStreak, lastFollowDate: this.state.dietLastFollowDate, lastMealDate: _today, mealB: this.state.dietMealB, mealL: this.state.dietMealL, mealD: this.state.dietMealD, mealS: this.state.dietMealS })); } catch(_) {}
+          if (_notifyCoach) this.notifyCoachDietDone();
         });
       },
       toggleDietMealS: () => {
@@ -6645,8 +6704,10 @@ class Component extends DCLogic {
         const _all = this.state.dietMealB && this.state.dietMealL && this.state.dietMealD && _next;
         const _newStreak = (_all && this.state.dietLastFollowDate !== _today) ? this.state.dietStreak + 1 : this.state.dietStreak;
         const _newDate = (_all && this.state.dietLastFollowDate !== _today) ? _today : this.state.dietLastFollowDate;
+        const _notifyCoach = _all && this.state.dietLastFollowDate !== _today;
         this.setState({ dietMealS: _next, dietStreak: _newStreak, dietLastFollowDate: _newDate }, () => {
           try { localStorage.setItem('vg_diet', JSON.stringify({ streak: this.state.dietStreak, lastFollowDate: this.state.dietLastFollowDate, lastMealDate: _today, mealB: this.state.dietMealB, mealL: this.state.dietMealL, mealD: this.state.dietMealD, mealS: this.state.dietMealS })); } catch(_) {}
+          if (_notifyCoach) this.notifyCoachDietDone();
         });
       },
       openDietPanel: () => this.setState({ dietPanelOpen: true }),
@@ -7470,6 +7531,19 @@ class Component extends DCLogic {
         };
       })()),
       trainerAccessStyle: userType === 'trainer' ? { display: 'block' } : { display: 'none' },
+      // Mis accesos al gym (solo miembros con ficha vinculada)
+      ...((() => {
+        const acc = this.state.myCustomerAccess;
+        const on = { fontSize: '11px', fontWeight: '700', color: '#22C55E', marginTop: '3px' };
+        const off = { fontSize: '11px', fontWeight: '700', color: '#C4C4C6', marginTop: '3px' };
+        return {
+          myAccessStyle: (userType !== 'trainer' && acc) ? { background: '#F2F2F4', borderRadius: '20px', padding: '18px', marginTop: '12px' } : { display: 'none' },
+          accessFingerLabel: acc && acc.fingerprint_id ? 'Activo ✓' : 'Sin registrar',
+          accessFingerStyle: acc && acc.fingerprint_id ? on : off,
+          accessFaceLabel: acc && acc.face_id ? 'Activo ✓' : 'Sin registrar',
+          accessFaceStyle: acc && acc.face_id ? on : off,
+        };
+      })()),
       profStat1: userType === 'trainer' ? this.state.coachStats.sessionCount : this.state.stats.totalWorkouts,
       profStat1Label: userType === 'trainer' ? 'Sesiones' : 'Entrenos',
       profStat2: userType === 'trainer' ? this.state.coachStats.clientCount : this.state.stats.streak,
