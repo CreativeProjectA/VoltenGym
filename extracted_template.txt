@@ -1197,7 +1197,7 @@
         <!-- Logo + skip top -->
         <div style="position:absolute;top:0;left:0;right:0;z-index:2;padding:44px 28px 0;display:flex;align-items:center;justify-content:space-between;">
           <div style="display:flex;align-items:center;gap:9px;">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M16 2L7 15h8l-3 11L22 13h-8z" fill="#F97316"></path></svg>
+            <img src="voltengym-logo.png" alt="Volten Gym" width="28" height="28" style="object-fit:contain;">
             <span style="font-size:15px;font-weight:800;color:#FFFFFF;letter-spacing:0.1em;">VOLTEN</span>
           </div>
         </div>
@@ -1218,7 +1218,7 @@
             <!-- Logo + skip -->
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
               <div style="display:flex;align-items:center;gap:8px;">
-                <svg width="22" height="22" viewBox="0 0 28 28" fill="none"><path d="M16 2L7 15h8l-3 11L22 13h-8z" fill="#F97316"></path></svg>
+                <img src="voltengym-logo.png" alt="Volten Gym" width="22" height="22" style="object-fit:contain;">
                 <span style="font-size:13px;font-weight:800;color:#0A0A0A;letter-spacing:0.1em;">VOLTEN GYM</span>
               </div>
             </div>
