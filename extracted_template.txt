@@ -1216,8 +1216,8 @@
           <div style="width:100%;max-width:440px;">
             <!-- Logo + skip -->
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
-              <div style="display:flex;align-items:center;">
-                <img src="voltengym-logo.png" alt="Volten Gym" style="height:38px;width:auto;object-fit:contain;">
+              <div style="display:flex;align-items:center;background:#0A0A0A;border-radius:12px;padding:10px 16px;">
+                <img src="voltengym-logo.png" alt="Volten Gym" style="height:30px;width:auto;object-fit:contain;">
               </div>
             </div>
 
