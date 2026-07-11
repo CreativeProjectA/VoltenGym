@@ -3418,9 +3418,55 @@ const Pos={
     return `
     <div class="topbar">
       <div><h1>Ejercicios</h1><div class="sub">Video de referencia — lo ven todos los clientes en su rutina</div></div>
-      <input class="inp" style="width:260px" placeholder="Buscar ejercicio..." oninput="Pos.exCatQ=this.value;Pos.renderExCat()">
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input class="inp" style="width:260px" placeholder="Buscar ejercicio..." oninput="Pos.exCatQ=this.value;Pos.renderExCat()">
+        <button class="btn btn-primary" onclick="Pos.newExerciseModal()">+ Nuevo ejercicio</button>
+      </div>
     </div>
     <div class="panel"><div id="ex-cat-list">Cargando...</div></div>`;
+  },
+  newExerciseModal(){
+    openModal(`
+      <h3>Nuevo ejercicio</h3><p class="msub">Se agrega al catálogo — lo pueden usar coaches y clientes en sus rutinas</p>
+      <div class="field"><label>Nombre *</label><input class="inp" id="nex-name" placeholder="Ej. Press de Banca con Barra"></div>
+      <div class="frow">
+        <div class="field"><label>Categoría *</label><select class="inp" id="nex-cat">
+          <option value="fuerza">Fuerza</option>
+          <option value="cardio">Cardio</option>
+          <option value="movilidad">Movilidad</option>
+          <option value="bienestar">Bienestar</option>
+        </select></div>
+        <div class="field"><label>Músculos / grupo</label><input class="inp" id="nex-muscle" placeholder="Ej. Pecho · Tríceps"></div>
+      </div>
+      <div class="field"><label>Equipo <span style="color:var(--muted);font-weight:500">(opcional)</span></label><input class="inp" id="nex-equip" placeholder="Ej. Barra / Banco"></div>
+      <div class="field"><label>Video <span style="color:var(--muted);font-weight:500">(opcional, lo puedes subir después)</span></label><input class="inp" type="file" accept="video/*" id="nex-video" style="padding-top:11px"></div>
+      <button class="btn btn-primary btn-block" id="nex-save" onclick="Pos.saveNewExercise()">Guardar ejercicio</button>
+    `);
+    setTimeout(()=>$('nex-name').focus(),50);
+  },
+  async saveNewExercise(){
+    const name=$('nex-name').value.trim();
+    if(!name){toast('Ponle nombre al ejercicio.',true);return;}
+    const btn=$('nex-save');btn.disabled=true;btn.textContent='Guardando...';
+    const payload={name,category:$('nex-cat').value,muscle_groups:$('nex-muscle').value.trim()||null,equipment:$('nex-equip').value.trim()||null};
+    const r=await sb.from('exercise_catalog').insert(payload).select('id,name,category,muscle_groups,video_url').single();
+    if(r.error){toast('Error: '+r.error.message,true);btn.disabled=false;btn.textContent='Guardar ejercicio';return;}
+    const newEx=r.data;
+    this.exCat.unshift(newEx);
+    const f=$('nex-video').files[0];
+    closeModal();toast('Ejercicio creado ✓');this.renderExCat();
+    if(f){
+      // sube el video justo después de crearlo, reusando el flujo normal
+      const ext=(f.name.split('.').pop()||'mp4').toLowerCase();
+      const path='exercises/'+newEx.id+'.'+ext;
+      toast('Subiendo video...');
+      const {error:upErr}=await sb.storage.from('avatars').upload(path,f,{upsert:true});
+      if(upErr){toast('El ejercicio se creó, pero el video falló: '+upErr.message,true);return;}
+      const {data:pub}=sb.storage.from('avatars').getPublicUrl(path);
+      await Q.update('exercise_catalog',{id:newEx.id},{video_url:pub.publicUrl});
+      newEx.video_url=pub.publicUrl;
+      toast('Video guardado ✓');this.renderExCat();
+    }
   },
   async after_exercises(){
     if(this.role!=='admin')return;
@@ -3439,10 +3485,11 @@ const Pos={
         <td>${x.video_url?'<span class="tag tag-green">Con video</span>':'<span class="tag tag-gray">Sin video</span>'}</td>
         <td style="text-align:right;white-space:nowrap">
           <input type="file" accept="video/*" id="exvid-${x.id}" style="display:none" onchange="Pos.uploadExVideo('${x.id}')">
+          ${x.video_url?`<button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.previewExVideo('${x.id}')">▶ Ver video</button>`:''}
           <button class="btn-xs btn" style="background:var(--gray)" onclick="document.getElementById('exvid-${x.id}').click()">${x.video_url?'Reemplazar':'+ Subir video'}</button>
           ${x.video_url?`<button class="btn-xs btn btn-ghost" onclick="Pos.removeExVideo('${x.id}')">Quitar</button>`:''}
         </td></tr>`).join('')
-    }</tbody></table>`:'<div class="stub"><div class="st">Sin ejercicios</div><p>El catálogo se siembra desde Supabase (exercise_catalog).</p></div>';
+    }</tbody></table>`:'<div class="stub"><div class="st">Sin ejercicios</div><p>Dale a "+ Nuevo ejercicio" para empezar tu catálogo.</p></div>';
   },
   async uploadExVideo(id){
     const inp=$('exvid-'+id);const f=inp&&inp.files[0];if(!f)return;
@@ -3458,6 +3505,13 @@ const Pos={
     if(r.error){toast(/video_url/i.test(r.error.message||'')?'Corre pos_migration8.sql primero.':'Error: '+r.error.message,true);return;}
     const ex=this.exCat.find(x=>x.id===id);if(ex)ex.video_url=video_url;
     toast('Video guardado ✓ — ya lo ven los clientes en su rutina');this.renderExCat();
+  },
+  previewExVideo(id){
+    const ex=this.exCat.find(x=>x.id===id);if(!ex||!ex.video_url)return;
+    openModal(`
+      <h3>${esc(ex.name)}</h3><p class="msub">Así lo ve el cliente dentro de su rutina, en la app</p>
+      <video src="${esc(ex.video_url)}" controls autoplay playsinline style="width:100%;border-radius:14px;background:#000"></video>
+    `);
   },
   async removeExVideo(id){
     const r=await Q.update('exercise_catalog',{id},{video_url:null});

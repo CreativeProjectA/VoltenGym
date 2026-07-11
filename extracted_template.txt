@@ -374,6 +374,28 @@
   <!-- ╔══ APP SHELL ══╗ -->
   <div id="app-root" style="width:100%;max-width:1280px;height:100%;background:#F5F5F5;position:relative;overflow:hidden;display:flex;flex-direction:column;">
 
+    <!-- CANDADO DE TÉRMINOS Y CONDICIONES — una sola vez por cuenta -->
+    <div style="{{ termsGateStyle }}">
+      <div style="width:100%;max-width:440px;max-height:82%;background:#FFFFFF;border-radius:24px;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:26px 26px 16px;flex-shrink:0;border-bottom:1px solid #F0F0F0;">
+          <h2 style="font-size:20px;font-weight:800;color:#0A0A0A;letter-spacing:-0.02em;">Antes de continuar</h2>
+          <p style="font-size:13px;color:#9CA3AF;font-weight:500;margin-top:4px;">Lee y confirma nuestro aviso de privacidad y reglamento</p>
+        </div>
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:20px 26px;">
+          <div style="{{ termsPrivacyStyle }}">
+            <h3 style="font-size:14px;font-weight:800;color:#0A0A0A;margin-bottom:8px;">{{ termsPrivacyTitle }}</h3>
+            <p style="font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap;margin-bottom:18px;">{{ termsPrivacyBody }}</p>
+          </div>
+          <div style="{{ termsRulesStyle }}">
+            <h3 style="font-size:14px;font-weight:800;color:#0A0A0A;margin-bottom:8px;">{{ termsRulesTitle }}</h3>
+            <p style="font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap;">{{ termsRulesBody }}</p>
+          </div>
+        </div>
+        <div style="padding:18px 26px 26px;flex-shrink:0;border-top:1px solid #F0F0F0;">
+          <button onclick="{{ acceptTermsClick }}" style="{{ acceptTermsBtnStyle }}">{{ acceptTermsLabel }}</button>
+        </div>
+      </div>
+    </div>
 
     <!-- REMINDER BANNER — in-app notification toast (works on iOS + Android + Desktop) -->
     <div style="{{ reminderBannerStyle }}">
@@ -4449,6 +4471,7 @@ class Component extends DCLogic {
     });
     this.subscribeToPush(session.user.id);
     this.fetchMyAccessMethods(session.user.id);
+    this.checkTermsAccepted(session.user.id);
     try {
       // Migración: datos guardados antes de separar por usuario
       ['vg_favs', 'vg_own_programs', 'vg_recents'].forEach(k => {
@@ -5145,6 +5168,30 @@ class Component extends DCLogic {
         body: '✅ ¡Cumplí mi dieta completa de hoy! Racha: ' + this.state.dietStreak + (this.state.dietStreak === 1 ? ' día' : ' días') + ' seguidos 🔥',
       });
     } catch (_) {}
+  }
+
+  // Términos y condiciones: se piden UNA sola vez por cuenta. Si el campo
+  // accepted_terms_at está vacío, se muestra el candado de pantalla
+  // completa hasta que confirme (requiere pos_migration19.sql).
+  async checkTermsAccepted(uid) {
+    try {
+      await waitForSupabase();
+      const { data, error } = await getSupabase().from('profiles').select('accepted_terms_at').eq('id', uid).single();
+      if (error) return; // migración aún no corrida -- no bloquea a nadie
+      if (!data || !data.accepted_terms_at) {
+        const [{ data: pol }] = await Promise.all([getSupabase().from('gym_policies').select('*')]);
+        this.setState({ termsGateOpen: true, termsPolicies: pol || [] });
+      }
+    } catch (_) {}
+  }
+  async acceptTerms() {
+    if (!this.state.session) return;
+    this.setState({ termsAccepting: true });
+    try {
+      await waitForSupabase();
+      await getSupabase().from('profiles').update({ accepted_terms_at: new Date().toISOString() }).eq('id', this.state.session.user.id);
+    } catch (_) {}
+    this.setState({ termsGateOpen: false, termsAccepting: false });
   }
 
   async sendPosRequest(type, refId, refName, price) {
@@ -7014,6 +7061,26 @@ class Component extends DCLogic {
             display: 'flex', alignItems: 'center', gap: '12px',
             boxShadow: '0 8px 32px rgba(0,0,0,0.18)', borderLeft: '4px solid #F97316' }
         : { display: 'none' },
+      // Candado de términos y condiciones
+      termsGateStyle: this.state.termsGateOpen
+        ? { position: 'absolute', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }
+        : { display: 'none' },
+      ...((() => {
+        const pols = this.state.termsPolicies || [];
+        const priv = pols.find(p => p.id === 'privacy');
+        const rules = pols.find(p => p.id === 'rules');
+        return {
+          termsPrivacyStyle: (priv && priv.body) ? {} : { display: 'none' },
+          termsPrivacyTitle: (priv && priv.title) || 'Aviso de privacidad',
+          termsPrivacyBody: (priv && priv.body) || '',
+          termsRulesStyle: (rules && rules.body) ? {} : { display: 'none' },
+          termsRulesTitle: (rules && rules.title) || 'Reglamento del gimnasio',
+          termsRulesBody: (rules && rules.body) || '',
+        };
+      })()),
+      acceptTermsLabel: this.state.termsAccepting ? 'Guardando...' : 'Acepto los términos y condiciones',
+      acceptTermsBtnStyle: { width: '100%', background: this.state.termsAccepting ? '#D1D5DB' : '#0A0A0A', color: '#FFFFFF', border: 'none', padding: '16px 0', borderRadius: '14px', fontSize: '15px', fontWeight: '700', cursor: this.state.termsAccepting ? 'default' : 'pointer' },
+      acceptTermsClick: () => this.acceptTerms(),
       workoutSessionStyle: {
         display: this.state.workoutSessionOpen ? 'flex' : 'none',
         position: 'absolute', top: 0, left: 0, right: 0, height: '100%', zIndex: 260, flexDirection: 'column',
