@@ -47,11 +47,12 @@ Deno.serve(async (req) => {
     const SERVICE_KEY = Deno.env.get('SB_SERVICE_KEY');
     // Hasta 3 secretos posibles: uno por sucursal, más el genérico viejo
     // por si alguna cuenta todavía no tiene el suyo específico configurado.
+    // .trim() por si el copy/paste dejó un espacio o salto de línea invisible.
     const candidateSecrets = [
       Deno.env.get('STRIPE_WEBHOOK_SECRET_GM'),
       Deno.env.get('STRIPE_WEBHOOK_SECRET_TC'),
       Deno.env.get('STRIPE_WEBHOOK_SECRET'),
-    ].filter((s): s is string => !!s);
+    ].map((s) => (s || '').trim()).filter((s): s is string => !!s);
     if (!SB_URL || !SERVICE_KEY || !candidateSecrets.length) {
       return new Response('Faltan secrets', { status: 500 });
     }

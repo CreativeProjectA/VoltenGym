@@ -24,10 +24,18 @@
 const BRANCH_GM = 'aa6c7382-7494-434b-a2e7-5fe24349e4f8'; // Gómez Morín
 const BRANCH_TC = '78857b72-1bcb-4ecb-a031-c2d9d7b5b248'; // Tres Cantos
 
+// .trim() por si el copy/paste del secret en Supabase dejó un espacio o
+// salto de línea invisible al final (rompe el header Authorization con un
+// error críptico "not a valid ByteString" — encontrado probando en vivo).
+function cleanKey(v: string | undefined | null): string | null {
+  if (!v) return null;
+  const t = v.trim();
+  return t || null;
+}
 function stripeKeyForBranch(branchId: string): string | null {
-  if (branchId === BRANCH_GM) return Deno.env.get('STRIPE_SECRET_KEY_GM') || Deno.env.get('STRIPE_SECRET_KEY') || null;
-  if (branchId === BRANCH_TC) return Deno.env.get('STRIPE_SECRET_KEY_TC') || Deno.env.get('STRIPE_SECRET_KEY') || null;
-  return Deno.env.get('STRIPE_SECRET_KEY') || null;
+  if (branchId === BRANCH_GM) return cleanKey(Deno.env.get('STRIPE_SECRET_KEY_GM')) || cleanKey(Deno.env.get('STRIPE_SECRET_KEY'));
+  if (branchId === BRANCH_TC) return cleanKey(Deno.env.get('STRIPE_SECRET_KEY_TC')) || cleanKey(Deno.env.get('STRIPE_SECRET_KEY'));
+  return cleanKey(Deno.env.get('STRIPE_SECRET_KEY'));
 }
 
 const CORS = {
