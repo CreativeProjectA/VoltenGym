@@ -3,6 +3,12 @@
 //  la membresía o el coach del cliente (acumulando días si ya tenía
 //  vigencia, igual que hace el POS).
 //
+//  DOS SUCURSALES = DOS CUENTAS DE STRIPE, así que este webhook recibe
+//  avisos de las 2 cuentas. Como cada cuenta firma sus eventos con un
+//  secreto distinto, se prueban los 2 secretos hasta encontrar el que
+//  coincide — así se sabe de qué cuenta viene, sin fiarse de nada del
+//  contenido del mensaje hasta comprobar la firma primero.
+//
 //  DESPLIEGUE (Supabase → Edge Functions → Deploy a new function,
 //  nómbrala EXACTO "stripe-webhook", pega este código, con
 //  --no-verify-jwt si usas CLI; desde el navegador no hace falta
@@ -10,10 +16,13 @@
 //
 //  1. Después de desplegarla, copia su URL (algo como
 //     https://mopyslyhjtnmvlksusjr.supabase.co/functions/v1/stripe-webhook)
-//  2. En dashboard.stripe.com → Developers → Webhooks → Add endpoint,
-//     pega esa URL, y selecciona el evento "checkout.session.completed".
-//  3. Stripe te da un "Signing secret" (empieza whsec_...) — agrégalo
-//     como secret aquí: STRIPE_WEBHOOK_SECRET = whsec_...
+//  2. En CADA cuenta de Stripe (Gómez Morín Y Tres Cantos, por separado):
+//     dashboard.stripe.com → Developers → Webhooks → Add endpoint,
+//     pega la MISMA URL, y selecciona el evento "checkout.session.completed".
+//  3. Cada cuenta te da su propio "Signing secret" (empieza whsec_...).
+//     Agrégalos como 2 secrets separados aquí:
+//       STRIPE_WEBHOOK_SECRET_GM = whsec_... (el de Gómez Morín)
+//       STRIPE_WEBHOOK_SECRET_TC = whsec_... (el de Tres Cantos)
 //  4. Los secrets SB_URL / SB_SERVICE_KEY ya deberían estar de las
 //     funciones anteriores (se comparten en todo el proyecto).
 // ═══════════════════════════════════════════════════════════════════
@@ -36,13 +45,22 @@ Deno.serve(async (req) => {
   try {
     const SB_URL = Deno.env.get('SB_URL');
     const SERVICE_KEY = Deno.env.get('SB_SERVICE_KEY');
-    const WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET');
-    if (!SB_URL || !SERVICE_KEY || !WEBHOOK_SECRET) {
+    // Hasta 3 secretos posibles: uno por sucursal, más el genérico viejo
+    // por si alguna cuenta todavía no tiene el suyo específico configurado.
+    const candidateSecrets = [
+      Deno.env.get('STRIPE_WEBHOOK_SECRET_GM'),
+      Deno.env.get('STRIPE_WEBHOOK_SECRET_TC'),
+      Deno.env.get('STRIPE_WEBHOOK_SECRET'),
+    ].filter((s): s is string => !!s);
+    if (!SB_URL || !SERVICE_KEY || !candidateSecrets.length) {
       return new Response('Faltan secrets', { status: 500 });
     }
     const payload = await req.text();
     const sig = req.headers.get('stripe-signature') || '';
-    const valid = await verifyStripeSignature(payload, sig, WEBHOOK_SECRET);
+    let valid = false;
+    for (const secret of candidateSecrets) {
+      if (await verifyStripeSignature(payload, sig, secret)) { valid = true; break; }
+    }
     if (!valid) return new Response('Firma inválida', { status: 400 });
 
     const event = JSON.parse(payload);

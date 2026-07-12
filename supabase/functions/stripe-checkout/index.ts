@@ -4,15 +4,31 @@
 //  app redirige ahí. Modo TEST mientras el dueño no active su cuenta
 //  real de Stripe — el dinero es ficticio pero el flujo es real.
 //
+//  DOS SUCURSALES = DOS CUENTAS DE STRIPE, cada una con su propio banco.
+//  Según la sucursal del cliente, se usa la llave secreta de ESA cuenta,
+//  para que el dinero caiga al banco correcto.
+//
 //  DESPLIEGUE (Supabase → Edge Functions → Deploy a new function,
 //  nómbrala EXACTO "stripe-checkout", pega este código):
-//   Secrets necesarios (Edge Functions → Secrets, si no están ya):
+//   Secrets necesarios (Edge Functions → Secrets):
 //     SB_URL          = https://mopyslyhjtnmvlksusjr.supabase.co
 //     SB_SERVICE_KEY  = (tu service_role key)
-//     STRIPE_SECRET_KEY = sk_test_... (o sk_live_... cuando el dueño
-//                          active su cuenta real)
+//     STRIPE_SECRET_KEY_GM = sk_test_... de la cuenta de Gómez Morín
+//     STRIPE_SECRET_KEY_TC = sk_test_... de la cuenta de Tres Cantos
 //     APP_URL         = https://voltengym.vercel.app  (o el dominio real)
+//   (STRIPE_SECRET_KEY, sin sufijo, se usa como respaldo si algún día
+//   hay una sucursal nueva sin llave propia todavía configurada.)
 // ═══════════════════════════════════════════════════════════════════
+
+// IDs fijos de las 2 sucursales — para saber qué llave de Stripe usar.
+const BRANCH_GM = 'aa6c7382-7494-434b-a2e7-5fe24349e4f8'; // Gómez Morín
+const BRANCH_TC = '78857b72-1bcb-4ecb-a031-c2d9d7b5b248'; // Tres Cantos
+
+function stripeKeyForBranch(branchId: string): string | null {
+  if (branchId === BRANCH_GM) return Deno.env.get('STRIPE_SECRET_KEY_GM') || Deno.env.get('STRIPE_SECRET_KEY') || null;
+  if (branchId === BRANCH_TC) return Deno.env.get('STRIPE_SECRET_KEY_TC') || Deno.env.get('STRIPE_SECRET_KEY') || null;
+  return Deno.env.get('STRIPE_SECRET_KEY') || null;
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -24,10 +40,9 @@ Deno.serve(async (req) => {
   try {
     const SB_URL = Deno.env.get('SB_URL');
     const SERVICE_KEY = Deno.env.get('SB_SERVICE_KEY');
-    const STRIPE_KEY = Deno.env.get('STRIPE_SECRET_KEY');
     const APP_URL = Deno.env.get('APP_URL') || 'https://voltengym.vercel.app';
-    if (!SB_URL || !SERVICE_KEY || !STRIPE_KEY) {
-      return new Response(JSON.stringify({ error: 'Faltan secrets: SB_URL, SB_SERVICE_KEY o STRIPE_SECRET_KEY.' }), { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } });
+    if (!SB_URL || !SERVICE_KEY) {
+      return new Response(JSON.stringify({ error: 'Faltan secrets: SB_URL o SB_SERVICE_KEY.' }), { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } });
     }
 
     // Verifica sesión del cliente (cualquier usuario logueado puede comprar su propia membresía)
@@ -40,6 +55,11 @@ Deno.serve(async (req) => {
 
     const { kind, plan_id, coach_id, coach_days, branch_id } = await req.json();
     if (!branch_id) return new Response(JSON.stringify({ error: 'Falta tu sucursal.' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
+
+    const STRIPE_KEY = stripeKeyForBranch(branch_id);
+    if (!STRIPE_KEY) {
+      return new Response(JSON.stringify({ error: 'Esta sucursal no tiene Stripe configurado todavía.' }), { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } });
+    }
 
     let amountMxn = 0, productName = '';
     if (kind === 'plan') {
