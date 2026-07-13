@@ -4,6 +4,27 @@ Esto conecta el facial AI07F y el torniquete ZKTeco con el sistema, SIN
 necesitar internet en el dispositivo (solo necesita ver esta PC en la
 red local del gym).
 
+## Bloqueo automático de vencidos (nuevo)
+
+El puente ya no solo registra accesos: **mantiene la lista de usuarios
+del aparato sincronizada con las membresías**. Cada minuto revisa:
+
+- Membresía **vencida** o cliente **suspendido** → le manda al aparato la
+  orden de **borrarlo de su memoria** → su cara/huella deja de abrir.
+- **Renueva** → lo vuelve a dar de alta en el aparato con el mismo código.
+  Ojo: el aparato borró su plantilla de cara/huella, así que el cliente
+  debe **registrarla de nuevo una sola vez** en el dispositivo.
+- El **personal** (coaches, cajeras, encargadas, admin) nunca se borra.
+
+Probado end-to-end con un dispositivo simulado (protocolo ZKTeco push):
+vencido → `DATA DELETE USERINFO`, renovado → `DATA UPDATE USERINFO`,
+acceso con cara → registrado. El formato exacto de comandos se confirma
+con el aparato físico el día de la instalación (la consola del puente
+muestra "Resultado de comando #N: OK/ERROR" para verificarlo en vivo).
+
+El estado de sincronización vive en `estado_sync.json` junto al puente
+(sobrevive reinicios de la PC).
+
 ## Qué es
 
 Un programa chiquito (`bridge.js`) que corre en la computadora de
