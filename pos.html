@@ -2192,7 +2192,7 @@ const Pos={
         <h2>Catálogo de planes</h2><div class="psub">${this.role==='admin'?'Toca un plan para editar precio o duración':(this.role==='encargado'?'Toca un plan de tu sucursal para editarlo — se notifica al admin':'Solo el admin edita precios')}</div>
         <table><thead><tr><th>Plan</th><th>Días</th><th>Precio</th><th>Estado</th></tr></thead><tbody>
         ${this.plans.filter(p=>!p.branch_id||p.branch_id===(this.branch?this.branch.id:null)).map(p=>`<tr ${this.role==='admin'||(this.role==='encargado'&&p.branch_id===(this.branch?this.branch.id:null))?`style="cursor:pointer" onclick="Pos.planModal('${p.id}')"`:''}>
-          <td style="font-weight:700">${esc(p.name)}${p.is_family?' <span class="tag tag-gray">familiar</span>':''}${p.branch_id?' <span class="tag tag-orange">'+esc((this.branches.find(b=>b.id===p.branch_id)||{}).name||'')+'</span>':''}</td>
+          <td style="font-weight:700">${esc(p.name)}${p.is_family?' <span class="tag tag-gray">familiar</span>':''}${p.branch_id?' <span class="tag tag-orange">'+esc((this.branches.find(b=>b.id===p.branch_id)||{}).name||'')+'</span>':' <span class="tag tag-gray">ambas sucursales</span>'}</td>
           <td>${p.duration_days}</td>
           <td style="font-weight:800;color:var(--orange)">${money(p.price)}</td>
           <td>${p.active!==false?'<span class="tag tag-green">Activo</span>':'<span class="tag tag-gray">Inactivo</span>'}</td>
