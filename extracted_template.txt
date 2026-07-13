@@ -3382,16 +3382,26 @@ class Component extends DCLogic {
     this.setState({ stats: { totalWorkouts, totalHours, totalHoursUnit, streak, thisWeekCount, thisWeekMinutes, weekDots }, recentLogs });
   }
 
-  async fetchGymAnnouncements() {
+  async fetchGymAnnouncements(branchId) {
     try {
       await waitForSupabase();
-      const { data } = await getSupabase()
+      // Solo anuncios de MI sucursal (anuncio sin sucursales marcadas = para todos)
+      const bId = branchId || this.state.memberBranchId || null;
+      let res = await getSupabase()
+        .from('announcements')
+        .select('id, title, body, image_url, created_at, branch_ids')
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (res.error) res = await getSupabase()
         .from('announcements')
         .select('title, body, image_url, created_at')
         .eq('active', true)
         .order('created_at', { ascending: false })
         .limit(1);
-      this.setState({ gymAnnouncement: (data && data[0]) || null });
+      const list = res.data || [];
+      const mine = list.filter((a) => !a.branch_ids || !a.branch_ids.length || (bId && a.branch_ids.includes(bId)));
+      this.setState({ gymAnnouncement: mine[0] || null });
     } catch (e) {}
   }
 
@@ -3425,6 +3435,8 @@ class Component extends DCLogic {
       memberHeight: data.height_cm || null,
       memberBranchId: data.branch_id || null,
     }, () => { this.checkWorkoutReminder(); });
+    // Ya con la sucursal conocida, re-filtra el banner de anuncios
+    this.fetchGymAnnouncements(data.branch_id || null);
     this.fetchBranches();
     if (data.branch_id) this.fetchCoaches();
     // Restore the assigned coach on login — without this, the coach card and

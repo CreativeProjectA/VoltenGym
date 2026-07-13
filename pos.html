@@ -2948,10 +2948,13 @@ const Pos={
       if(an){this.anns=an;cset('anns',an);}
     }catch(e){this.anns=cget('anns')||[];}
     const el=$('anns-list');
-    if(el)el.innerHTML=this.anns.length?this.anns.map(a=>`
+    // fuera de admin: solo anuncios que aplican en ESTA sucursal
+    const abId=this.branch?this.branch.id:null;
+    const vAnns=this.role==='admin'?this.anns:this.anns.filter(a=>!a.branch_ids||!a.branch_ids.length||a.branch_ids.includes(abId));
+    if(el)el.innerHTML=vAnns.length?vAnns.map(a=>`
       <div class="row-line">
         ${a.image_url?`<div style="width:52px;height:52px;border-radius:12px;overflow:hidden;flex-shrink:0;margin-right:14px;background:#F3F4F6;"><img src="${esc(a.image_url)}" style="width:100%;height:100%;object-fit:cover" alt=""></div>`:''}
-        <div style="flex:1"><div style="font-weight:800;font-size:15px">${esc(a.title||'')}</div><div style="font-size:13px;color:var(--muted);font-weight:500;margin-top:2px">${esc(a.body||'')}</div></div>
+        <div style="flex:1"><div style="font-weight:800;font-size:15px">${esc(a.title||'')} ${a.branch_ids&&a.branch_ids.length?'<span class="tag tag-orange">'+a.branch_ids.map(bid=>esc((this.branches.find(b=>b.id===bid)||{}).name||'')).join(', ')+'</span>':'<span class="tag tag-gray">ambas sucursales</span>'}</div><div style="font-size:13px;color:var(--muted);font-weight:500;margin-top:2px">${esc(a.body||'')}</div></div>
         <div style="display:flex;gap:6px;align-items:center;">
           ${a.active?'<span class="tag tag-green">En la app</span>':'<span class="tag tag-gray">Oculto</span>'}
           ${this.role!=='cajera'?`<button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.annModal('${a.id}')">Editar</button>
@@ -3052,12 +3055,21 @@ const Pos={
         <div class="field"><label>Subir foto (opcional)</label><input class="inp" type="file" id="an-photo" accept="image/*" style="padding-top:11px"></div>
         <div class="field"><label>...o pegar URL de imagen</label><input class="inp" id="an-img" value="${a?esc(a.image_url||''):''}" placeholder="https://..."></div>
       </div>
+      <div class="field"><label>Sucursales</label>
+        <div style="display:flex;gap:14px;padding:4px 0;">
+          ${this.branches.map(b=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer"><input type="checkbox" class="an-branch" value="${b.id}" ${!a||!a.branch_ids||!a.branch_ids.length||a.branch_ids.includes(b.id)?'checked':''}> ${esc(b.name)}</label>`).join('')}
+        </div>
+        <p style="font-size:11px;color:var(--muted);font-weight:500;margin-top:4px">El anuncio solo les sale en la app a los miembros de las sucursales marcadas. Con todas marcadas, lo ven todos.</p>
+      </div>
       <button class="btn btn-primary btn-block" id="an-save" onclick="Pos.saveAnn('${a?a.id:''}')">Publicar en la app</button>
     `);
   },
   async saveAnn(id){
-    const payload={title:$('an-title').value.trim(),body:$('an-body').value.trim()||null,image_url:$('an-img').value.trim()||null,active:true};
+    const anChk=Array.from(document.querySelectorAll('.an-branch:checked')).map(x=>x.value);
+    const payload={title:$('an-title').value.trim(),body:$('an-body').value.trim()||null,image_url:$('an-img').value.trim()||null,active:true,
+      branch_ids:anChk.length===this.branches.length?null:anChk};
     if(!payload.title){toast('Ponle título.',true);return;}
+    if(!anChk.length){toast('Marca al menos una sucursal.',true);return;}
     // foto subida → bucket avatars/anns (requiere pos_migration3.sql)
     const f=$('an-photo')&&$('an-photo').files[0];
     if(f){
