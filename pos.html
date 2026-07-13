@@ -2905,6 +2905,9 @@ const Pos={
   anns:[],
   view_promos(){
     const canEdit=this.role!=='cajera';
+    // fuera de admin: solo promos que aplican en ESTA sucursal (sin sucursales marcadas = ambas)
+    const bId=this.branch?this.branch.id:null;
+    const vPromos=this.role==='admin'?this.promos:this.promos.filter(p=>!p.branch_ids||!p.branch_ids.length||p.branch_ids.includes(bId));
     return `
     <div class="topbar">
       <div><h1>Promociones</h1><div class="sub">Descuentos del POS y anuncios en la app de los miembros</div></div>
@@ -2919,8 +2922,8 @@ const Pos={
     </div>
     ${this.promoTab==='promos'?`
     <div class="panel">
-      ${this.promos.length?`<table><thead><tr><th>Promoción</th><th>Descuento</th><th>Aplica a</th><th>Vigencia</th><th>Estado</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${
-        this.promos.map(p=>`<tr>
+      ${vPromos.length?`<table><thead><tr><th>Promoción</th><th>Descuento</th><th>Aplica a</th><th>Vigencia</th><th>Estado</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${
+        vPromos.map(p=>`<tr>
           <td style="font-weight:700">${esc(p.name)}</td>
           <td style="font-weight:800;color:var(--orange)">${p.discount_type==='percent'?p.discount_value+'%':money(p.discount_value)}</td>
           <td>${p.applies_to==='plans'?'Membresías':(p.applies_to==='products'?'Productos':'Todo')}${p.branch_ids&&p.branch_ids.length?' · '+p.branch_ids.map(bid=>esc((this.branches.find(b=>b.id===bid)||{}).name||'')).join(', '):' · Ambas sucursales'}</td>
