@@ -2148,6 +2148,11 @@ const Pos={
 
   /* ═══════ MEMBRESÍAS ═══════ */
   view_memberships(){
+    // Filtro del catálogo de planes por sucursal (solo admin; los demás ya ven solo su sucursal)
+    const brCat=this.planBrCat||'__all';
+    const catPlans=this.role==='admin'
+      ?(brCat==='__all'?this.plans:this.plans.filter(p=>!p.branch_id||p.branch_id===brCat))
+      :this.plans.filter(p=>!p.branch_id||p.branch_id===(this.branch?this.branch.id:null));
     const withSub=this.customers.map(c=>({c,s:this.bestSub(c)})).filter(x=>x.s);
     const act=withSub.filter(x=>daysLeft(x.s.end_date)>7).length;
     const exp7=withSub.filter(x=>{const d=daysLeft(x.s.end_date);return d>=0&&d<=7;});
@@ -2190,8 +2195,12 @@ const Pos={
       </div>
       <div class="panel">
         <h2>Catálogo de planes</h2><div class="psub">${this.role==='admin'?'Toca un plan para editar precio o duración':(this.role==='encargado'?'Toca un plan de tu sucursal para editarlo — se notifica al admin':'Solo el admin edita precios')}</div>
+        ${this.role==='admin'&&this.branches.length>1?`<div class="pick-tabs" style="margin:10px 0 12px;flex-wrap:wrap">
+          <button class="pick-tab ${brCat==='__all'?'on':''}" onclick="Pos.planBrCat='__all';Pos.go('memberships')">Todas</button>
+          ${this.branches.map(b=>`<button class="pick-tab ${brCat===b.id?'on':''}" onclick="Pos.planBrCat='${b.id}';Pos.go('memberships')">${esc(b.name)}</button>`).join('')}
+        </div>`:''}
         <table><thead><tr><th>Plan</th><th>Días</th><th>Precio</th><th>Estado</th></tr></thead><tbody>
-        ${this.plans.filter(p=>!p.branch_id||p.branch_id===(this.branch?this.branch.id:null)).map(p=>`<tr ${this.role==='admin'||(this.role==='encargado'&&p.branch_id===(this.branch?this.branch.id:null))?`style="cursor:pointer" onclick="Pos.planModal('${p.id}')"`:''}>
+        ${catPlans.map(p=>`<tr ${this.role==='admin'||(this.role==='encargado'&&p.branch_id===(this.branch?this.branch.id:null))?`style="cursor:pointer" onclick="Pos.planModal('${p.id}')"`:''}>
           <td style="font-weight:700">${esc(p.name)}${p.is_family?' <span class="tag tag-gray">familiar</span>':''}${p.branch_id?' <span class="tag tag-orange">'+esc((this.branches.find(b=>b.id===p.branch_id)||{}).name||'')+'</span>':' <span class="tag tag-gray">ambas sucursales</span>'}</td>
           <td>${p.duration_days}</td>
           <td style="font-weight:800;color:var(--orange)">${money(p.price)}</td>
