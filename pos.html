@@ -591,6 +591,20 @@ const Pos={
     return this.appProfiles.filter(p=>p.role==='coach'&&this.coachProfiles.find(x=>x.profile_id===p.id))
       .filter(p=>!byCoach[p.id]||!b||byCoach[p.id].indexOf(b)!==-1);
   },
+  // clientes visibles en esta sesión: admin ve todos, los demás SOLO su sucursal
+  // (misma regla que ya usaba la lista de Clientes — aplicada en todas las pantallas)
+  custForBranch(){
+    if(this.role==='admin')return this.customers;
+    const b=this.branch?this.branch.id:null;
+    return this.customers.filter(c=>c.branch_id===b);
+  },
+  // ¿este coach atiende en la sucursal actual? (sin sucursal asignada = en todas)
+  coachInBranch(pid){
+    if(this.role==='admin')return true;
+    const b=this.branch?this.branch.id:null;
+    const mine=(this.staffBranches||[]).filter(x=>x.staff_id===pid).map(x=>x.branch_id);
+    return !mine.length||!b||mine.indexOf(b)!==-1;
+  },
 
   /* ── Turno ── */
   async checkShiftGate(){
@@ -779,7 +793,10 @@ const Pos={
 
   renderRequests(){
     const rp=$('d-requests');if(!rp)return;
-    rp.innerHTML=this.requests.length?this.requests.map(r=>`
+    // solo solicitudes de ESTA sucursal (las sin sucursal salen en todas para no perderse)
+    const bId=this.branch?this.branch.id:null;
+    const reqs=this.role==='admin'?this.requests:this.requests.filter(r=>!r.branch_id||r.branch_id===bId);
+    rp.innerHTML=reqs.length?reqs.map(r=>`
       <div class="row-line">
         <div><div style="font-weight:700;font-size:14px">${esc(this.profName(r.member_id))}</div>
         <div style="font-size:12px;color:var(--muted);font-weight:500">${r.type==='plan'?'Membresía':'Coach'}: ${esc(r.ref_name||'')}${r.price?' · '+money(r.price):''}</div></div>
@@ -1019,9 +1036,9 @@ const Pos={
       $('d-last-sales').innerHTML='<table><thead><tr><th>Cliente</th><th>Total</th><th>Pago</th><th>Hora</th></tr></thead><tbody>'+
         t.sales.slice(0,6).map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td style="color:#16A34A;font-weight:700">${money(s.total)}</td><td>${payTagHtml(s.payment_method)}</td><td>${ftime(s.created_at)}</td></tr>`).join('')+'</tbody></table>';
     }
-    // por vencer
+    // por vencer — solo clientes de la sucursal visible
     const t7=new Date(Date.now()+7*864e5);
-    const expiring=this.customers.map(c=>({c,s:this.bestSub(c)}))
+    const expiring=this.custForBranch().map(c=>({c,s:this.bestSub(c)}))
       .filter(x=>x.s&&daysLeft(x.s.end_date)>=0&&new Date(x.s.end_date)<=t7)
       .sort((a,b)=>a.s.end_date<b.s.end_date?-1:1).slice(0,6);
     $('d-expiring').textContent=expiring.length;
@@ -1035,7 +1052,7 @@ const Pos={
       const now=new Date(),tom=new Date(Date.now()+864e5);
       const mmdd=(d)=>String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
       const todayKey=mmdd(now),tomKey=mmdd(tom);
-      const bdays=this.customers.filter(c=>c.birth_date&&(mmdd(new Date(c.birth_date+'T12:00:00'))===todayKey||mmdd(new Date(c.birth_date+'T12:00:00'))===tomKey));
+      const bdays=this.custForBranch().filter(c=>c.birth_date&&(mmdd(new Date(c.birth_date+'T12:00:00'))===todayKey||mmdd(new Date(c.birth_date+'T12:00:00'))===tomKey));
       bEl.innerHTML=bdays.length?bdays.map(c=>{
         const isToday=mmdd(new Date(c.birth_date+'T12:00:00'))===todayKey;
         const msg='¡Feliz cumpleaños, '+c.full_name.split(' ')[0]+'! Todo el equipo de Volten Gym te desea un excelente día. ¡Que este nuevo año esté lleno de logros dentro y fuera del gym!';
@@ -1111,10 +1128,13 @@ const Pos={
     </div>`;
   },
   familyPicker(){
-    if(!this.families.length){toast('Aún no hay familias. Créalas en la ficha de un cliente.',true);return;}
+    // fuera de admin: solo familias con algún miembro de ESTA sucursal
+    const bId=this.branch?this.branch.id:null;
+    const fams=this.role==='admin'?this.families:this.families.filter(f=>this.customers.some(c=>c.family_id===f.id&&c.branch_id===bId));
+    if(!fams.length){toast('Aún no hay familias en tu sucursal. Créalas en la ficha de un cliente.',true);return;}
     openModal(`
       <h3>Familias</h3><p class="msub">Elige la familia y quién paga — el plan familiar cubre a todos</p>
-      ${this.families.map(f=>{
+      ${fams.map(f=>{
         const mem=this.customers.filter(c=>c.family_id===f.id);
         return `<div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:12px;">
           <div style="font-weight:800;font-size:15px;margin-bottom:8px">${esc(f.name||'Familia')} · ${mem.length} miembro${mem.length===1?'':'s'}</div>
@@ -1129,7 +1149,7 @@ const Pos={
   },
   saleCustRows(){
     const q=(this.sale.q||'').toLowerCase();
-    let list=this.customers;
+    let list=this.custForBranch();
     if(q)list=list.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q));
     list=list.slice(0,8);
     if(!list.length)return '<div class="stub" style="padding:30px"><p>'+(this.customers.length?'Sin resultados.':'Aún no hay clientes registrados. Crea el primero con "+ Nuevo cliente".')+'</p></div>';
@@ -2153,7 +2173,7 @@ const Pos={
     const catPlans=this.role==='admin'
       ?(brCat==='__all'?this.plans:this.plans.filter(p=>!p.branch_id||p.branch_id===brCat))
       :this.plans.filter(p=>!p.branch_id||p.branch_id===(this.branch?this.branch.id:null));
-    const withSub=this.customers.map(c=>({c,s:this.bestSub(c)})).filter(x=>x.s);
+    const withSub=this.custForBranch().map(c=>({c,s:this.bestSub(c)})).filter(x=>x.s);
     const act=withSub.filter(x=>daysLeft(x.s.end_date)>7).length;
     const exp7=withSub.filter(x=>{const d=daysLeft(x.s.end_date);return d>=0&&d<=7;});
     const dead=withSub.filter(x=>{const d=daysLeft(x.s.end_date);return d<0&&d>=-30;});
@@ -2211,7 +2231,7 @@ const Pos={
     <div class="panel">
       <h2>Catálogo de entrenadores</h2><div class="psub">Precio por día, semana, mes y año — se editan en Personal, con el precio mensual base</div>
       <table><thead><tr><th>Coach</th><th>Sucursal</th><th>Día</th><th>Semana</th><th>Mes</th><th>Año</th></tr></thead><tbody>
-      ${this.appProfiles.filter(p=>p.role==='coach').map(p=>{
+      ${this.appProfiles.filter(p=>p.role==='coach'&&this.coachInBranch(p.id)).map(p=>{
         const cp=this.coachProfiles.find(x=>x.profile_id===p.id);
         const monthly=cp&&cp.monthly_price?Number(cp.monthly_price):0;
         const sbr=this.staffBranches.find(x=>x.staff_id===p.id);
@@ -2229,7 +2249,7 @@ const Pos={
       const {data}=await sb.from('checkins').select('customer_id,member_id').gte('created_at',since).eq('granted',true);
       const seen=new Set();
       (data||[]).forEach(x=>{if(x.customer_id)seen.add(x.customer_id);if(x.member_id)seen.add(x.member_id);});
-      const inact=this.customers.filter(c=>{
+      const inact=this.custForBranch().filter(c=>{
         const s=this.bestSub(c);
         return s&&daysLeft(s.end_date)>=0&&!seen.has(c.id)&&!(c.profile_id&&seen.has(c.profile_id));
       });
@@ -2271,7 +2291,7 @@ const Pos={
   async buildCampaign(){
     const aud=$('cp-aud').value,msg=$('cp-msg').value;
     const box=$('cp-list');box.innerHTML='Preparando...';
-    const withSub=this.customers.map(c=>({c,s:this.bestSub(c)}));
+    const withSub=this.custForBranch().map(c=>({c,s:this.bestSub(c)}));
     let list=[];
     if(aud==='porvencer')list=withSub.filter(x=>x.s&&daysLeft(x.s.end_date)>=0&&daysLeft(x.s.end_date)<=7);
     else if(aud==='vencidos')list=withSub.filter(x=>x.s&&daysLeft(x.s.end_date)<0&&daysLeft(x.s.end_date)>=-30);
