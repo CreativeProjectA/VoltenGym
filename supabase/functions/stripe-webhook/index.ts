@@ -101,12 +101,12 @@ Deno.serve(async (req) => {
       const until = dISO(new Date(Date.now() + days * 86400000));
       await fetch(SB_URL + '/rest/v1/member_profiles', {
         method: 'POST', headers: { ...H, Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ profile_id: memberId, coach_id: meta.coach_id, coach_until: until, branch_id: branchId }),
+        body: JSON.stringify({ profile_id: memberId, coach_id: meta.coach_id, coach_until: until, branch_id: branchId, coach_cancelled: false }),
       });
       // También en su ficha del POS si ya tiene una (para que la cajera lo vea en Clientes)
       await fetch(SB_URL + '/rest/v1/customers?profile_id=eq.' + memberId, {
         method: 'PATCH', headers: { ...H, Prefer: 'return=minimal' },
-        body: JSON.stringify({ coach_id: meta.coach_id, coach_until: until }),
+        body: JSON.stringify({ coach_id: meta.coach_id, coach_until: until, coach_cancelled: false }),
       });
     }
 

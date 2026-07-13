@@ -1,0 +1,23 @@
+Buenas tardes [nombre del dueño],
+
+Le mando también los pasos para instalar el programita que conecta el lector facial/huella con el sistema, en la computadora de recepción de cada sucursal. Es sencillo, se hace una sola vez, y hasta lo puede hacer cualquier persona de su equipo sin necesidad de que yo esté presente:
+
+1. Le voy a mandar por WhatsApp DOS archivos comprimidos (ZIP) — uno dice "Gómez Morín" y el otro "Tres Cantos". Cada sucursal usa SOLO el suyo, no se deben mezclar.
+
+2. En la computadora de recepción de esa sucursal, descarguen el ZIP correspondiente y descomprímanlo (clic derecho → Extraer todo).
+
+3. Si esa computadora no tiene instalado "Node.js" (un programa gratuito y oficial que se necesita para que esto funcione), va a aparecer un mensaje avisando. En ese caso:
+   - Entren a nodejs.org
+   - Descarguen el botón verde que dice "LTS"
+   - Instálenlo dándole "Siguiente" a todo, hasta que diga "Finalizar"
+   - Reinicien la computadora
+
+4. Ya con Node.js instalado, abran la carpeta que descomprimieron y denle doble clic a "INSTALAR.bat".
+
+5. Va a salir una ventana negra que hace todo solo — esperen a que diga "LISTO" y ciérrenla.
+
+Con eso queda instalado para siempre: arranca solo cada vez que se prenda esa computadora, corre invisible (sin ventanas abiertas), y no hay que volver a tocarlo.
+
+El único paso que si necesita a un técnico es configurar el aparato físico (el lector facial o el torniquete) — eso se hace directo en el menú del aparato el día que lo instalen, y ya viene explicado en un archivo "LEEME.txt" que va dentro de cada carpeta, para que el técnico lo siga sin broncas.
+
+Cualquier duda en el camino, aquí estoy.

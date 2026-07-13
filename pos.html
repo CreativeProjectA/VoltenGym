@@ -530,6 +530,8 @@ const Pos={
       $('shift-chip').classList.add('hidden');
       this.nav='reports';
     }
+    // El admin no maneja caja — el chip "Cerrar turno" no le aplica
+    if(this.role==='admin')$('shift-chip').classList.add('hidden');
     await this.loadCore();
     // sucursal fija para no-admin (staff_branches), admin elige
     if(this.role!=='admin'){
@@ -542,6 +544,20 @@ const Pos={
     }
     $('login').style.display='none';
     await this.checkShiftGate();
+    // Refresco automático: cada 60s recarga los catálogos (planes, precios,
+    // promos, clientes...) para que un cambio hecho desde otra sesión (ej.
+    // el admin sube un precio) aparezca solo, sin cerrar sesión. Se salta
+    // el refresco si hay un modal abierto, una venta en curso o se está
+    // escribiendo en algún campo, para no interrumpir a la cajera.
+    if(!this._autoRefresh)this._autoRefresh=setInterval(async()=>{
+      if(!navigator.onLine||document.hidden)return;
+      if($('modal-root')&&$('modal-root').style.display==='flex')return;
+      if(this.nav==='sale')return;
+      const ae=document.activeElement;
+      if(ae&&['INPUT','TEXTAREA','SELECT'].includes(ae.tagName))return;
+      await this.loadCore();
+      if($('shell').style.display!=='none')this.go(this.nav||'dashboard');
+    },60000);
   },
 
   async loadCore(){
@@ -578,18 +594,24 @@ const Pos={
 
   /* ── Turno ── */
   async checkShiftGate(){
-    if(this.role==='contador'){
+    // El admin no maneja caja — no le toca abrir/cerrar turno, va directo al panel.
+    if(this.role==='contador'||this.role==='admin'){
       $('gate').style.display='none';$('shell').style.display='grid';
-      this.go('reports');return;
+      this.go(this.role==='contador'?'reports':(this.nav||'dashboard'));this.refreshChip();return;
     }
     const bId=this.branch?this.branch.id:null;
     let shift=null;
     try{
-      let q=sb.from('cash_shifts').select('*').eq('status','open').order('opened_at',{ascending:false}).limit(1);
+      // El turno abierto tiene que ser DE ESTA PERSONA — antes solo se checaba
+      // la sucursal, así que si alguien más (ej. el admin) dejaba un turno
+      // abierto en la misma sucursal, a la cajera/encargada que entraba
+      // después se le saltaba el check-in por error, pensando que ya tenía
+      // turno cuando en realidad era el de otra persona.
+      let q=sb.from('cash_shifts').select('*').eq('status','open').eq('staff_id',this.user.id).order('opened_at',{ascending:false}).limit(1);
       if(bId)q=q.eq('branch_id',bId);
       const {data}=await q;shift=(data&&data[0])||null;
-      cset('shift_'+bId,shift);
-    }catch(e){shift=cget('shift_'+bId);}
+      cset('shift_'+bId+'_'+this.user.id,shift);
+    }catch(e){shift=cget('shift_'+bId+'_'+this.user.id);}
     this.shift=shift;
     if(!this.shift){
       $('shell').style.display='none';$('gate').style.display='flex';
@@ -624,7 +646,7 @@ const Pos={
       Q.push({t:'insert',table:'cash_shifts',payload});
       toast('Turno abierto SIN internet — se sincroniza solo al reconectar.');
     }
-    this.shift=payload;cset('shift_'+bId,payload);
+    this.shift=payload;cset('shift_'+bId+'_'+this.user.id,payload);
     cset('shift_sales',[]);cset('shift_movs',[]);
     $('gate').style.display='none';$('shell').style.display='grid';
     this.go('dashboard');this.refreshChip();
@@ -632,13 +654,23 @@ const Pos={
 
   async shiftTotals(){
     let sales=[];let movs=[];
+    // El admin ya no abre turno: sus tarjetas de Inicio muestran las ventas
+    // de HOY de la sucursal seleccionada (de todos los turnos), en vez de
+    // las de un turno propio que no existe.
+    const noShift=!this.shift;
     try{
-      const {data:sv}=await sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy').eq('shift_id',this.shift.id).order('created_at',{ascending:false});
+      let q=sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy').order('created_at',{ascending:false});
+      if(noShift){q=q.gte('created_at',todayISO()+'T00:00:00');if(this.branch)q=q.eq('branch_id',this.branch.id);}
+      else q=q.eq('shift_id',this.shift.id);
+      const {data:sv}=await q;
       sales=sv||[];cset('shift_sales',sales);
     }catch(e){sales=cget('shift_sales')||[];}
     try{
-      const {data:mv}=await sb.from('cash_movements').select('*').eq('shift_id',this.shift.id).order('created_at',{ascending:false});
-      movs=mv||[];cset('shift_movs',movs);
+      if(noShift)movs=[];
+      else{
+        const {data:mv}=await sb.from('cash_movements').select('*').eq('shift_id',this.shift.id).order('created_at',{ascending:false});
+        movs=mv||[];cset('shift_movs',movs);
+      }
     }catch(e){movs=cget('shift_movs')||[];}
     const by=(m)=>sales.filter(x=>x.payment_method===m).reduce((s,x)=>s+Number(x.total||0),0);
     const movIn=movs.filter(m=>m.type==='in').reduce((s,x)=>s+Number(x.amount),0);
@@ -647,7 +679,7 @@ const Pos={
     const courtesies=sales.filter(x=>x.is_courtesy).length;
     return{sales,movs,cash,card,transfer,movIn,movOut,courtesies,
       total:cash+card+transfer,
-      expected:Number(this.shift.opening_cash)+cash+movIn-movOut};
+      expected:(this.shift?Number(this.shift.opening_cash):0)+cash+movIn-movOut};
   },
 
   async refreshChip(){
@@ -691,7 +723,7 @@ const Pos={
     const t=await this.shiftTotals();
     const r=await Q.update('cash_shifts',{id:this.shift.id},{status:'closed',closed_at:new Date().toISOString(),expected_cash:expected,counted_cash:counted});
     if(r.error){toast('Error: '+r.error.message,true);return;}
-    cset('shift_'+(this.branch?this.branch.id:null),null);
+    cset('shift_'+(this.branch?this.branch.id:null)+'_'+this.user.id,null);
     // Cierre automático de accesos: quien entró y no marcó su salida (se le
     // olvidó escanear, o fue el último de la huella/facial) queda registrado
     // como salido a la hora de cerrar el gym en esta sucursal.
@@ -727,7 +759,7 @@ const Pos={
     // el candado real es que this.shift deja de existir y checkShiftGate()
     // vuelve a pedir abrir turno.
     this.shift=null;
-    cset('shift_'+(this.branch?this.branch.id:null),null);
+    cset('shift_'+(this.branch?this.branch.id:null)+'_'+this.user.id,null);
     // La pantalla de fondo YA vuelve a "Iniciar turno" antes de abrir el modal
     // del corte — así, cierres el modal como lo cierres (tachita o Terminar),
     // detrás ya no hay acceso al POS, solo el gate de turno.
@@ -787,7 +819,7 @@ const Pos={
   },
 
   cashMoveModal(){
-    if(!this.shift)return;
+    if(!this.shift){toast('Los movimientos de efectivo se hacen dentro de un turno de caja (cajera/encargada).',true);return;}
     openModal(`
       <h3>Movimiento de efectivo</h3>
       <p class="msub">Meter o retirar dinero de la caja (no es una venta)</p>
@@ -892,7 +924,8 @@ const Pos={
   minOf(pid){const s=this.stock.find(x=>x.product_id===pid&&this.branch&&x.branch_id===this.branch.id);return s?Number(s.min_qty||0):0;},
   activePromos(){
     const t=todayISO();
-    return this.promos.filter(p=>p.active&&(!p.starts_at||p.starts_at<=t)&&(!p.ends_at||p.ends_at>=t));
+    const bId=this.branch?this.branch.id:null;
+    return this.promos.filter(p=>p.active&&(!p.starts_at||p.starts_at<=t)&&(!p.ends_at||p.ends_at>=t)&&(!p.branch_ids||!p.branch_ids.length||p.branch_ids.includes(bId)));
   },
 
   /* ═══════ DASHBOARD ═══════ */
@@ -944,6 +977,12 @@ const Pos={
           <div class="psub">Hoy y mañana — mándales una felicitación</div>
           <div id="d-birthdays"></div>
         </div>
+        ${this.role==='admin'?`
+        <div class="panel">
+          <h2 style="font-size:18px">Cambios del personal</h2>
+          <div class="psub">Planes editados por las encargadas — últimos movimientos</div>
+          <div id="d-audit"><div style="color:var(--muted);font-size:13px;font-weight:500;padding:6px 0">Cargando...</div></div>
+        </div>`:''}
       </div>
     </div>`;
   },
@@ -1011,6 +1050,19 @@ const Pos={
       if(rq){this.requests=rq;cset('requests',rq);}
     }catch(e){}
     this.renderRequests();
+    // Bitácora: cambios que hicieron las encargadas (solo la ve el admin)
+    const aEl=$('d-audit');
+    if(aEl){
+      try{
+        const {data:logs,error:logErr}=await sb.from('audit_log').select('*').order('created_at',{ascending:false}).limit(8);
+        if(logErr)throw logErr;
+        aEl.innerHTML=(logs&&logs.length)?logs.map(l=>`
+          <div class="row-line"><div><div style="font-weight:700;font-size:13px">${esc(l.staff_name||'')} <span style="color:var(--muted);font-weight:500">· ${esc((this.branches.find(b=>b.id===l.branch_id)||{}).name||'')}</span></div>
+          <div style="font-size:12px;color:var(--muted);font-weight:500">${esc(l.details||'')}</div></div>
+          <span style="font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">${fdate(l.created_at)} ${ftime(l.created_at)}</span></div>`).join('')
+        :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Sin cambios registrados todavía.</div>';
+      }catch(e){aEl.innerHTML='<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Corre pos_migration22.sql para activar la bitácora.</div>';}
+    }
   },
 
 
@@ -1374,13 +1426,13 @@ const Pos={
         // AL PAGAR se asigna el coach Y la sucursal al perfil del cliente (si ya tiene app)
         // → en su teléfono aparece el mismo entrenador y su sucursal.
         if(c&&c.profile_id){
-          const mp={profile_id:c.profile_id,coach_id:it.id,coach_until:until};
+          const mp={profile_id:c.profile_id,coach_id:it.id,coach_until:until,coach_cancelled:false};
           if(c.branch_id)mp.branch_id=c.branch_id;
           try{await sb.from('member_profiles').upsert(mp,{onConflict:'profile_id'});}catch(e){}
         }
         // guarda el coach en la ficha para que se transfiera si vincula la app después
-        try{await Q.update('customers',{id:c.id},{coach_id:it.id,coach_until:until});}catch(e){}
-        c.coach_id=it.id;c.coach_until=until;cset('customers',this.customers);
+        try{await Q.update('customers',{id:c.id},{coach_id:it.id,coach_until:until,coach_cancelled:false});}catch(e){}
+        c.coach_id=it.id;c.coach_until=until;c.coach_cancelled=false;cset('customers',this.customers);
         if(c.profile_id){this.sendPush(c.profile_id,'Ya tienes coach asignado','Válido hasta el '+fdate(until));}
         this.sendPush(it.id,'Nuevo atleta asignado',c.full_name+' ya es tu cliente');
       }
@@ -1550,7 +1602,10 @@ const Pos={
   },
   custTable(){
     const q=this.custQuery.toLowerCase();
-    let list=this.customers;
+    // Fuera de admin, cada quien ve SOLO los clientes de su propia sucursal
+    // (antes se veían los de las 2 sucursales sin importar el rol).
+    const bId=this.branch?this.branch.id:null;
+    let list=this.role==='admin'?this.customers:this.customers.filter(c=>c.branch_id===bId);
     if(q)list=list.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q));
     if(!list.length)return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
     return `<table><thead><tr><th>Cliente</th><th>Teléfono</th><th>App</th><th>Membresía</th><th>Alta</th><th></th></tr></thead><tbody>${
@@ -1656,6 +1711,7 @@ const Pos={
 
   async openCustomer(id){
     const c=this.customers.find(x=>x.id===id);if(!c)return;
+    if(this.role!=='admin'&&c.branch_id!==(this.branch?this.branch.id:null)){toast('Ese cliente es de otra sucursal.',true);return;}
     const subs=this.subsOf(c).slice(0,6);
     const appProf=c.profile_id?this.appProfiles.find(p=>p.id===c.profile_id):null;
     openModal(`
@@ -1664,7 +1720,7 @@ const Pos={
           return url?`<div class="av2" style="width:54px;height:54px;border-radius:18px;"><img src="${esc(url)}" alt=""></div>`
           :`<div class="av2" style="width:54px;height:54px;font-size:20px;border-radius:18px;background:linear-gradient(135deg,#F97316,#EA580C);color:#FFF">${esc((c.full_name||'?')[0].toUpperCase())}</div>`;})()}
         <div style="flex:1"><h3 style="margin-bottom:2px">${esc(c.full_name)}</h3>
-        <div style="font-size:13px;color:var(--muted);font-weight:600">${esc(c.phone||'sin teléfono')} · ${esc(c.email||'sin correo')}</div></div>
+        <div style="font-size:13px;color:var(--muted);font-weight:600">${esc(c.phone||'sin teléfono')} · ${esc(c.email||'sin correo')}${c.birth_date?' · 🎂 '+fdate(c.birth_date)+' ('+Math.floor((Date.now()-new Date(c.birth_date+'T12:00:00'))/(365.25*864e5))+' años)':''}</div></div>
         ${this.membershipTag(c)}
       </div>
       <div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;">
@@ -1674,7 +1730,7 @@ const Pos={
         <button class="btn btn-sm ${c.suspended?'btn-dark':'btn-danger'}" onclick="Pos.toggleSuspend('${c.id}')">${c.suspended?'Reactivar acceso':'Suspender acceso'}</button>
         <button class="btn btn-sm btn-ghost" onclick="Pos.changeBranchModal('${c.id}')">Cambiar de sucursal</button>
       </div>
-      ${c.coach_id?`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:14px;padding:12px 16px;margin-bottom:16px;font-size:13px;font-weight:600;color:#9A3412;display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>Coach activo${c.coach_until?' hasta el '+fdate(c.coach_until)+(daysLeft(c.coach_until)<0?' <span class="tag tag-red">vencido</span>':''):''}</span><button class="btn-xs btn" style="background:#FEE2E2;color:#DC2626;flex-shrink:0" onclick="Pos.cancelCoach('${c.id}')">Cancelar coach</button></div>`:''}
+      ${c.coach_id?`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:14px;padding:12px 16px;margin-bottom:16px;font-size:13px;font-weight:600;color:#9A3412;display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>${c.coach_cancelled?'Coach cancelado — activo':'Coach activo'}${c.coach_until?' hasta el '+fdate(c.coach_until)+(daysLeft(c.coach_until)<0?' <span class="tag tag-red">vencido</span>':''):''}${c.coach_cancelled?' <span class="tag" style="background:#FEE2E2;color:#DC2626">no se renueva</span>':''}</span>${c.coach_cancelled?'':`<button class="btn-xs btn" style="background:#FEE2E2;color:#DC2626;flex-shrink:0" onclick="Pos.cancelCoach('${c.id}')">Cancelar coach</button>`}</div>`:''}
       <div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:16px;">
         <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Cuenta de la app</div>
         ${appProf?`
@@ -1950,13 +2006,14 @@ const Pos={
         <div class="field"><label>Teléfono</label><input class="inp" id="ec-phone" value="${esc(c.phone||'')}"></div>
         <div class="field"><label>Correo</label><input class="inp" id="ec-email" value="${esc(c.email||'')}"></div>
       </div>
+      <div class="field"><label>Fecha de nacimiento</label><input class="inp" type="date" id="ec-birth" value="${c.birth_date||''}"></div>
       <div class="field"><label>Notas</label><textarea class="inp" id="ec-notes" rows="2">${esc(c.notes||'')}</textarea></div>
       <button class="btn btn-primary btn-block" onclick="Pos.saveCustomerEdit('${c.id}')">Guardar cambios</button>
     `);
   },
   async saveCustomerEdit(id){
     const c=this.customers.find(x=>x.id===id);if(!c)return;
-    const patch={full_name:$('ec-name').value.trim()||c.full_name,phone:$('ec-phone').value.trim()||null,email:$('ec-email').value.trim()||null,notes:$('ec-notes').value.trim()||null};
+    const patch={full_name:$('ec-name').value.trim()||c.full_name,phone:$('ec-phone').value.trim()||null,email:$('ec-email').value.trim()||null,birth_date:($('ec-birth')&&$('ec-birth').value)||null,notes:$('ec-notes').value.trim()||null};
     const r=await Q.update('customers',{id},patch);
     if(r.error){toast('Error: '+r.error.message,true);return;}
     Object.assign(c,patch);cset('customers',this.customers);
@@ -1975,18 +2032,25 @@ const Pos={
   // atletas" del coach. Aquí no hay cobros automáticos, así que cancelar
   // solo significa que al renovar ya no se le cobra el coach.
   async cancelCoach(id){
+    // Cancelar NO corta el acceso al momento: el cliente ya pagó hasta
+    // coach_until, así que lo conserva hasta esa fecha. Cancelar solo
+    // bloquea que se le vuelva a cobrar/renovar después. coach_id y
+    // coach_until se quedan intactos; se marca coach_cancelled para que
+    // la ficha deje de mostrar el botón de cancelar y avise que ya no se
+    // renovará.
     const c=this.customers.find(x=>x.id===id);if(!c||!c.coach_id)return;
-    if(!confirm('¿Cancelar el coach de '+c.full_name+'? Dejará de verlo en su app y ya no se le cobrará el coach en su próxima renovación.'))return;
+    const untilTxt=c.coach_until?' Seguirá viéndolo hasta el '+fdate(c.coach_until)+'.':'';
+    if(!confirm('¿Cancelar el coach de '+c.full_name+'?'+untilTxt+' Ya no se le renovará después de esa fecha.'))return;
     const coachId=c.coach_id;
-    const r=await Q.update('customers',{id},{coach_id:null,coach_until:null});
+    const r=await Q.update('customers',{id},{coach_cancelled:true});
     if(r.error){toast('Error: '+r.error.message,true);return;}
     if(c.profile_id){
-      try{await sb.from('member_profiles').update({coach_id:null,coach_until:null}).eq('profile_id',c.profile_id);}catch(e){}
-      this.sendPush(c.profile_id,'Tu coach fue cancelado','Ya no se te cobrará el coach en tu próxima renovación');
+      try{await sb.from('member_profiles').update({coach_cancelled:true}).eq('profile_id',c.profile_id);}catch(e){}
+      this.sendPush(c.profile_id,'Tu coach fue cancelado','Lo sigues teniendo hasta el '+(c.coach_until?fdate(c.coach_until):'fin de tu periodo')+'. Ya no se te cobrará después.');
     }
-    this.sendPush(coachId,'Atleta dado de baja',c.full_name+' ya no es tu cliente');
-    c.coach_id=null;c.coach_until=null;cset('customers',this.customers);
-    toast('Coach cancelado ✓ — ya no se le cobrará');
+    this.sendPush(coachId,'Atleta canceló renovación',c.full_name+' ya no renovará contigo después de su fecha actual.');
+    c.coach_cancelled=true;cset('customers',this.customers);
+    toast('Coach cancelado ✓ — sigue activo hasta su fecha, no se renovará');
     this.openCustomer(id);
   },
 
@@ -2093,7 +2157,7 @@ const Pos={
       <div><h1>Membresías</h1><div class="sub">Planes, vigencias y renovaciones</div></div>
       <div style="display:flex;gap:12px;align-items:center;">${this.branchSelector()}
       <button class="btn btn-ghost" onclick="Pos.campaignModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>Campaña WhatsApp</button>
-      ${this.role==='admin'?'<button class="btn btn-ghost" onclick="Pos.planModal()">+ Nuevo plan</button>':''}
+      ${['admin','encargado'].includes(this.role)?'<button class="btn btn-ghost" onclick="Pos.planModal()">+ Nuevo plan</button>':''}
       <button class="btn btn-primary" onclick="Pos.startSale()">Vender membresía</button></div>
     </div>
     <div class="cards" style="grid-template-columns:repeat(3,1fr);">
@@ -2125,9 +2189,9 @@ const Pos={
         <div id="inact-list" style="color:var(--muted);font-size:13px;font-weight:500;padding:4px 0">Cargando...</div>
       </div>
       <div class="panel">
-        <h2>Catálogo de planes</h2><div class="psub">${this.role==='admin'?'Toca un plan para editar precio o duración':'Solo el admin edita precios'}</div>
+        <h2>Catálogo de planes</h2><div class="psub">${this.role==='admin'?'Toca un plan para editar precio o duración':(this.role==='encargado'?'Toca un plan de tu sucursal para editarlo — se notifica al admin':'Solo el admin edita precios')}</div>
         <table><thead><tr><th>Plan</th><th>Días</th><th>Precio</th><th>Estado</th></tr></thead><tbody>
-        ${this.plans.map(p=>`<tr ${this.role==='admin'?`style="cursor:pointer" onclick="Pos.planModal('${p.id}')"`:''}>
+        ${this.plans.filter(p=>!p.branch_id||p.branch_id===(this.branch?this.branch.id:null)).map(p=>`<tr ${this.role==='admin'||(this.role==='encargado'&&p.branch_id===(this.branch?this.branch.id:null))?`style="cursor:pointer" onclick="Pos.planModal('${p.id}')"`:''}>
           <td style="font-weight:700">${esc(p.name)}${p.is_family?' <span class="tag tag-gray">familiar</span>':''}${p.branch_id?' <span class="tag tag-orange">'+esc((this.branches.find(b=>b.id===p.branch_id)||{}).name||'')+'</span>':''}</td>
           <td>${p.duration_days}</td>
           <td style="font-weight:800;color:var(--orange)">${money(p.price)}</td>
@@ -2223,10 +2287,15 @@ const Pos={
   },
 
   planModal(id){
-    if(this.role!=='admin')return;
+    // La encargada también puede editar planes, pero SOLO los de su
+    // sucursal (subadministradora) — cada cambio suyo queda en la
+    // bitácora y le llega aviso al admin.
+    if(!['admin','encargado'].includes(this.role))return;
     const p=id?this.plans.find(x=>x.id===id):null;
+    const enc=this.role==='encargado';
+    if(enc&&p&&p.branch_id!==(this.branch?this.branch.id:null)){toast('Ese plan es de otra sucursal o compartido — solo el admin lo edita.',true);return;}
     openModal(`
-      <h3>${p?'Editar plan':'Nuevo plan'}</h3><p class="msub">Los cambios aplican para las próximas ventas</p>
+      <h3>${p?'Editar plan':'Nuevo plan'}</h3><p class="msub">Los cambios aplican para las próximas ventas${enc?' · se notifica al administrador':''}</p>
       <div class="field"><label>Nombre</label><input class="inp" id="pl-name" value="${p?esc(p.name):''}" placeholder="ej. Mensual"></div>
       <div class="frow">
         <div class="field"><label>Duración (días)</label><input class="inp" type="number" id="pl-days" value="${p?p.duration_days:30}"></div>
@@ -2238,9 +2307,10 @@ const Pos={
       </div>
       <div class="frow">
         <div class="field"><label>Activo</label><select class="inp" id="pl-active"><option value="si" ${!p||p.active!==false?'selected':''}>Sí</option><option value="no" ${p&&p.active===false?'selected':''}>No</option></select></div>
-        <div class="field"><label>Sucursal donde aplica</label><select class="inp" id="pl-branch">
-          <option value="">Ambas sucursales</option>
-          ${this.branches.map(b=>`<option value="${b.id}" ${p&&p.branch_id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}
+        <div class="field"><label>Sucursal donde aplica</label><select class="inp" id="pl-branch" ${enc?'disabled':''}>
+          ${enc?`<option value="${this.branch?this.branch.id:''}" selected>${esc(this.branch?this.branch.name:'')}</option>`
+          :`<option value="">Ambas sucursales</option>
+          ${this.branches.map(b=>`<option value="${b.id}" ${p&&p.branch_id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}`}
         </select></div>
       </div>
       <button class="btn btn-primary btn-block" onclick="Pos.savePlan('${p?p.id:''}')">Guardar plan</button>
@@ -2251,7 +2321,11 @@ const Pos={
     const payload={name:$('pl-name').value.trim(),duration_days:Number($('pl-days').value)||1,price:Number($('pl-price').value)||0,
       is_family:$('pl-family').value==='si',max_members:Number($('pl-max').value)||1,active:$('pl-active').value==='si',
       branch_id:$('pl-branch').value||null};
+    // La encargada solo puede tocar planes de SU sucursal — se fuerza aquí
+    // aunque alguien manipule el select deshabilitado.
+    if(this.role==='encargado')payload.branch_id=this.branch?this.branch.id:null;
     if(!payload.name){toast('Ponle nombre al plan.',true);return;}
+    const old=id?{...(this.plans.find(x=>x.id===id)||{})}:null;
     const save=async(pl)=>id?Q.update('plans',{id},pl):(pl.id=pl.id||uuid(),Q.insert('plans',pl));
     let r=await save(payload);
     if(r.error&&/branch_id/i.test(r.error.message||'')){delete payload.branch_id;r=await save(payload);toast('Para precios por sucursal corre pos_migration4.sql.',true);}
@@ -2259,6 +2333,20 @@ const Pos={
     if(id)Object.assign(this.plans.find(x=>x.id===id)||{},payload);
     else this.plans.push(payload);
     cset('plans',this.plans);closeModal();toast('Plan guardado ✓');this.go('memberships');
+    // Bitácora + aviso al admin cuando el cambio NO lo hizo el admin
+    if(this.role!=='admin'){
+      const cambios=[];
+      if(old){
+        if(Number(old.price)!==payload.price)cambios.push('precio '+money(old.price)+' → '+money(payload.price));
+        if(Number(old.duration_days)!==payload.duration_days)cambios.push('duración '+old.duration_days+' → '+payload.duration_days+' días');
+        if((old.active!==false)!==payload.active)cambios.push(payload.active?'lo activó':'lo desactivó');
+        if(old.name!==payload.name)cambios.push('nombre "'+old.name+'" → "'+payload.name+'"');
+      }
+      const details=old?('Editó el plan "'+payload.name+'"'+(cambios.length?': '+cambios.join(', '):' (sin cambios de fondo)'))
+        :('Creó el plan "'+payload.name+'" ('+money(payload.price)+', '+payload.duration_days+' días)');
+      try{await sb.from('audit_log').insert({staff_id:this.user.id,staff_name:this.profileName,branch_id:payload.branch_id||null,action:old?'plan_edit':'plan_create',details});}catch(e){}
+      (this.appProfiles||[]).filter(p=>p.role==='admin').forEach(a=>this.sendPush(a.id,'Cambio de plan — '+(this.branch?this.branch.name:''),this.profileName+': '+details));
+    }
   },
 
 
@@ -2806,9 +2894,9 @@ const Pos={
         this.promos.map(p=>`<tr>
           <td style="font-weight:700">${esc(p.name)}</td>
           <td style="font-weight:800;color:var(--orange)">${p.discount_type==='percent'?p.discount_value+'%':money(p.discount_value)}</td>
-          <td>${p.applies_to==='plans'?'Membresías':(p.applies_to==='products'?'Productos':'Todo')}</td>
+          <td>${p.applies_to==='plans'?'Membresías':(p.applies_to==='products'?'Productos':'Todo')}${p.branch_ids&&p.branch_ids.length?' · '+p.branch_ids.map(bid=>esc((this.branches.find(b=>b.id===bid)||{}).name||'')).join(', '):' · Ambas sucursales'}</td>
           <td style="color:var(--muted)">${p.starts_at?fdate(p.starts_at):'—'} → ${p.ends_at?fdate(p.ends_at):'sin límite'}</td>
-          <td>${this.activePromos().some(x=>x.id===p.id)?'<span class="tag tag-green">Activa</span>':'<span class="tag tag-gray">Inactiva</span>'}</td>
+          <td>${(()=>{const t=todayISO();return p.active&&(!p.starts_at||p.starts_at<=t)&&(!p.ends_at||p.ends_at>=t);})()?'<span class="tag tag-green">Activa</span>':'<span class="tag tag-gray">Inactiva</span>'}</td>
           ${canEdit?`<td style="text-align:right;white-space:nowrap">
             <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.promoModal('${p.id}')">Editar</button>
             <button class="btn-xs btn ${p.active?'btn-danger':''}" style="${p.active?'':'background:#DCFCE7;color:#16A34A'}" onclick="Pos.togglePromo('${p.id}')">${p.active?'Desactivar':'Activar'}</button>
@@ -2855,6 +2943,12 @@ const Pos={
         <option value="plans" ${p&&p.applies_to==='plans'?'selected':''}>Solo membresías</option>
         <option value="products" ${p&&p.applies_to==='products'?'selected':''}>Solo productos</option>
       </select></div>
+      <div class="field"><label>Sucursales</label>
+        <div style="display:flex;gap:14px;padding:4px 0;">
+          ${this.branches.map(b=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer"><input type="checkbox" class="pm-branch" value="${b.id}" ${!p||!p.branch_ids||!p.branch_ids.length||p.branch_ids.includes(b.id)?'checked':''}> ${esc(b.name)}</label>`).join('')}
+        </div>
+        <p style="font-size:11px;color:var(--muted);font-weight:500;margin-top:4px">Desmarca las sucursales donde NO quieres que aplique. Con todas marcadas, aplica en ambas.</p>
+      </div>
       <div class="frow">
         <div class="field"><label>Inicia</label><input class="inp" type="date" id="pm-start" value="${p&&p.starts_at?p.starts_at:todayISO()}"></div>
         <div class="field"><label>Termina</label><input class="inp" type="date" id="pm-end" value="${p&&p.ends_at?p.ends_at:''}"></div>
@@ -2868,8 +2962,10 @@ const Pos={
     `);
   },
   async savePromo(id){
+    const checkedBranches=Array.from(document.querySelectorAll('.pm-branch:checked')).map(x=>x.value);
     const payload={name:$('pm-name').value.trim(),discount_type:$('pm-type').value,discount_value:Number($('pm-value').value)||0,
-      applies_to:$('pm-applies').value,starts_at:$('pm-start').value||null,ends_at:$('pm-end').value||null,active:true};
+      applies_to:$('pm-applies').value,starts_at:$('pm-start').value||null,ends_at:$('pm-end').value||null,active:true,
+      branch_ids:checkedBranches.length===this.branches.length?null:checkedBranches};
     if(!payload.name||!payload.discount_value){toast('Nombre y valor son obligatorios.',true);return;}
     const btn=$('pm-save');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
     let promoId=id;

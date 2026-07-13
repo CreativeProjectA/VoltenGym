@@ -1,0 +1,20 @@
+Buenas tardes [nombre del dueño],
+
+Le escribo para platicarle del último paso que falta para que el sistema pueda cobrar membresías con tarjeta desde el celular de sus clientes.
+
+Usamos una plataforma llamada Stripe (la misma que usan Amazon, Uber y muchos negocios grandes) para procesar esos pagos. Ya está todo conectado y probado de nuestro lado — lo único que falta es activar la cuenta con los datos reales de su negocio, y eso solo lo puede hacer usted, porque el dinero de cada venta cae directo a su cuenta de banco, no a la nuestra.
+
+Es un trámite de una sola vez, toma unos 15 minutos. Le voy a mandar una invitación por correo a su bandeja — nada más le da clic, crea una contraseña, y ahí mismo llena estos datos:
+
+1. CLABE de la cuenta de banco donde quiere recibir el dinero
+2. Su RFC (personal o del negocio)
+3. Una identificación oficial (INE)
+4. Datos básicos del gimnasio (nombre, dirección, teléfono)
+
+Cuando Stripe revise y apruebe esos datos (normalmente toma 1 o 2 días), nosotros hacemos el último ajuste en el sistema y desde ese momento cada pago con tarjeta de sus clientes le va a caer solo a su cuenta.
+
+Un detalle importante: Stripe cobra una comisión de 3.6% + $3 pesos por cada cobro con tarjeta — esa comisión la cobra Stripe directamente, no nosotros.
+
+En cuanto le llegue el correo de invitación, cualquier duda que le salga en el proceso, con confianza me pregunta y lo guío paso a paso.
+
+Saludos.
