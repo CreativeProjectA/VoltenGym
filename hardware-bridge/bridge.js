@@ -374,6 +374,20 @@ try {
   console.log('AVISO: falta el paquete "ws" (protocolo AiFace del facial). Corre INSTALAR.bat de nuevo.');
 }
 
+// Detector de FONDO: anota CUALQUIER toque al puerto — hasta conexiones en
+// protocolos desconocidos (no-HTTP). Si el aparato toca la puerta aunque sea
+// una vez, queda grabado con su IP y los bytes crudos que mandó.
+server.on('connection', (s) => {
+  try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] TCP conexión entrante de ' + (s.remoteAddress || '?') + '\n'); } catch (_) {}
+  console.log('TCP: conexión de', s.remoteAddress || '?');
+});
+server.on('clientError', (err, socket) => {
+  const crudo = err && err.rawPacket ? err.rawPacket.toString('utf8').slice(0, 400) : (err ? err.message : '?');
+  try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] TCP datos NO-HTTP de ' + ((socket && socket.remoteAddress) || '?') + ': ' + JSON.stringify(crudo) + '\n'); } catch (_) {}
+  console.log('TCP: datos en protocolo desconocido:', JSON.stringify(crudo).slice(0, 200));
+  try { socket.destroy(); } catch (_) {}
+});
+
 server.listen(4370, () => {
   console.log('Puente Volten Gym escuchando en el puerto 4370 — sucursal', BRANCH_ID);
   console.log('Protocolos: ZKTeco push (HTTP)' + (wsOk ? ' + AiFace (WebSocket JSON)' : ' — AiFace DESACTIVADO, falta paquete ws'));
