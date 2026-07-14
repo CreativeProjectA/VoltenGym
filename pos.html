@@ -558,6 +558,23 @@ const Pos={
       await this.loadCore();
       if($('shell').style.display!=='none')this.go(this.nav||'dashboard');
     },60000);
+    // Cierre de sesión automático por inactividad (20 min sin tocar nada) —
+    // evita que la sesión de una cajera se quede abierta y la siguiente
+    // persona entre "gratis" con su cuenta. Si hay turno abierto, logout()
+    // ya se niega solo (pide cerrar turno primero), así que esto es seguro.
+    if(!this._idleSetup){
+      this._idleSetup=true;
+      const resetIdle=()=>{
+        clearTimeout(this._idleTimer);
+        this._idleTimer=setTimeout(()=>{
+          if(this.shift)return; // con turno abierto no se fuerza el cierre de sesión
+          if($('modal-root')&&$('modal-root').style.display==='flex')return;
+          this.logout();
+        },20*60000);
+      };
+      ['mousedown','keydown','touchstart','click'].forEach(ev=>document.addEventListener(ev,resetIdle,{passive:true}));
+      resetIdle();
+    }
   },
 
   async loadCore(){
