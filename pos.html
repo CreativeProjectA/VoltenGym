@@ -1775,8 +1775,8 @@ const Pos={
       <div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:16px;">
         <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">Accesos del cliente</div>
         <div class="row-line"><span class="k">Código QR / Nº de cuenta</span><span class="v" style="font-family:monospace;letter-spacing:.05em">${esc((c.profile_id||c.id).slice(0,8).toUpperCase())}</span></div>
-        <div class="row-line"><span class="k">Huella dactilar</span>${c.fingerprint_id?'<span class="tag tag-green">Registrada</span>':`<button class="btn-xs btn btn-ghost" onclick="Pos.enrollBio('${c.id}','huella')">Registrar</button>`}</div>
-        <div class="row-line"><span class="k">Reconocimiento facial</span>${c.face_id?'<span class="tag tag-green">Registrado</span>':`<button class="btn-xs btn btn-ghost" onclick="Pos.enrollBio('${c.id}','rostro')">Registrar</button>`}</div>
+        <div class="row-line"><span class="k">Huella dactilar</span>${c.fingerprint_id?`<span class="tag tag-green" style="cursor:pointer" onclick="Pos.enrollBio('${c.id}','huella')" title="Toca para cambiarla o quitarla">Registrada ✎</span>`:`<button class="btn-xs btn btn-ghost" onclick="Pos.enrollBio('${c.id}','huella')">Registrar</button>`}</div>
+        <div class="row-line"><span class="k">Reconocimiento facial</span>${c.face_id?`<span class="tag tag-green" style="cursor:pointer" onclick="Pos.enrollBio('${c.id}','rostro')" title="Toca para cambiarlo o quitarlo">Registrado ✎</span>`:`<button class="btn-xs btn btn-ghost" onclick="Pos.enrollBio('${c.id}','rostro')">Registrar</button>`}</div>
       </div>
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Historial de pagos</div>
       ${subs.filter(s=>s.price_paid).length?`<div style="display:flex;flex-direction:column;margin-bottom:16px;">${
