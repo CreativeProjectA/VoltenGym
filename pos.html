@@ -1449,13 +1449,20 @@ const Pos={
         }
         // Al pagar su membresía, si aún no tiene cuenta de la app, se le crea
         // sola (edge function con la service key — nunca en el navegador).
+        // Límite de 8s: si el internet tiene un tropiezo, esto NO debe dejar
+        // el cobro trabado para siempre — la venta sigue de todos modos y la
+        // cuenta se crea después (desde la ficha del cliente).
         if(c&&!c.profile_id&&c.email&&navigator.onLine&&!this._acctCreated){
           try{
-            const {data:j,error:fnErr}=await sb.functions.invoke('create-member-account',{
-              body:{customer_id:c.id,full_name:c.full_name,email:c.email,branch_id:c.branch_id,coach_id:c.coach_id||null,coach_until:c.coach_until||null},
-            });
+            const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000));
+            const {data:j,error:fnErr}=await Promise.race([
+              sb.functions.invoke('create-member-account',{
+                body:{customer_id:c.id,full_name:c.full_name,email:c.email,branch_id:c.branch_id,coach_id:c.coach_id||null,coach_until:c.coach_until||null},
+              }),
+              timeout,
+            ]);
             if(!fnErr&&j&&j.ok){this._acctCreated={email:j.email,password:j.password,emailSent:j.emailSent};c.profile_id=j.profile_id;cset('customers',this.customers);}
-          }catch(e){/* función aún no desplegada u offline — no bloquea la venta */}
+          }catch(e){/* función aún no desplegada, offline, o tardó demasiado — no bloquea la venta */}
         }
       }else if(it.kind==='coach'){
         productId=await this.ensureCoachProduct(it,put);
