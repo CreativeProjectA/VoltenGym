@@ -243,8 +243,8 @@
     <h1>Punto de venta</h1>
     <p class="lead">Acceso para personal del gimnasio.</p>
     <div class="login-err" id="login-err"></div>
-    <div class="field"><label>Usuario</label><input class="inp" id="li-user" placeholder="tu usuario o correo" autocomplete="username"></div>
-    <div class="field"><label>Contraseña</label><input class="inp" type="password" id="li-pass" placeholder="••••••••" autocomplete="current-password"></div>
+    <div class="field"><label>Usuario</label><input class="inp" id="li-user" placeholder="tu usuario o correo" autocomplete="off" name="vg-user-field"></div>
+    <div class="field"><label>Contraseña</label><input class="inp" type="password" id="li-pass" placeholder="••••••••" autocomplete="new-password" name="vg-pass-field"></div>
     <button class="btn btn-primary btn-block" id="li-btn">Entrar</button>
     <p style="text-align:center;margin-top:18px;font-size:13px;color:var(--muted);font-weight:500;">¿Eres cliente? <a href="app.html" style="color:var(--orange);font-weight:700;text-decoration:none;">Ir a la app</a></p>
   </div>
@@ -470,6 +470,10 @@ const Pos={
 
   async init(){
     Q.badge();
+    // Candado extra: algunos navegadores rellenan usuario/contraseña
+    // guardados aunque autocomplete diga que no — se limpian a la fuerza
+    // para que SIEMPRE se escriban a mano en una compu compartida del gym.
+    setTimeout(()=>{if($('li-user'))$('li-user').value='';if($('li-pass'))$('li-pass').value='';},50);
     const {data}=await sb.auth.getSession();
     if(data.session){await this.afterLogin(data.session);}
     $('li-btn').onclick=()=>this.login();
