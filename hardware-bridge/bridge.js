@@ -114,6 +114,8 @@ function toDbMethod(kind) {
   return kind === 'rostro' ? 'face' : (kind === 'qr' ? 'qr' : 'fingerprint');
 }
 
+// Regresa true si el acceso fue PERMITIDO (o si es una salida) — así los
+// aparatos que preguntan en tiempo real ("Ratificar servidor") saben si abrir.
 async function registerCheckin(customer, kind) {
   // Mismo comportamiento que el POS: si ya está adentro, esto es su salida.
   const openRes = await fetch(
@@ -127,7 +129,7 @@ async function registerCheckin(customer, kind) {
       body: JSON.stringify({ checked_out_at: new Date().toISOString() }),
     });
     console.log('SALIDA registrada:', customer.full_name);
-    return;
+    return true;
   }
   // Validación de membresía (misma regla que el POS: solo vale en ESTA sucursal)
   const subRes = await fetch(
@@ -136,7 +138,7 @@ async function registerCheckin(customer, kind) {
   );
   const subs = await subRes.json();
   const sub = subs && subs[0];
-  const granted = !!(sub && new Date(sub.end_date + 'T23:59:59') >= new Date());
+  const granted = !!(sub && new Date(sub.end_date + 'T23:59:59') >= new Date()) && !customer.suspended;
   await fetch(SB_URL + '/rest/v1/checkins', {
     method: 'POST', headers: HJ,
     body: JSON.stringify({
@@ -145,6 +147,25 @@ async function registerCheckin(customer, kind) {
     }),
   });
   console.log((granted ? 'ACCESO PERMITIDO' : 'ACCESO DENEGADO') + ':', customer.full_name);
+  return granted;
+}
+
+// Cara/huella nueva que nadie ha vinculado — se anota para asignarla con
+// un clic desde el POS (Accesos → "Registros nuevos del aparato").
+async function anotarPendiente(deviceUserId, kind) {
+  try {
+    const exists = await fetch(
+      SB_URL + '/rest/v1/device_enrollments?device_user_id=eq.' + encodeURIComponent(deviceUserId) + '&branch_id=eq.' + BRANCH_ID + '&assigned_to=is.null&limit=1',
+      { headers: H }
+    );
+    const rows = await exists.json();
+    if (!rows || !rows.length) {
+      await fetch(SB_URL + '/rest/v1/device_enrollments', {
+        method: 'POST', headers: HJ,
+        body: JSON.stringify({ branch_id: BRANCH_ID, device_user_id: String(deviceUserId), kind }),
+      });
+    }
+  } catch (_) { /* si falta pos_migration12.sql, no rompe el resto */ }
 }
 
 // ── SINCRONIZACIÓN: vencidos fuera del aparato, renovados de vuelta ────
@@ -238,22 +259,8 @@ app.post('/iclock/cdata', async (req, res) => {
       const kind = verifyCode === '15' ? 'rostro' : (verifyCode === '2' ? 'qr' : 'huella');
       const customer = (await findCustomerByDeviceId(deviceUserId)) || (await findCustomerByQr(deviceUserId));
       if (customer) { await registerCheckin(customer, kind); continue; }
-      // Huella/cara nueva sin vincular — se anota para asignarla con un
-      // clic desde el POS (Accesos → "Registros nuevos del aparato").
       console.log('Sin cliente vinculado — anotado como pendiente:', deviceUserId, kind);
-      try {
-        const exists = await fetch(
-          SB_URL + '/rest/v1/device_enrollments?device_user_id=eq.' + encodeURIComponent(deviceUserId) + '&branch_id=eq.' + BRANCH_ID + '&assigned_to=is.null&limit=1',
-          { headers: H }
-        );
-        const rows = await exists.json();
-        if (!rows || !rows.length) {
-          await fetch(SB_URL + '/rest/v1/device_enrollments', {
-            method: 'POST', headers: HJ,
-            body: JSON.stringify({ branch_id: BRANCH_ID, device_user_id: deviceUserId, kind }),
-          });
-        }
-      } catch (_) { /* si falta pos_migration12.sql, no rompe el resto */ }
+      await anotarPendiente(deviceUserId, kind);
     }
     res.send('OK');
   } catch (e) { console.error(e); res.status(500).send('error'); }
@@ -290,8 +297,86 @@ app.post('/iclock/devicecmd', (req, res) => {
   res.send('OK');
 });
 
-app.listen(4370, () => {
+// ═══════════════ PROTOCOLO "AiFace" (WebSocket + JSON) ═══════════════
+// El facial TM-AI07F (marca TIMY, firmware ai806) NO habla el protocolo
+// HTTP de ZKTeco: se conecta por WEBSOCKET y manda mensajes JSON.
+// Con "Ratificar servidor: Sí", el aparato PREGUNTA en cada acceso si
+// debe abrir — o sea, validamos la membresía EN TIEMPO REAL: vencido o
+// suspendido = el aparato no abre. Mejor aún que borrar usuarios.
+const http = require('http');
+const server = http.createServer(app);
+let wsOk = false;
+try {
+  const { WebSocketServer } = require('ws');
+  const wss = new WebSocketServer({ server });
+  wsOk = true;
+
+  const nowCloud = () => {
+    const d = new Date(); const p = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  };
+  const wsLog = (txt) => {
+    try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] WS ' + txt + '\n'); } catch (_) {}
+    console.log('WS:', String(txt).slice(0, 250));
+  };
+  // según lo observado en esta familia de aparatos: modo 0-9 huella, 11 tarjeta, 50+ cara
+  const kindFromBackup = (n) => { n = Number(n); return n >= 50 ? 'rostro' : (n === 11 ? 'qr' : 'huella'); };
+
+  wss.on('connection', (ws, req) => {
+    wsLog('CONEXIÓN nueva desde ' + (req.socket.remoteAddress || '?'));
+    ws.on('message', async (data) => {
+      const raw = data.toString();
+      wsLog('LLEGÓ: ' + raw.slice(0, 900));
+      let msg = null;
+      try { msg = JSON.parse(raw); } catch (_) { return; }
+      const reply = (obj) => { try { ws.send(JSON.stringify(obj)); wsLog('RESPONDÍ: ' + JSON.stringify(obj).slice(0, 300)); } catch (_) {} };
+
+      try {
+        if (msg.cmd === 'reg') {
+          // El aparato se presenta — se le da la bienvenida y la hora
+          if (msg.sn) seenDevice(msg.sn);
+          reply({ ret: 'reg', result: true, cloudtime: nowCloud(), nosenduser: false });
+
+        } else if (msg.cmd === 'sendlog') {
+          // Accesos (cara/huella) — puede venir 1 o varios registros.
+          // Se valida la membresía y se le contesta si ABRE o NO (access).
+          const records = msg.record || msg.records || [];
+          let granted = false;
+          for (const r of records) {
+            const pin = String(r.enrollid != null ? r.enrollid : (r.userid != null ? r.userid : ''));
+            if (!pin) continue;
+            const kind = r.mode != null ? kindFromBackup(r.mode) : 'rostro';
+            const customer = await findCustomerByDeviceId(pin);
+            if (customer) { granted = (await registerCheckin(customer, kind)) || granted; }
+            else { console.log('Acceso de código sin vincular:', pin); await anotarPendiente(pin, kind); }
+          }
+          reply({ ret: 'sendlog', result: true, count: records.length, logindex: msg.logindex != null ? msg.logindex : 0, cloudtime: nowCloud(), access: granted ? 1 : 0 });
+
+        } else if (msg.cmd === 'senduser') {
+          // Usuario recién REGISTRADO en el aparato → directo a la lista de
+          // "Registros nuevos" del POS para asignarlo a un cliente con un clic.
+          const pin = String(msg.enrollid != null ? msg.enrollid : '');
+          const kind = kindFromBackup(msg.backupnum);
+          if (pin) { console.log('Usuario nuevo registrado en el aparato:', pin, '(' + kind + ')'); await anotarPendiente(pin, kind); }
+          reply({ ret: 'senduser', result: true, cloudtime: nowCloud() });
+
+        } else if (msg.cmd) {
+          // Cualquier otro mensaje: se acepta y queda grabado en el log
+          // para conocer el protocolo completo de este aparato.
+          reply({ ret: msg.cmd, result: true, cloudtime: nowCloud() });
+        }
+      } catch (e) { wsLog('error procesando: ' + e.message); }
+    });
+    ws.on('close', () => wsLog('conexión cerrada'));
+    ws.on('error', (e) => wsLog('error de conexión: ' + e.message));
+  });
+} catch (e) {
+  console.log('AVISO: falta el paquete "ws" (protocolo AiFace del facial). Corre INSTALAR.bat de nuevo.');
+}
+
+server.listen(4370, () => {
   console.log('Puente Volten Gym escuchando en el puerto 4370 — sucursal', BRANCH_ID);
+  console.log('Protocolos: ZKTeco push (HTTP)' + (wsOk ? ' + AiFace (WebSocket JSON)' : ' — AiFace DESACTIVADO, falta paquete ws'));
   // Barrido inicial a los 10s y luego cada SYNC_MS: vencidos fuera, renovados de vuelta.
   setTimeout(syncUsuarios, 10000);
   setInterval(syncUsuarios, SYNC_MS);
