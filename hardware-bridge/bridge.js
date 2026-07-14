@@ -42,6 +42,20 @@ const HJ = Object.assign({}, H, { 'Content-Type': 'application/json' });
 const app = express();
 app.use(express.text({ type: '*/*', limit: '5mb' })); // ZKTeco manda texto plano, no JSON
 
+// ── GRABADOR de diagnóstico ─────────────────────────────────────────────
+// Anota en un archivo TODO lo que llegue al puente, sea cual sea la ruta,
+// para ver exactamente qué manda el aparato cuando no logramos identificar
+// su protocolo exacto. Se puede borrar este bloque una vez resuelto.
+const LOG_FILE = path.join(__dirname, 'log_conexiones.txt');
+app.use((req, res, next) => {
+  const linea = '\n[' + new Date().toLocaleString('es-MX') + '] ' + req.method + ' ' + req.originalUrl +
+    '\n  headers: ' + JSON.stringify(req.headers) +
+    '\n  body: ' + JSON.stringify(req.body || '').slice(0, 500) + '\n';
+  try { fs.appendFileSync(LOG_FILE, linea); } catch (_) {}
+  console.log('LLEGÓ:', req.method, req.originalUrl);
+  next();
+});
+
 // ── Estado persistente (sobrevive reinicios de la PC) ──────────────────
 // borrados: { pin: {status:'pendiente'|'ok', t:fecha} } — a quiénes ya se
 //   les mandó borrar del aparato por membresía vencida.
