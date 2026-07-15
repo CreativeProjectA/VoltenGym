@@ -297,6 +297,48 @@ app.post('/iclock/devicecmd', (req, res) => {
   res.send('OK');
 });
 
+// ── A PRUEBA DE RUTAS ────────────────────────────────────────────────
+// GymCloud (mismo fabricante TM-AI) usa una ruta distinta a la estándar
+// de ZKTeco (ellos: /ControlAcceso/adms.php). No sabemos con certeza si
+// ESTE aparato exige /iclock/cdata exacto o acepta cualquier ruta — por
+// eso, cualquier otra ruta que llegue se atiende IGUAL que /iclock/cdata
+// y /iclock/getrequest, para no depender de acertarle a la ruta exacta.
+app.get(/^(?!\/iclock).*/, (req, res) => {
+  seenDevice(req.query.SN);
+  const sn = req.query.SN;
+  const q = cmdQueue[sn];
+  if (q && q.length) {
+    const batch = q.splice(0, 20);
+    const body = batch.map((c) => 'C:' + c.id + ':' + c.cmd).join('\n');
+    for (const c of batch) {
+      const m = c.cmd.match(/DELETE USERINFO PIN=(\S+)/);
+      if (m && state.borrados[m[1]]) { state.borrados[m[1]] = { status: 'ok', t: new Date().toISOString() }; }
+    }
+    saveState();
+    console.log('(ruta comodín ' + req.path + ') Comandos entregados a', sn + ':', batch.map((c) => c.cmd).join(' | '));
+    return res.send(body);
+  }
+  res.send('GET OPTION FROM: ' + sn + '\nATTLOGStamp=None\nOPERLOGStamp=9999\nATTPHOTOStamp=None\nErrorDelay=30\nDelay=10\nTransTimes=00:00;14:05\nTransInterval=1\nTransFlag=1111000000\nRealtime=1\nEncrypt=None');
+});
+app.post(/^(?!\/iclock).*/, async (req, res) => {
+  try {
+    seenDevice(req.query.SN);
+    console.log('(ruta comodín ' + req.path + ') POST recibido, largo:', String(req.body || '').length);
+    const lines = String(req.body || '').trim().split('\n').filter(Boolean);
+    for (const line of lines) {
+      const fields = line.split('\t');
+      const deviceUserId = fields[0];
+      if (!deviceUserId || deviceUserId.startsWith('ID=')) continue; // no confundir con devicecmd
+      const verifyCode = fields[3];
+      const kind = verifyCode === '15' ? 'rostro' : (verifyCode === '2' ? 'qr' : 'huella');
+      const customer = (await findCustomerByDeviceId(deviceUserId)) || (await findCustomerByQr(deviceUserId));
+      if (customer) { await registerCheckin(customer, kind); continue; }
+      await anotarPendiente(deviceUserId, kind);
+    }
+    res.send('OK');
+  } catch (e) { console.error(e); res.status(500).send('error'); }
+});
+
 // ═══════════════ PROTOCOLO "AiFace" (WebSocket + JSON) ═══════════════
 // El facial TM-AI07F (marca TIMY, firmware ai806) NO habla el protocolo
 // HTTP de ZKTeco: se conecta por WEBSOCKET y manda mensajes JSON.
