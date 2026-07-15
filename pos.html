@@ -1434,6 +1434,12 @@ const Pos={
     if(!s.method||!s.cart.length){this._checkingOut=false;return;}
     if(s.method==='cash'&&!(Number(s.received)>0)){toast('Captura cuánto recibiste en efectivo antes de cobrar.',true);this._checkingOut=false;return;}
     const bc=$('btn-cobrar');if(bc){bc.disabled=true;bc.textContent='Cobrando...';}
+    // Red de seguridad: si algo truena de forma inesperada a media venta (no
+    // solo un tropiezo de red, que ya tiene su propio manejo abajo), el
+    // candado y el botón SIEMPRE se destraban al final — antes, un error
+    // fuera de lo previsto dejaba "Cobrando..." pegado para siempre y nadie
+    // podía volver a cobrar sin recargar la página.
+    try{
     const c=s.customer;const bId=this.branch?this.branch.id:null;
     const saleId=uuid();const nowIso=new Date().toISOString();
     let qd=false; // si una operación se encola, las que dependen de ella también
@@ -1527,8 +1533,14 @@ const Pos={
     }
     // 5) actualizar cache de ventas del turno
     const sc=cget('shift_sales')||[];sc.unshift(salePayload);cset('shift_sales',sc);
-    s.queued=qd;s.step=4;this._checkingOut=false;this.go('sale');this.refreshChip();
+    s.queued=qd;s.step=4;this.go('sale');this.refreshChip();
     Q.badge();
+    }catch(e){
+      toast('Algo salió mal a media venta: '+(e&&e.message||e)+' — intenta de nuevo.',true);
+      if(bc){bc.disabled=false;bc.textContent='Cobrar '+money(t.total);}
+    }finally{
+      this._checkingOut=false;
+    }
   },
   printTicket(){
     const t=this.lastSale;if(!t)return;
