@@ -381,6 +381,8 @@ const kindFromBackup = (n) => { n = Number(n); return n >= 50 ? 'rostro' : (n ==
 // se usa una vez por cada puerto que abrimos, todos con la misma lógica.
 function attachWs(srv) {
   const wss = new WebSocketServer({ server: srv });
+  // si el puerto ya está ocupado (otra copia corriendo), avisar sin morirse
+  wss.on('error', (e) => wsLog('aviso (no fatal): ' + e.message));
   wss.on('connection', (ws, req) => {
     wsLog('CONEXIÓN nueva desde ' + (req.socket.remoteAddress || '?') + ' (puerto ' + srv.address().port + ')');
     ws.on('message', async (data) => {
