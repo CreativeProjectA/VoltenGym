@@ -361,26 +361,28 @@ app.post(/^(?!\/iclock).*/, async (req, res) => {
 // debe abrir — o sea, validamos la membresía EN TIEMPO REAL: vencido o
 // suspendido = el aparato no abre. Mejor aún que borrar usuarios.
 const http = require('http');
-const server = http.createServer(app);
 let wsOk = false;
-try {
-  const { WebSocketServer } = require('ws');
-  const wss = new WebSocketServer({ server });
-  wsOk = true;
+let WebSocketServer = null;
+try { ({ WebSocketServer } = require('ws')); wsOk = true; }
+catch (e) { console.log('AVISO: falta el paquete "ws" (protocolo AiFace del facial). Corre INSTALAR.bat de nuevo.'); }
 
-  const nowCloud = () => {
-    const d = new Date(); const p = (n) => String(n).padStart(2, '0');
-    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
-  };
-  const wsLog = (txt) => {
-    try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] WS ' + txt + '\n'); } catch (_) {}
-    console.log('WS:', String(txt).slice(0, 250));
-  };
-  // según lo observado en esta familia de aparatos: modo 0-9 huella, 11 tarjeta, 50+ cara
-  const kindFromBackup = (n) => { n = Number(n); return n >= 50 ? 'rostro' : (n === 11 ? 'qr' : 'huella'); };
+const nowCloud = () => {
+  const d = new Date(); const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+};
+const wsLog = (txt) => {
+  try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] WS ' + txt + '\n'); } catch (_) {}
+  console.log('WS:', String(txt).slice(0, 250));
+};
+// según lo observado en esta familia de aparatos: modo 0-9 huella, 11 tarjeta, 50+ cara
+const kindFromBackup = (n) => { n = Number(n); return n >= 50 ? 'rostro' : (n === 11 ? 'qr' : 'huella'); };
 
+// Le pega el protocolo AiFace (WebSocket+JSON) a un servidor HTTP dado —
+// se usa una vez por cada puerto que abrimos, todos con la misma lógica.
+function attachWs(srv) {
+  const wss = new WebSocketServer({ server: srv });
   wss.on('connection', (ws, req) => {
-    wsLog('CONEXIÓN nueva desde ' + (req.socket.remoteAddress || '?'));
+    wsLog('CONEXIÓN nueva desde ' + (req.socket.remoteAddress || '?') + ' (puerto ' + srv.address().port + ')');
     ws.on('message', async (data) => {
       const raw = data.toString();
       wsLog('LLEGÓ: ' + raw.slice(0, 900));
@@ -390,13 +392,10 @@ try {
 
       try {
         if (msg.cmd === 'reg') {
-          // El aparato se presenta — se le da la bienvenida y la hora
           if (msg.sn) seenDevice(msg.sn);
           reply({ ret: 'reg', result: true, cloudtime: nowCloud(), nosenduser: false });
 
         } else if (msg.cmd === 'sendlog') {
-          // Accesos (cara/huella) — puede venir 1 o varios registros.
-          // Se valida la membresía y se le contesta si ABRE o NO (access).
           const records = msg.record || msg.records || [];
           let granted = false;
           for (const r of records) {
@@ -410,16 +409,12 @@ try {
           reply({ ret: 'sendlog', result: true, count: records.length, logindex: msg.logindex != null ? msg.logindex : 0, cloudtime: nowCloud(), access: granted ? 1 : 0 });
 
         } else if (msg.cmd === 'senduser') {
-          // Usuario recién REGISTRADO en el aparato → directo a la lista de
-          // "Registros nuevos" del POS para asignarlo a un cliente con un clic.
           const pin = String(msg.enrollid != null ? msg.enrollid : '');
           const kind = kindFromBackup(msg.backupnum);
           if (pin) { console.log('Usuario nuevo registrado en el aparato:', pin, '(' + kind + ')'); await anotarPendiente(pin, kind); }
           reply({ ret: 'senduser', result: true, cloudtime: nowCloud() });
 
         } else if (msg.cmd) {
-          // Cualquier otro mensaje: se acepta y queda grabado en el log
-          // para conocer el protocolo completo de este aparato.
           reply({ ret: msg.cmd, result: true, cloudtime: nowCloud() });
         }
       } catch (e) { wsLog('error procesando: ' + e.message); }
@@ -427,28 +422,37 @@ try {
     ws.on('close', () => wsLog('conexión cerrada'));
     ws.on('error', (e) => wsLog('error de conexión: ' + e.message));
   });
-} catch (e) {
-  console.log('AVISO: falta el paquete "ws" (protocolo AiFace del facial). Corre INSTALAR.bat de nuevo.');
 }
 
-// Detector de FONDO: anota CUALQUIER toque al puerto — hasta conexiones en
-// protocolos desconocidos (no-HTTP). Si el aparato toca la puerta aunque sea
-// una vez, queda grabado con su IP y los bytes crudos que mandó.
-server.on('connection', (s) => {
-  try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] TCP conexión entrante de ' + (s.remoteAddress || '?') + '\n'); } catch (_) {}
-  console.log('TCP: conexión de', s.remoteAddress || '?');
-});
-server.on('clientError', (err, socket) => {
-  const crudo = err && err.rawPacket ? err.rawPacket.toString('utf8').slice(0, 400) : (err ? err.message : '?');
-  try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] TCP datos NO-HTTP de ' + ((socket && socket.remoteAddress) || '?') + ': ' + JSON.stringify(crudo) + '\n'); } catch (_) {}
-  console.log('TCP: datos en protocolo desconocido:', JSON.stringify(crudo).slice(0, 200));
-  try { socket.destroy(); } catch (_) {}
-});
-
-server.listen(4370, () => {
-  console.log('Puente Volten Gym escuchando en el puerto 4370 — sucursal', BRANCH_ID);
-  console.log('Protocolos: ZKTeco push (HTTP)' + (wsOk ? ' + AiFace (WebSocket JSON)' : ' — AiFace DESACTIVADO, falta paquete ws'));
-  // Barrido inicial a los 10s y luego cada SYNC_MS: vencidos fuera, renovados de vuelta.
-  setTimeout(syncUsuarios, 10000);
-  setInterval(syncUsuarios, SYNC_MS);
-});
+// ── VARIOS PUERTOS A LA VEZ ──────────────────────────────────────────
+// El manual de GymCloud (mismo fabricante) NUNCA pide capturar un puerto
+// — su dirección es "app.gymcloud.mx/ControlAcceso/adms.php" sin número
+// de puerto. Sospecha fuerte: en modo "dominio", este aparato puede estar
+// IGNORANDO el campo "Puerto" del menú y usando el 80 (el normal de
+// internet) por su cuenta. Por eso el puente ahora escucha en VARIOS
+// puertos a la vez — sea cual sea el que el aparato use de verdad, alguien
+// va a estar ahí esperándolo. El 4370 sigue siendo el principal/recomendado.
+const PUERTOS = [4370, 80, 8090, 8080];
+const servidores = [];
+for (const puerto of PUERTOS) {
+  const srv = http.createServer(app);
+  if (wsOk) attachWs(srv);
+  // Detector de FONDO: anota CUALQUIER toque, hasta protocolos desconocidos.
+  srv.on('connection', (s) => {
+    const linea = '[' + new Date().toLocaleString('es-MX') + '] TCP conexión entrante de ' + (s.remoteAddress || '?') + ' (puerto ' + puerto + ')\n';
+    try { fs.appendFileSync(LOG_FILE, linea); } catch (_) {}
+    console.log('TCP: conexión de', s.remoteAddress || '?', 'en el puerto', puerto);
+  });
+  srv.on('clientError', (err, socket) => {
+    const crudo = err && err.rawPacket ? err.rawPacket.toString('utf8').slice(0, 400) : (err ? err.message : '?');
+    try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] TCP datos NO-HTTP de ' + ((socket && socket.remoteAddress) || '?') + ' (puerto ' + puerto + '): ' + JSON.stringify(crudo) + '\n'); } catch (_) {}
+    try { socket.destroy(); } catch (_) {}
+  });
+  srv.listen(puerto, () => console.log('Puente Volten Gym escuchando en el puerto', puerto, '— sucursal', BRANCH_ID))
+    .on('error', (e) => console.log('AVISO: no se pudo abrir el puerto ' + puerto + ' (' + e.message + ') — probablemente ya está en uso por Windows, se ignora y sigue con los demás.'));
+  servidores.push(srv);
+}
+console.log('Protocolos activos: ZKTeco push (HTTP)' + (wsOk ? ' + AiFace (WebSocket JSON)' : ' — AiFace DESACTIVADO, falta paquete ws'));
+// Barrido inicial a los 10s y luego cada SYNC_MS: vencidos fuera, renovados de vuelta.
+setTimeout(syncUsuarios, 10000);
+setInterval(syncUsuarios, SYNC_MS);
