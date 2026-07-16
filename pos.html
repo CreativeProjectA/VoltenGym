@@ -1432,6 +1432,10 @@ const Pos={
     this._acctCreated=null;
     const s=this.sale;const t=this.saleTotals();
     if(!s.method||!s.cart.length){this._checkingOut=false;return;}
+    // El admin/contador no manejan caja (no tienen turno abierto). Sin turno
+    // no se puede cobrar: antes esto tronaba al leer this.shift.id ("reading
+    // id"). Ahora avisa claro en vez de romperse a media venta.
+    if(!this.shift||!this.shift.id){toast('Esta cuenta no maneja caja. Para vender, entra con una cuenta de cajera o encargada y abre el turno.',true);this._checkingOut=false;return;}
     if(s.method==='cash'&&!(Number(s.received)>0)){toast('Captura cuánto recibiste en efectivo antes de cobrar.',true);this._checkingOut=false;return;}
     const bc=$('btn-cobrar');if(bc){bc.disabled=true;bc.textContent='Cobrando...';}
     // Red de seguridad: si algo truena de forma inesperada a media venta (no
