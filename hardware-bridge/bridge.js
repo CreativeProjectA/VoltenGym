@@ -272,7 +272,19 @@ app.get('/iclock/cdata', (req, res) => {
 app.post('/iclock/cdata', async (req, res) => {
   try {
     seenDevice(req.query.SN);
-    const lines = String(req.body || '').trim().split('\n').filter(Boolean);
+    const t = String(req.body || '').trim();
+    // ── AiFace: el TM-AI07F manda JSON por HTTP POST (cmd: reg/sendlog/senduser).
+    //    Confirmado con el aparato real: POST /iclock/cdata con {"cmd":"reg",...}
+    if (t.startsWith('{')) {
+      let msg = null;
+      try { msg = JSON.parse(t); } catch (_) {}
+      if (msg && msg.cmd) {
+        const resp = await procesarAiFace(msg);
+        return res.json(resp || { result: true, cloudtime: nowCloud() });
+      }
+    }
+    // ── ZKTeco clásico: texto separado por tabuladores (userId\ttimestamp\t...).
+    const lines = t.split('\n').filter(Boolean);
     for (const line of lines) {
       const fields = line.split('\t');
       const deviceUserId = fields[0];
@@ -348,7 +360,16 @@ app.post(/^(?!\/iclock).*/, async (req, res) => {
   try {
     seenDevice(req.query.SN);
     console.log('(ruta comodín ' + req.path + ') POST recibido, largo:', String(req.body || '').length);
-    const lines = String(req.body || '').trim().split('\n').filter(Boolean);
+    const t = String(req.body || '').trim();
+    if (t.startsWith('{')) {
+      let msg = null;
+      try { msg = JSON.parse(t); } catch (_) {}
+      if (msg && msg.cmd) {
+        const resp = await procesarAiFace(msg);
+        return res.json(resp || { result: true, cloudtime: nowCloud() });
+      }
+    }
+    const lines = t.split('\n').filter(Boolean);
     for (const line of lines) {
       const fields = line.split('\t');
       const deviceUserId = fields[0];
@@ -386,6 +407,42 @@ const wsLog = (txt) => {
 // según lo observado en esta familia de aparatos: modo 0-9 huella, 11 tarjeta, 50+ cara
 const kindFromBackup = (n) => { n = Number(n); return n >= 50 ? 'rostro' : (n === 11 ? 'qr' : 'huella'); };
 
+// ── Cerebro del protocolo AiFace (JSON) ──────────────────────────────
+// El TM-AI07F manda estos mensajes JSON. Da igual si llegan por WebSocket
+// o por HTTP POST (según cómo se configure): se procesan igual y se
+// devuelve el OBJETO de respuesta que el aparato espera.
+//   reg      = el aparato se presenta al conectar
+//   sendlog  = alguien pasó la cara/huella/QR -> validamos y contestamos
+//              access:1 (abre) o access:0 (no abre) EN TIEMPO REAL
+//   senduser = se registró un usuario nuevo en el aparato
+async function procesarAiFace(msg) {
+  if (!msg || !msg.cmd) return null;
+  if (msg.sn) seenDevice(msg.sn);
+  if (msg.cmd === 'reg') {
+    return { ret: 'reg', result: true, cloudtime: nowCloud(), nosenduser: false };
+  }
+  if (msg.cmd === 'sendlog') {
+    const records = msg.record || msg.records || (msg.enrollid != null ? [msg] : []);
+    let granted = false;
+    for (const r of records) {
+      const pin = String(r.enrollid != null ? r.enrollid : (r.userid != null ? r.userid : ''));
+      if (!pin) continue;
+      const kind = r.mode != null ? kindFromBackup(r.mode) : 'rostro';
+      const customer = (await findCustomerByDeviceId(pin)) || (await findCustomerByQr(pin));
+      if (customer) { granted = (await registerCheckin(customer, kind)) || granted; }
+      else { console.log('Acceso de código sin vincular:', pin); await anotarPendiente(pin, kind); }
+    }
+    return { ret: 'sendlog', result: true, count: records.length, logindex: msg.logindex != null ? msg.logindex : 0, cloudtime: nowCloud(), access: granted ? 1 : 0 };
+  }
+  if (msg.cmd === 'senduser') {
+    const pin = String(msg.enrollid != null ? msg.enrollid : '');
+    const kind = kindFromBackup(msg.backupnum);
+    if (pin) { console.log('Usuario nuevo registrado en el aparato:', pin, '(' + kind + ')'); await anotarPendiente(pin, kind); }
+    return { ret: 'senduser', result: true, cloudtime: nowCloud() };
+  }
+  return { ret: msg.cmd, result: true, cloudtime: nowCloud() };
+}
+
 // Le pega el protocolo AiFace (WebSocket+JSON) a un servidor HTTP dado —
 // se usa una vez por cada puerto que abrimos, todos con la misma lógica.
 function attachWs(srv, puerto) {
@@ -402,32 +459,8 @@ function attachWs(srv, puerto) {
       const reply = (obj) => { try { ws.send(JSON.stringify(obj)); wsLog('RESPONDÍ: ' + JSON.stringify(obj).slice(0, 300)); } catch (_) {} };
 
       try {
-        if (msg.cmd === 'reg') {
-          if (msg.sn) seenDevice(msg.sn);
-          reply({ ret: 'reg', result: true, cloudtime: nowCloud(), nosenduser: false });
-
-        } else if (msg.cmd === 'sendlog') {
-          const records = msg.record || msg.records || [];
-          let granted = false;
-          for (const r of records) {
-            const pin = String(r.enrollid != null ? r.enrollid : (r.userid != null ? r.userid : ''));
-            if (!pin) continue;
-            const kind = r.mode != null ? kindFromBackup(r.mode) : 'rostro';
-            const customer = await findCustomerByDeviceId(pin);
-            if (customer) { granted = (await registerCheckin(customer, kind)) || granted; }
-            else { console.log('Acceso de código sin vincular:', pin); await anotarPendiente(pin, kind); }
-          }
-          reply({ ret: 'sendlog', result: true, count: records.length, logindex: msg.logindex != null ? msg.logindex : 0, cloudtime: nowCloud(), access: granted ? 1 : 0 });
-
-        } else if (msg.cmd === 'senduser') {
-          const pin = String(msg.enrollid != null ? msg.enrollid : '');
-          const kind = kindFromBackup(msg.backupnum);
-          if (pin) { console.log('Usuario nuevo registrado en el aparato:', pin, '(' + kind + ')'); await anotarPendiente(pin, kind); }
-          reply({ ret: 'senduser', result: true, cloudtime: nowCloud() });
-
-        } else if (msg.cmd) {
-          reply({ ret: msg.cmd, result: true, cloudtime: nowCloud() });
-        }
+        const resp = await procesarAiFace(msg);
+        if (resp) reply(resp);
       } catch (e) { wsLog('error procesando: ' + e.message); }
     });
     ws.on('close', () => wsLog('conexión cerrada'));
