@@ -144,22 +144,26 @@ async function registerCheckin(customer, kind) {
   // membresía, es su trabajo, no un cliente pagando. Mismo criterio que ya
   // usa syncUsuarios() para no borrarlos del aparato, pero aquí falta aplicarlo
   // también al acceso en tiempo real (Ratificar servidor pregunta cada vez).
-  let esStaff = false;
-  if (customer.profile_id) {
-    try {
-      const pr = await fetch(SB_URL + '/rest/v1/profiles?id=eq.' + customer.profile_id + '&select=role', { headers: H });
-      const prRows = await pr.json();
-      esStaff = !!(prRows && prRows[0] && prRows[0].role && prRows[0].role !== 'member');
-    } catch (_) {}
-  }
+  //
+  // Estas dos consultas son independientes entre sí, así que van EN PARALELO
+  // (antes iban una tras otra: hasta 3 viajes seguidos a la base antes de
+  // contestar). Con "Ratificar servidor" el aparato solo espera unos
+  // segundos por la respuesta (Latencia=3 en su configuración) — si la
+  // suma de esos viajes se acerca a ese límite, el aparato se cansa y marca
+  // "error" aunque el acceso sí se haya procesado bien del lado del sistema.
+  const [prRows, subs] = await Promise.all([
+    customer.profile_id
+      ? fetch(SB_URL + '/rest/v1/profiles?id=eq.' + customer.profile_id + '&select=role', { headers: H }).then((r) => r.json()).catch(() => null)
+      : Promise.resolve(null),
+    fetch(
+      SB_URL + '/rest/v1/subscriptions?customer_id=eq.' + customer.id + '&branch_id=eq.' + BRANCH_ID + '&status=neq.canceled&order=end_date.desc&limit=1',
+      { headers: H }
+    ).then((r) => r.json()).catch(() => null),
+  ]);
+  const esStaff = !!(prRows && prRows[0] && prRows[0].role && prRows[0].role !== 'member');
   let granted = esStaff && !customer.suspended;
   if (!granted && !esStaff) {
     // Validación de membresía (misma regla que el POS: solo vale en ESTA sucursal)
-    const subRes = await fetch(
-      SB_URL + '/rest/v1/subscriptions?customer_id=eq.' + customer.id + '&branch_id=eq.' + BRANCH_ID + '&status=neq.canceled&order=end_date.desc&limit=1',
-      { headers: H }
-    );
-    const subs = await subRes.json();
     const sub = subs && subs[0];
     granted = !!(sub && new Date(sub.end_date + 'T23:59:59') >= new Date()) && !customer.suspended;
   }

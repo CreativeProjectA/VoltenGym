@@ -563,6 +563,8 @@ const Pos={
       this.branch=mine||this.branches[0]||null;
     }else{
       const saved=cget('branch_sel');
+      // "all" (o primera vez) = ver todas; si guardó una sucursal, la filtra.
+      this.brAll=(saved==='all'||saved==null);
       this.branch=this.branches.find(b=>b.id===saved)||this.branches[0]||null;
     }
     $('login').style.display='none';
@@ -619,24 +621,32 @@ const Pos={
     this.requests=await load('requests',sb.from('pos_requests').select('*').eq('status','pendiente').order('created_at',{ascending:false}));
     this.loadPendingRegs();
   },
-  // planes visibles en ESTA sucursal (branch_id null = aplica en ambas)
-  plansForBranch(){
-    const b=this.branch?this.branch.id:null;
-    return this.plans.filter(p=>p.active!==false&&(!p.branch_id||p.branch_id===b));
+  // ── FILTRO POR SUCURSAL, UNA SOLA REGLA PARA TODO EL POS ──────────────
+  // Devuelve la sucursal en foco para filtrar CUALQUIER pantalla, o null =
+  // "ver todas". Solo admin/contador pueden ver todas (eligen "Todas las
+  // sucursales" en el selector); cajera/encargada SIEMPRE ven solo la suya.
+  // Antes cada pantalla decidía por su cuenta (unas filtraban por sucursal y
+  // otras dejaban ver todo al admin), y por eso el filtro se sentía disparejo.
+  viewBr(){
+    if(['admin','contador'].includes(this.role))return this.brAll?null:(this.branch?this.branch.id:null);
+    return this.branch?this.branch.id:null;
   },
-  // coaches de ESTA sucursal (según staff_branches). Coach sin sucursal = aparece en todas.
+  // planes visibles en la sucursal en foco (branch_id null = aplica en ambas)
+  plansForBranch(){
+    const b=this.viewBr();
+    return this.plans.filter(p=>p.active!==false&&(!b||!p.branch_id||p.branch_id===b));
+  },
+  // coaches de la sucursal en foco (según staff_branches). Coach sin sucursal = en todas.
   coachesForBranch(){
-    const b=this.branch?this.branch.id:null;
+    const b=this.viewBr();
     const byCoach={};(this.staffBranches||[]).forEach(x=>{(byCoach[x.staff_id]=byCoach[x.staff_id]||[]).push(x.branch_id);});
     return this.appProfiles.filter(p=>p.role==='coach'&&this.coachProfiles.find(x=>x.profile_id===p.id))
       .filter(p=>!byCoach[p.id]||!b||byCoach[p.id].indexOf(b)!==-1);
   },
-  // clientes visibles en esta sesión: admin ve todos, los demás SOLO su sucursal
-  // (misma regla que ya usaba la lista de Clientes — aplicada en todas las pantallas)
+  // clientes visibles: la sucursal en foco (o todas si el admin eligió "Todas")
   custForBranch(){
-    if(this.role==='admin')return this.customers;
-    const b=this.branch?this.branch.id:null;
-    return this.customers.filter(c=>c.branch_id===b);
+    const b=this.viewBr();
+    return b?this.customers.filter(c=>c.branch_id===b):this.customers;
   },
   // ¿este coach atiende en la sucursal actual? (sin sucursal asignada = en todas)
   coachInBranch(pid){
@@ -834,8 +844,8 @@ const Pos={
   renderRequests(){
     const rp=$('d-requests');if(!rp)return;
     // solo solicitudes de ESTA sucursal (las sin sucursal salen en todas para no perderse)
-    const bId=this.branch?this.branch.id:null;
-    const reqs=this.role==='admin'?this.requests:this.requests.filter(r=>!r.branch_id||r.branch_id===bId);
+    const bId=this.viewBr();
+    const reqs=bId?this.requests.filter(r=>!r.branch_id||r.branch_id===bId):this.requests;
     rp.innerHTML=reqs.length?reqs.map(r=>`
       <div class="row-line">
         <div><div style="font-weight:700;font-size:14px">${esc(this.profName(r.member_id))}</div>
@@ -932,9 +942,13 @@ const Pos={
   branchSelector(){
     if(!['admin','contador'].includes(this.role)||this.branches.length<=1)
       return this.branch?`<span class="tag tag-gray" style="height:44px;display:inline-flex;align-items:center;padding:0 18px;">${esc(this.branch.name)}</span>`:'';
-    return `<div class="branch-pick"><select onchange="Pos.setBranch(this.value)">${this.branches.map(b=>`<option value="${b.id}" ${this.branch&&this.branch.id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`;
+    return `<div class="branch-pick"><select onchange="Pos.setBranch(this.value)"><option value="all" ${this.brAll?'selected':''}>Todas las sucursales</option>${this.branches.map(b=>`<option value="${b.id}" ${!this.brAll&&this.branch&&this.branch.id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`;
   },
-  setBranch(id){this.branch=this.branches.find(b=>b.id===id);cset('branch_sel',id);this.checkShiftGate();},
+  setBranch(id){
+    if(id==='all'){this.brAll=true;cset('branch_sel','all');}
+    else{this.brAll=false;this.branch=this.branches.find(b=>b.id===id)||this.branch;cset('branch_sel',id);}
+    this.checkShiftGate();
+  },
   today(){return new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});},
   greeting(){const h=new Date().getHours();return h<12?'Buenos días':(h<19?'Buenas tardes':'Buenas noches');},
 
@@ -1168,9 +1182,9 @@ const Pos={
     </div>`;
   },
   familyPicker(){
-    // fuera de admin: solo familias con algún miembro de ESTA sucursal
-    const bId=this.branch?this.branch.id:null;
-    const fams=this.role==='admin'?this.families:this.families.filter(f=>this.customers.some(c=>c.family_id===f.id&&c.branch_id===bId));
+    // solo familias con algún miembro en la sucursal en foco (o todas si "Todas")
+    const bId=this.viewBr();
+    const fams=!bId?this.families:this.families.filter(f=>this.customers.some(c=>c.family_id===f.id&&c.branch_id===bId));
     if(!fams.length){toast('Aún no hay familias en tu sucursal. Créalas en la ficha de un cliente.',true);return;}
     openModal(`
       <h3>Familias</h3><p class="msub">Elige la familia y quién paga — el plan familiar cubre a todos</p>
@@ -1687,10 +1701,9 @@ const Pos={
   },
   custTable(){
     const q=this.custQuery.toLowerCase();
-    // Fuera de admin, cada quien ve SOLO los clientes de su propia sucursal
-    // (antes se veían los de las 2 sucursales sin importar el rol).
-    const bId=this.branch?this.branch.id:null;
-    let list=this.role==='admin'?this.customers:this.customers.filter(c=>c.branch_id===bId);
+    // Clientes de la sucursal en foco (el selector de arriba manda; admin
+    // puede elegir "Todas" para ver el conjunto).
+    let list=this.custForBranch();
     if(q)list=list.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q));
     if(!list.length)return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
     return `<table><thead><tr><th>Cliente</th><th>Teléfono</th><th>App</th><th>Membresía</th><th>Alta</th><th></th></tr></thead><tbody>${
@@ -2497,7 +2510,7 @@ const Pos={
   },
   async loadPendingEnrollments(){
     const el=$('device-enroll-panel');if(!el)return;
-    const bId=this.branch?this.branch.id:null;
+    const bId=this.viewBr();
     try{
       let q=sb.from('device_enrollments').select('*').is('assigned_to',null).order('first_seen_at',{ascending:false}).limit(10);
       if(bId)q=q.eq('branch_id',bId);
@@ -2514,12 +2527,28 @@ const Pos={
     }catch(e){el.innerHTML='';}
   },
   assignEnrollment(enrollId,deviceUserId,kind){
+    // El aparato no siempre avisa con certeza si un registro nuevo es cara o
+    // huella (adivinarlo mal deja el método incorrecto guardado para
+    // siempre) — así que aquí se CONFIRMA con un clic en vez de asignarlo
+    // a ciegas con lo que el aparato dijo.
+    const kindConfirm=kind==='qr'?'':`
+      <div class="msub" style="margin-top:10px">¿Qué es este registro? (revísalo, el aparato no siempre acierta)</div>
+      <div style="display:flex;gap:8px;margin-top:6px" id="assign-enroll-kind">
+        <button type="button" class="btn-xs btn ${kind==='rostro'?'btn-primary':'btn-ghost'}" data-k="rostro" onclick="Pos.pickEnrollKind('rostro')">Facial</button>
+        <button type="button" class="btn-xs btn ${kind!=='rostro'?'btn-primary':'btn-ghost'}" data-k="huella" onclick="Pos.pickEnrollKind('huella')">Huella</button>
+      </div>`;
     openModal(`
-      <h3>¿A quién le pertenece?</h3><p class="msub">Código del aparato: ${esc(deviceUserId)} (${kind==='rostro'?'facial':(kind==='qr'?'QR':'huella')})</p>
-      <input class="inp" id="assign-enroll-q" placeholder="Busca por nombre..." oninput="Pos.searchAssignEnroll(this.value)">
+      <h3>¿A quién le pertenece?</h3><p class="msub">Código del aparato: ${esc(deviceUserId)}</p>
+      ${kindConfirm}
+      <input class="inp" id="assign-enroll-q" style="margin-top:10px" placeholder="Busca por nombre..." oninput="Pos.searchAssignEnroll(this.value)">
       <div id="assign-enroll-res" style="margin-top:10px;font-size:13px;color:var(--muted);font-weight:500">Escribe el nombre del cliente.</div>
     `);
-    this._pendingEnrollId=enrollId;this._pendingEnrollDeviceId=deviceUserId;this._pendingEnrollKind=kind;
+    this._pendingEnrollId=enrollId;this._pendingEnrollDeviceId=deviceUserId;this._pendingEnrollKind=kind==='qr'?'qr':(kind==='rostro'?'rostro':'huella');
+  },
+  pickEnrollKind(k){
+    this._pendingEnrollKind=k;
+    const box=$('assign-enroll-kind');if(!box)return;
+    box.querySelectorAll('button').forEach(b=>{b.className='btn-xs btn '+(b.dataset.k===k?'btn-primary':'btn-ghost');});
   },
   searchAssignEnroll(q){
     q=(q||'').trim().toLowerCase();
@@ -2543,7 +2572,7 @@ const Pos={
     closeModal();toast('Vinculado ✓ — ya puede entrar con eso');this.loadPendingEnrollments();
   },
   async loadAccess(){
-    const bId=this.branch?this.branch.id:null;
+    const bId=this.viewBr();
     try{
       let q=sb.from('checkins').select('*').gte('created_at',this.accFrom+'T00:00:00').lte('created_at',this.accTo+'T23:59:59').order('created_at',{ascending:false}).limit(2000);
       if(bId)q=q.eq('branch_id',bId);
@@ -2970,9 +2999,9 @@ const Pos={
   anns:[],
   view_promos(){
     const canEdit=this.role!=='cajera';
-    // fuera de admin: solo promos que aplican en ESTA sucursal (sin sucursales marcadas = ambas)
-    const bId=this.branch?this.branch.id:null;
-    const vPromos=this.role==='admin'?this.promos:this.promos.filter(p=>!p.branch_ids||!p.branch_ids.length||p.branch_ids.includes(bId));
+    // promos que aplican en la sucursal en foco (sin sucursales marcadas = todas; "Todas" = sin filtrar)
+    const bId=this.viewBr();
+    const vPromos=!bId?this.promos:this.promos.filter(p=>!p.branch_ids||!p.branch_ids.length||p.branch_ids.includes(bId));
     return `
     <div class="topbar">
       <div><h1>Promociones</h1><div class="sub">Descuentos del POS y anuncios en la app de los miembros</div></div>
@@ -3013,9 +3042,9 @@ const Pos={
       if(an){this.anns=an;cset('anns',an);}
     }catch(e){this.anns=cget('anns')||[];}
     const el=$('anns-list');
-    // fuera de admin: solo anuncios que aplican en ESTA sucursal
-    const abId=this.branch?this.branch.id:null;
-    const vAnns=this.role==='admin'?this.anns:this.anns.filter(a=>!a.branch_ids||!a.branch_ids.length||a.branch_ids.includes(abId));
+    // anuncios que aplican en la sucursal en foco ("Todas" = sin filtrar)
+    const abId=this.viewBr();
+    const vAnns=!abId?this.anns:this.anns.filter(a=>!a.branch_ids||!a.branch_ids.length||a.branch_ids.includes(abId));
     if(el)el.innerHTML=vAnns.length?vAnns.map(a=>`
       <div class="row-line">
         ${a.image_url?`<div style="width:52px;height:52px;border-radius:12px;overflow:hidden;flex-shrink:0;margin-right:14px;background:#F3F4F6;"><img src="${esc(a.image_url)}" style="width:100%;height:100%;object-fit:cover" alt=""></div>`:''}
@@ -3207,7 +3236,7 @@ const Pos={
   },
   anRecoverBucket:0,
   async after_analytics(){
-    const bId=this.branch?this.branch.id:null;
+    const bId=this.viewBr();
     const now=new Date();
     // ── Clientes: edad, género, alta, actividad ──
     let custs=this.customers;
