@@ -443,16 +443,55 @@ function leerSerialFacial(buf) {
   const m = buf.toString('latin1').match(/[A-Z]{2,}[0-9]{5,}/);
   return m ? m[0] : '';
 }
-function responderFacial(socket, buf) {
+// ── El marco del aparato, ya descifrado con paquetes REALES ──────────
+//  byte 0-1   : a5 5a  (marca de inicio)
+//  byte 2-3   : comando (little-endian). El aparato manda 1 = saludo/latido
+//  byte 4-7   : su reloj, en segundos desde el 1-ene-2000 UTC
+//  byte 8-12  : ceros
+//  byte 13    : 01
+//  byte 14-15 : SUMA DE VERIFICACIÓN = suma de los bytes 0..13 (LE)
+//               (comprobado contra 4 paquetes reales del aparato)
+//  byte 16-27 : número de serie en texto (AYUD21048991)
+//  byte 28-47 : ceros
+const EPOCH_2000 = Date.UTC(2000, 0, 1);
+function ahoraEpoch2000() { return Math.floor((Date.now() - EPOCH_2000) / 1000); }
+function armarFrame(cmd, tiempo, serial) {
+  const b = Buffer.alloc(48, 0);
+  b[0] = 0xa5; b[1] = 0x5a;
+  b.writeUInt16LE(cmd & 0xffff, 2);
+  b.writeUInt32LE(tiempo >>> 0, 4);
+  b[13] = 0x01;
+  let s = 0; for (let i = 0; i < 14; i++) s += b[i];
+  b.writeUInt16LE(s & 0xffff, 14);           // suma de verificación
+  if (serial) b.write(String(serial).slice(0, 12), 16, 'latin1');
+  return b;
+}
+
+// ── SONDA: candidatos de respuesta ───────────────────────────────────
+// El eco exacto ya lo probamos con el aparato real: lo RECHAZA (nos manda
+// ECONNRESET al segundo). O sea: el formato/suma están bien, pero espera
+// OTRO comando de vuelta. Como el aparato se reconecta cada ~1 segundo,
+// rotamos un candidato por conexión y anotamos cuánto aguanta cada uno:
+// el que NO provoque corte inmediato es el bueno.
+const CANDIDATOS = [
+  { nombre: 'cmd1-horaServidor-conSerial', hacer: (o, sn) => armarFrame(1, ahoraEpoch2000(), sn) },
+  { nombre: 'cmd2-horaDispositivo-conSerial', hacer: (o, sn) => armarFrame(2, o.readUInt32LE(4), sn) },
+  { nombre: 'cmd2-horaServidor-conSerial', hacer: (o, sn) => armarFrame(2, ahoraEpoch2000(), sn) },
+  { nombre: 'cmd0x8001-horaServidor-conSerial', hacer: (o, sn) => armarFrame(0x8001, ahoraEpoch2000(), sn) },
+  { nombre: 'cmd1-horaServidor-sinSerial', hacer: () => armarFrame(1, ahoraEpoch2000(), '') },
+  { nombre: 'cmd2-horaServidor-sinSerial', hacer: () => armarFrame(2, ahoraEpoch2000(), '') },
+  { nombre: 'eco-exacto (referencia, ya sabemos que lo rechaza)', hacer: (o) => Buffer.from(o) },
+];
+let idxCandidato = 0;
+
+function responderFacial(socket, buf, candidato) {
   const sn = leerSerialFacial(buf);
   logFacial('RECIBÍ (' + buf.length + ' bytes' + (sn ? ', SN ' + sn : '') + '): ' + buf.toString('hex'));
   if (sn) seenDevice(sn);
-  // PRIMER SALUDO DE PRUEBA: le devolvemos su mismo marco (eco). El cambio
-  // grande vs. antes es que ya NO le colgamos: recibe una respuesta válida
-  // en una conexión que sigue viva. Vemos su reacción en el log (si cambia
-  // de mensaje, si deja de reintentar, si marca "conectado") y con eso
-  // afinamos la respuesta exacta que espera.
-  try { socket.write(buf); logFacial('RESPONDÍ eco de ' + buf.length + ' bytes'); }
+  let resp;
+  try { resp = candidato.hacer(buf, sn); }
+  catch (e) { logFacial('no pude armar la respuesta: ' + e.message); return; }
+  try { socket.write(resp); logFacial('RESPONDÍ [' + candidato.nombre + ']: ' + resp.toString('hex')); }
   catch (e) { logFacial('no pude responder: ' + e.message); }
 }
 // ¿El primer trozo que llega es del protocolo binario del facial?
@@ -460,11 +499,19 @@ function esPaqueteFacial(chunk) {
   return !!chunk && chunk.length >= 2 && chunk[0] === 0xa5 && chunk[1] === 0x5a;
 }
 function manejarFacialBinario(socket, primerChunk, remote, puerto) {
-  logFacial('CONEXIÓN binaria a5 5a de ' + remote + ' (puerto ' + puerto + ') — la mantengo abierta y respondo');
+  // Un candidato distinto por conexión: como el aparato reconecta cada ~1s,
+  // en pocos segundos quedan probados todos y el log dice cuál aguantó.
+  const candidato = CANDIDATOS[idxCandidato % CANDIDATOS.length];
+  idxCandidato++;
+  const t0 = Date.now();
+  logFacial('CONEXIÓN binaria a5 5a de ' + remote + ' (puerto ' + puerto + ') — PROBANDO respuesta: ' + candidato.nombre);
   try { socket.setKeepAlive(true, 10000); } catch (_) {}
-  responderFacial(socket, primerChunk);               // el primer paquete ya lo tenemos en mano
-  socket.on('data', (buf) => responderFacial(socket, buf)); // y contestamos los siguientes
-  socket.on('close', () => logFacial('conexión binaria cerrada por ' + remote));
+  responderFacial(socket, primerChunk, candidato);               // el primer paquete ya lo tenemos en mano
+  socket.on('data', (buf) => responderFacial(socket, buf, candidato)); // y contestamos los siguientes
+  socket.on('close', () => {
+    const ms = Date.now() - t0;
+    logFacial('>>> "' + candidato.nombre + '" duró ' + ms + ' ms' + (ms > 8000 ? '  <<-- ¡ESTE AGUANTÓ! ***' : ' (lo cortó rápido = lo rechaza)'));
+  });
   socket.on('error', (e) => logFacial('error binario: ' + e.message));
 }
 
@@ -506,4 +553,4 @@ setTimeout(syncUsuarios, 10000);
 setInterval(syncUsuarios, SYNC_MS);
 
 // Expuesto para las pruebas automatizadas (no cambia nada del funcionamiento).
-module.exports = { esPaqueteFacial, leerSerialFacial, responderFacial, manejarFacialBinario };
+module.exports = { esPaqueteFacial, leerSerialFacial, responderFacial, manejarFacialBinario, armarFrame, ahoraEpoch2000, CANDIDATOS };
