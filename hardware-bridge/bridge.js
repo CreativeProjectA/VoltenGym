@@ -28,6 +28,7 @@ const express = require('express');
 const fetch = require('node-fetch'); // npm install node-fetch@2
 const fs = require('fs');
 const path = require('path');
+const net = require('net'); // para atender el protocolo BINARIO del facial (a5 5a)
 
 const SB_URL = process.env.SB_URL || 'https://mopyslyhjtnmvlksusjr.supabase.co';
 const SB_SERVICE_KEY = process.env.SB_SERVICE_KEY || 'PEGA_AQUI_LA_SERVICE_KEY';
@@ -379,12 +380,12 @@ const kindFromBackup = (n) => { n = Number(n); return n >= 50 ? 'rostro' : (n ==
 
 // Le pega el protocolo AiFace (WebSocket+JSON) a un servidor HTTP dado —
 // se usa una vez por cada puerto que abrimos, todos con la misma lógica.
-function attachWs(srv) {
+function attachWs(srv, puerto) {
   const wss = new WebSocketServer({ server: srv });
   // si el puerto ya está ocupado (otra copia corriendo), avisar sin morirse
   wss.on('error', (e) => wsLog('aviso (no fatal): ' + e.message));
   wss.on('connection', (ws, req) => {
-    wsLog('CONEXIÓN nueva desde ' + (req.socket.remoteAddress || '?') + ' (puerto ' + srv.address().port + ')');
+    wsLog('CONEXIÓN nueva desde ' + (req.socket.remoteAddress || '?') + ' (puerto ' + (puerto || '?') + ')');
     ws.on('message', async (data) => {
       const raw = data.toString();
       wsLog('LLEGÓ: ' + raw.slice(0, 900));
@@ -426,38 +427,83 @@ function attachWs(srv) {
   });
 }
 
-// ── VARIOS PUERTOS A LA VEZ ──────────────────────────────────────────
-// El manual de GymCloud (mismo fabricante) NUNCA pide capturar un puerto
-// — su dirección es "app.gymcloud.mx/ControlAcceso/adms.php" sin número
-// de puerto. Sospecha fuerte: en modo "dominio", este aparato puede estar
-// IGNORANDO el campo "Puerto" del menú y usando el 80 (el normal de
-// internet) por su cuenta. Por eso el puente ahora escucha en VARIOS
-// puertos a la vez — sea cual sea el que el aparato use de verdad, alguien
-// va a estar ahí esperándolo. El 4370 sigue siendo el principal/recomendado.
+// ═══════════════ PROTOCOLO BINARIO DEL FACIAL (a5 5a) ═══════════════
+// Con el aparato REAL confirmamos que NO habla HTTP ni WebSocket en el
+// puerto 4370: manda paquetes BINARIOS de 48 bytes que empiezan con los
+// bytes a5 5a, cada ~3 seg, con su número de serie (AYUD21048991) adentro.
+// Antes el puente los tomaba por "HTTP mal escrito" y COLGABA la llamada
+// de inmediato — por eso el aparato tocaba y tocaba sin recibir respuesta.
+// Ahora: mantenemos la conexión ABIERTA y le contestamos en su idioma.
+function logFacial(txt) {
+  try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] FACIAL ' + txt + '\n'); } catch (_) {}
+  console.log('FACIAL:', String(txt).slice(0, 200));
+}
+// El número de serie viene en ASCII dentro del paquete (letras + dígitos).
+function leerSerialFacial(buf) {
+  const m = buf.toString('latin1').match(/[A-Z]{2,}[0-9]{5,}/);
+  return m ? m[0] : '';
+}
+function responderFacial(socket, buf) {
+  const sn = leerSerialFacial(buf);
+  logFacial('RECIBÍ (' + buf.length + ' bytes' + (sn ? ', SN ' + sn : '') + '): ' + buf.toString('hex'));
+  if (sn) seenDevice(sn);
+  // PRIMER SALUDO DE PRUEBA: le devolvemos su mismo marco (eco). El cambio
+  // grande vs. antes es que ya NO le colgamos: recibe una respuesta válida
+  // en una conexión que sigue viva. Vemos su reacción en el log (si cambia
+  // de mensaje, si deja de reintentar, si marca "conectado") y con eso
+  // afinamos la respuesta exacta que espera.
+  try { socket.write(buf); logFacial('RESPONDÍ eco de ' + buf.length + ' bytes'); }
+  catch (e) { logFacial('no pude responder: ' + e.message); }
+}
+// ¿El primer trozo que llega es del protocolo binario del facial?
+function esPaqueteFacial(chunk) {
+  return !!chunk && chunk.length >= 2 && chunk[0] === 0xa5 && chunk[1] === 0x5a;
+}
+function manejarFacialBinario(socket, primerChunk, remote, puerto) {
+  logFacial('CONEXIÓN binaria a5 5a de ' + remote + ' (puerto ' + puerto + ') — la mantengo abierta y respondo');
+  try { socket.setKeepAlive(true, 10000); } catch (_) {}
+  responderFacial(socket, primerChunk);               // el primer paquete ya lo tenemos en mano
+  socket.on('data', (buf) => responderFacial(socket, buf)); // y contestamos los siguientes
+  socket.on('close', () => logFacial('conexión binaria cerrada por ' + remote));
+  socket.on('error', (e) => logFacial('error binario: ' + e.message));
+}
+
+// ── VARIOS PUERTOS A LA VEZ (HTTP + WebSocket + binario a5 5a) ────────
+// Cada puerto lo abre un "portero" (net) que MIRA el primer byte:
+//   • a5 5a  → protocolo binario del facial (lo atiende manejarFacialBinario)
+//   • lo demás (GET/POST, WebSocket) → se lo pasa al servidor HTTP/WS normal
+// Así un mismo puerto atiende los DOS mundos sin estorbarse.
 const PUERTOS = [4370, 80, 8090, 8080];
 const servidores = [];
 for (const puerto of PUERTOS) {
-  const srv = http.createServer(app);
-  if (wsOk) attachWs(srv);
-  // Detector de FONDO: anota CUALQUIER toque, hasta protocolos desconocidos.
-  srv.on('connection', (s) => {
-    const linea = '[' + new Date().toLocaleString('es-MX') + '] TCP conexión entrante de ' + (s.remoteAddress || '?') + ' (puerto ' + puerto + ')\n';
-    try { fs.appendFileSync(LOG_FILE, linea); } catch (_) {}
-    console.log('TCP: conexión de', s.remoteAddress || '?', 'en el puerto', puerto);
+  const httpSrv = http.createServer(app);
+  if (wsOk) attachWs(httpSrv, puerto);
+  httpSrv.on('clientError', (err, socket) => { try { socket.destroy(); } catch (_) {} });
+
+  const mux = net.createServer((socket) => {
+    const remote = socket.remoteAddress || '?';
+    socket.once('data', (chunk) => {
+      if (esPaqueteFacial(chunk)) {
+        // binario: ya tenemos el primer paquete, lo atendemos directo
+        manejarFacialBinario(socket, chunk, remote, puerto);
+      } else {
+        // HTTP/WebSocket: reinyectamos el primer trozo y se lo damos al servidor HTTP
+        socket.pause();
+        socket.unshift(chunk);
+        httpSrv.emit('connection', socket);
+        socket.resume();
+      }
+    });
+    socket.on('error', () => {});
   });
-  srv.on('clientError', (err, socket) => {
-    // HEX crudo, byte por byte — el texto (utf8) deforma los bytes que no
-    // son texto normal, y este aparato manda protocolo binario, no HTTP.
-    const crudoHex = err && err.rawPacket ? err.rawPacket.toString('hex') : '';
-    const crudoTxt = err && err.rawPacket ? err.rawPacket.toString('latin1').replace(/[^\x20-\x7E]/g, '.') : (err ? err.message : '?');
-    try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] TCP datos NO-HTTP de ' + ((socket && socket.remoteAddress) || '?') + ' (puerto ' + puerto + ', ' + (err && err.rawPacket ? err.rawPacket.length : 0) + ' bytes)\n  HEX: ' + crudoHex + '\n  TXT: ' + crudoTxt + '\n'); } catch (_) {}
-    try { socket.destroy(); } catch (_) {}
-  });
-  srv.listen(puerto, () => console.log('Puente Volten Gym escuchando en el puerto', puerto, '— sucursal', BRANCH_ID))
+  mux.listen(puerto, () => console.log('Puente Volten Gym escuchando en el puerto', puerto, '— sucursal', BRANCH_ID))
     .on('error', (e) => console.log('AVISO: no se pudo abrir el puerto ' + puerto + ' (' + e.message + ') — probablemente ya está en uso por Windows, se ignora y sigue con los demás.'));
-  servidores.push(srv);
+  servidores.push(mux);
 }
-console.log('Protocolos activos: ZKTeco push (HTTP)' + (wsOk ? ' + AiFace (WebSocket JSON)' : ' — AiFace DESACTIVADO, falta paquete ws'));
+console.log('Protocolos activos: binario a5 5a (facial) + ZKTeco push (HTTP)' + (wsOk ? ' + AiFace (WebSocket JSON)' : ' — AiFace DESACTIVADO, falta paquete ws'));
 // Barrido inicial a los 10s y luego cada SYNC_MS: vencidos fuera, renovados de vuelta.
 setTimeout(syncUsuarios, 10000);
 setInterval(syncUsuarios, SYNC_MS);
+
+// Expuesto para las pruebas automatizadas (no cambia nada del funcionamiento).
+module.exports = { esPaqueteFacial, leerSerialFacial, responderFacial, manejarFacialBinario };
