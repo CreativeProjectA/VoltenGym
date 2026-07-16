@@ -446,8 +446,11 @@ for (const puerto of PUERTOS) {
     console.log('TCP: conexión de', s.remoteAddress || '?', 'en el puerto', puerto);
   });
   srv.on('clientError', (err, socket) => {
-    const crudo = err && err.rawPacket ? err.rawPacket.toString('utf8').slice(0, 400) : (err ? err.message : '?');
-    try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] TCP datos NO-HTTP de ' + ((socket && socket.remoteAddress) || '?') + ' (puerto ' + puerto + '): ' + JSON.stringify(crudo) + '\n'); } catch (_) {}
+    // HEX crudo, byte por byte — el texto (utf8) deforma los bytes que no
+    // son texto normal, y este aparato manda protocolo binario, no HTTP.
+    const crudoHex = err && err.rawPacket ? err.rawPacket.toString('hex') : '';
+    const crudoTxt = err && err.rawPacket ? err.rawPacket.toString('latin1').replace(/[^\x20-\x7E]/g, '.') : (err ? err.message : '?');
+    try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] TCP datos NO-HTTP de ' + ((socket && socket.remoteAddress) || '?') + ' (puerto ' + puerto + ', ' + (err && err.rawPacket ? err.rawPacket.length : 0) + ' bytes)\n  HEX: ' + crudoHex + '\n  TXT: ' + crudoTxt + '\n'); } catch (_) {}
     try { socket.destroy(); } catch (_) {}
   });
   srv.listen(puerto, () => console.log('Puente Volten Gym escuchando en el puerto', puerto, '— sucursal', BRANCH_ID))
