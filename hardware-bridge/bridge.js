@@ -131,14 +131,29 @@ async function registerCheckin(customer, kind) {
     console.log('SALIDA registrada:', customer.full_name);
     return true;
   }
-  // Validación de membresía (misma regla que el POS: solo vale en ESTA sucursal)
-  const subRes = await fetch(
-    SB_URL + '/rest/v1/subscriptions?customer_id=eq.' + customer.id + '&branch_id=eq.' + BRANCH_ID + '&status=neq.canceled&order=end_date.desc&limit=1',
-    { headers: H }
-  );
-  const subs = await subRes.json();
-  const sub = subs && subs[0];
-  const granted = !!(sub && new Date(sub.end_date + 'T23:59:59') >= new Date()) && !customer.suspended;
+  // El personal (coach/cajera/encargado/admin) SIEMPRE entra — no necesita
+  // membresía, es su trabajo, no un cliente pagando. Mismo criterio que ya
+  // usa syncUsuarios() para no borrarlos del aparato, pero aquí falta aplicarlo
+  // también al acceso en tiempo real (Ratificar servidor pregunta cada vez).
+  let esStaff = false;
+  if (customer.profile_id) {
+    try {
+      const pr = await fetch(SB_URL + '/rest/v1/profiles?id=eq.' + customer.profile_id + '&select=role', { headers: H });
+      const prRows = await pr.json();
+      esStaff = !!(prRows && prRows[0] && prRows[0].role && prRows[0].role !== 'member');
+    } catch (_) {}
+  }
+  let granted = esStaff && !customer.suspended;
+  if (!granted && !esStaff) {
+    // Validación de membresía (misma regla que el POS: solo vale en ESTA sucursal)
+    const subRes = await fetch(
+      SB_URL + '/rest/v1/subscriptions?customer_id=eq.' + customer.id + '&branch_id=eq.' + BRANCH_ID + '&status=neq.canceled&order=end_date.desc&limit=1',
+      { headers: H }
+    );
+    const subs = await subRes.json();
+    const sub = subs && subs[0];
+    granted = !!(sub && new Date(sub.end_date + 'T23:59:59') >= new Date()) && !customer.suspended;
+  }
   await fetch(SB_URL + '/rest/v1/checkins', {
     method: 'POST', headers: HJ,
     body: JSON.stringify({
