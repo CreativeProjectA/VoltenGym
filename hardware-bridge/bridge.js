@@ -36,6 +36,14 @@ const SB_SERVICE_KEY = process.env.SB_SERVICE_KEY || 'PEGA_AQUI_LA_SERVICE_KEY';
 const BRANCH_ID = process.env.BRANCH_ID || 'PEGA_AQUI_EL_ID_DE_LA_SUCURSAL';
 // Cada cuánto revisar membresías vencidas/renovadas (60s por defecto).
 const SYNC_MS = Number(process.env.SYNC_MS) || 60000;
+// ── MODO ESPÍA (solo para diagnóstico, apagado por defecto) ───────────
+// El facial rechaza toda respuesta que le inventamos. Pero el servidor de
+// GymCloud (del mismo fabricante) SÍ sabe contestarle. En modo espía el
+// puente se pone EN MEDIO: le pasa al servidor de GymCloud lo que dice el
+// aparato, le devuelve al aparato lo que contesta GymCloud, y GRABA las dos
+// mitades. Así vemos la respuesta buena en vez de adivinarla.
+const MODO_ESPIA = process.env.MODO_ESPIA === '1';
+const ESPIA_DESTINO = process.env.ESPIA_DESTINO || 'app.gymcloud.mx:80';
 
 const H = { apikey: SB_SERVICE_KEY, Authorization: 'Bearer ' + SB_SERVICE_KEY };
 const HJ = Object.assign({}, H, { 'Content-Type': 'application/json' });
@@ -498,7 +506,54 @@ function responderFacial(socket, buf, candidato) {
 function esPaqueteFacial(chunk) {
   return !!chunk && chunk.length >= 2 && chunk[0] === 0xa5 && chunk[1] === 0x5a;
 }
+// ── EL ESPÍA ─────────────────────────────────────────────────────────
+// Pone al puente EN MEDIO entre el aparato y el servidor de GymCloud, y
+// graba las dos mitades de la conversación. Lo que buscamos es la línea
+// "GYMCLOUD -> APARATO": esa es la respuesta buena que el aparato acepta,
+// la que llevamos todo el día tratando de adivinar.
+function espiarFacial(socket, primerChunk, remote, puerto) {
+  const partes = String(ESPIA_DESTINO).split(':');
+  const host = partes[0];
+  const port = Number(partes[1]) || 80;
+  logFacial('ESPÍA: aparato ' + remote + ' conectó (puerto ' + puerto + '). Abriendo hacia ' + host + ':' + port);
+
+  let arriba = null;
+  const pendientes = [primerChunk];   // lo que diga el aparato antes de que abra GymCloud
+  let abierto = false;
+
+  try {
+    arriba = net.connect({ host: host, port: port }, () => {
+      abierto = true;
+      logFacial('ESPÍA: conectado a ' + host + ':' + port + ' — reenviando lo del aparato');
+      for (const p of pendientes) { try { arriba.write(p); } catch (_) {} }
+      pendientes.length = 0;
+    });
+  } catch (e) {
+    logFacial('ESPÍA: no pude abrir hacia ' + host + ':' + port + ' -> ' + e.message);
+    try { socket.destroy(); } catch (_) {}
+    return;
+  }
+
+  logFacial('ESPÍA: APARATO -> GYMCLOUD (' + primerChunk.length + ' bytes): ' + primerChunk.toString('hex'));
+
+  socket.on('data', (d) => {
+    logFacial('ESPÍA: APARATO -> GYMCLOUD (' + d.length + ' bytes): ' + d.toString('hex'));
+    if (abierto) { try { arriba.write(d); } catch (_) {} } else { pendientes.push(d); }
+  });
+  // ► ESTA es la línea de oro: la respuesta que el aparato SÍ acepta.
+  arriba.on('data', (d) => {
+    logFacial('*** ESPÍA: GYMCLOUD -> APARATO (' + d.length + ' bytes): ' + d.toString('hex') + '  <<== RESPUESTA BUENA ***');
+    try { socket.write(d); } catch (_) {}
+  });
+
+  arriba.on('error', (e) => { logFacial('ESPÍA: error hacia GymCloud: ' + e.message); try { socket.destroy(); } catch (_) {} });
+  arriba.on('close', () => { logFacial('ESPÍA: GymCloud cerró la conexión'); try { socket.destroy(); } catch (_) {} });
+  socket.on('error', (e) => logFacial('ESPÍA: error del lado del aparato: ' + e.message));
+  socket.on('close', () => { logFacial('ESPÍA: el aparato cerró la conexión'); try { arriba.destroy(); } catch (_) {} });
+}
+
 function manejarFacialBinario(socket, primerChunk, remote, puerto) {
+  if (MODO_ESPIA) return espiarFacial(socket, primerChunk, remote, puerto);
   // Un candidato distinto por conexión: como el aparato reconecta cada ~1s,
   // en pocos segundos quedan probados todos y el log dice cuál aguantó.
   const candidato = CANDIDATOS[idxCandidato % CANDIDATOS.length];
@@ -548,9 +603,13 @@ for (const puerto of PUERTOS) {
   servidores.push(mux);
 }
 console.log('Protocolos activos: binario a5 5a (facial) + ZKTeco push (HTTP)' + (wsOk ? ' + AiFace (WebSocket JSON)' : ' — AiFace DESACTIVADO, falta paquete ws'));
+if (MODO_ESPIA) {
+  console.log('*** MODO ESPÍA ENCENDIDO -> ' + ESPIA_DESTINO + ' ***');
+  console.log('    (el puente NO valida accesos en este modo: solo escucha y graba la conversación)');
+}
 // Barrido inicial a los 10s y luego cada SYNC_MS: vencidos fuera, renovados de vuelta.
 setTimeout(syncUsuarios, 10000);
 setInterval(syncUsuarios, SYNC_MS);
 
 // Expuesto para las pruebas automatizadas (no cambia nada del funcionamiento).
-module.exports = { esPaqueteFacial, leerSerialFacial, responderFacial, manejarFacialBinario, armarFrame, ahoraEpoch2000, CANDIDATOS };
+module.exports = { esPaqueteFacial, leerSerialFacial, responderFacial, manejarFacialBinario, armarFrame, ahoraEpoch2000, CANDIDATOS, espiarFacial };
