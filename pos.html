@@ -563,8 +563,17 @@ const Pos={
       this.branch=mine||this.branches[0]||null;
     }else{
       const saved=cget('branch_sel');
-      // "all" (o primera vez) = ver todas; si guardó una sucursal, la filtra.
-      this.brAll=(saved==='all'||saved==null);
+      // "Todas" es una eleccion explicita del admin (le da clic al selector),
+      // NUNCA el default silencioso — antes, la primera vez que se abria el
+      // POS en una computadora nueva (sin nada guardado aun, ej. la PC de
+      // una sucursal recien instalada), quedaba en "Todas" sin que se viera
+      // en pantalla: arriba seguia mostrando el nombre de UNA sucursal
+      // (la primera de la lista), dando la impresion de que solo se veia
+      // esa, cuando en realidad se colaban datos de la otra (paso con un
+      // registro de facial sin asignar de Tres Cantos, visto desde Gomez
+      // Morin). Ahora, sin nada guardado, arranca en la PRIMERA sucursal
+      // especifica — "Todas" solo se activa si el admin la elige a proposito.
+      this.brAll=(saved==='all');
       this.branch=this.branches.find(b=>b.id===saved)||this.branches[0]||null;
     }
     $('login').style.display='none';
