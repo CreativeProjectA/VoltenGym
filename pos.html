@@ -2607,16 +2607,20 @@ const Pos={
       // Sin lector de salida (el torniquete deja salir libre, sin escanear),
       // el sistema NO sabe la hora exacta en que alguien se fue. Para que
       // "adentro ahora" no acumule gente que ya se fue hace rato:
-      // - Personal (coach/encargados) con horario configurado: se asume que
-      //   ya salió en cuanto pasa su hora de salida programada.
-      // - Todos los demás (miembros, o personal sin horario puesto): estimado
-      //   de 3 horas sin actividad. Nunca se escribe una hora de salida falsa,
-      //   solo se oculta de esta lista en vivo (el corte del día sí la cierra).
+      // - Clientes (miembros): estimado de 3 horas sin actividad — nunca se
+      //   escribe una hora de salida falsa, solo se oculta de esta lista en
+      //   vivo (el corte del día sí la cierra de verdad).
+      // - Personal (coach/encargados/cajeras): NUNCA se les aplica la regla
+      //   de 3 horas — con horario configurado, se asume que salió hasta su
+      //   hora de salida programada; SIN horario configurado, se queda
+      //   "adentro" indefinidamente hasta que salga de verdad o cierre su
+      //   turno (mejor eso que sacarlo de la lista por error a media jornada).
       const STALE_MS=3*60*60*1000;
       const now=new Date();
       this.accInside=(d2||[]).filter(ci=>{
         const staff=!ci.customer_id&&ci.member_id?this.appProfiles.find(p=>p.id===ci.member_id):null;
-        if(staff&&staff.shift_end){
+        if(staff){
+          if(!staff.shift_end)return true;
           const [hh,mm]=staff.shift_end.split(':').map(Number);
           const shiftEnd=new Date(ci.created_at);shiftEnd.setHours(hh,mm||0,0,0);
           return now<shiftEnd;
