@@ -3794,6 +3794,10 @@ const Pos={
     return staff.map(p=>{
       const sbr=this.staffBranches.find(x=>x.staff_id===p.id);
       const br=sbr?this.branches.find(b=>b.id===sbr.branch_id):null;
+      // ¿ya tiene ficha para poder registrar su cara/huella? El personal NO
+      // pasa por "Nuevo cliente" ni compra nada, así que sin esto no había
+      // forma de darle de alta para el Face ID.
+      const yaTieneFicha=this.customers.some(c=>c.profile_id===p.id);
       return `<tr>
       <td style="width:46px"><div class="av2" style="width:36px;height:36px;border-radius:50%;background:#E5E7EB;color:#6B7280;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;overflow:hidden;">${p.avatar_url?'<img src="'+esc(p.avatar_url)+'" style="width:100%;height:100%;object-fit:cover" alt="">':esc((p.full_name||'?')[0].toUpperCase())}</div></td>
       <td style="font-weight:700">${esc(p.full_name||'—')}</td>
@@ -3802,10 +3806,24 @@ const Pos={
       <td>${br?esc(br.name):'Todas'}</td>
       <td style="color:var(--muted)">${fdate(p.created_at)}</td>
       <td style="text-align:right;white-space:nowrap">
+        ${yaTieneFicha?'<span class="tag tag-green" style="margin-right:6px">Face ID listo</span>':`<button class="btn-xs btn" style="background:var(--orange);color:#FFF;margin-right:6px" onclick="Pos.enableStaffFacial('${p.id}')">Dar de alta Face ID</button>`}
         <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.staffEditModal('${p.id}')">Editar</button>
         ${p.id!==this.user.id&&p.role!=='admin'?`<button class="btn-xs btn btn-danger" onclick="Pos.removeStaff('${p.id}')">Quitar</button>`:''}
       </td></tr>`;
     }).join('');
+  },
+  async enableStaffFacial(profileId){
+    const p=this.appProfiles.find(x=>x.id===profileId);if(!p)return;
+    if(this.customers.some(c=>c.profile_id===profileId)){toast('Ya tiene ficha para el Face ID.',true);return;}
+    const sbr=this.staffBranches.find(x=>x.staff_id===profileId);
+    const bId=sbr?sbr.branch_id:(this.branch?this.branch.id:(this.branches[0]&&this.branches[0].id));
+    const payload={id:uuid(),full_name:p.full_name||p.email||'Personal',email:p.email||null,
+      profile_id:profileId,branch_id:bId||null,suspended:false,created_at:new Date().toISOString()};
+    const r=await Q.insert('customers',payload);
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    this.customers.push(payload);cset('customers',this.customers);
+    toast('Listo ✓ Ahora regístrale su cara/huella en el aparato y asígnala en Accesos.');
+    this.after_staff();
   },
   async removeStaff(id){
     const p=this.appProfiles.find(x=>x.id===id);if(!p)return;
