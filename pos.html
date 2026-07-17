@@ -2530,7 +2530,10 @@ const Pos={
         <div class="psub">El facial/huella detectó a alguien nuevo — dale clic para conectarlo con su ficha, sin teclear ningún número</div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
           ${data.map(d=>`<div class="row-line"><span class="k">Código ${esc(d.device_user_id)} · ${d.kind==='rostro'?'facial':(d.kind==='qr'?'QR':'huella')} · ${ftime(d.first_seen_at)}</span>
-            <button class="btn-xs btn" style="background:var(--orange);color:#FFF" onclick="Pos.assignEnrollment('${d.id}','${esc(d.device_user_id)}','${d.kind||'huella'}')">Asignar a cliente</button></span></div>`).join('')}
+            <span style="display:flex;gap:6px;">
+            <button class="btn-xs btn" style="background:var(--orange);color:#FFF" onclick="Pos.assignEnrollment('${d.id}','${esc(d.device_user_id)}','${d.kind||'huella'}')">Asignar a cliente</button>
+            <button class="btn-xs btn btn-ghost" onclick="Pos.discardEnrollment('${d.id}')" title="Descartar (fue una prueba, no es de nadie)">Descartar</button>
+            </span></div>`).join('')}
         </div>
       </div>`;
     }catch(e){el.innerHTML='';}
@@ -2579,6 +2582,13 @@ const Pos={
     }
     await sb.from('device_enrollments').update({assigned_to:custId}).eq('id',this._pendingEnrollId);
     closeModal();toast('Vinculado ✓ — ya puede entrar con eso');this.loadPendingEnrollments();
+  },
+  async discardEnrollment(enrollId){
+    // Para pruebas del tecnico/instalador o registros equivocados en el
+    // aparato — ya no hace falta pedirle a soporte que lo borre por atras.
+    if(!confirm('¿Descartar este registro? Es para pruebas o códigos que no le pertenecen a nadie — no se puede deshacer.'))return;
+    await sb.from('device_enrollments').delete().eq('id',enrollId);
+    toast('Descartado ✓');this.loadPendingEnrollments();
   },
   async loadAccess(){
     const bId=this.viewBr();
