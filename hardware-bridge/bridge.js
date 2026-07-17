@@ -196,73 +196,19 @@ async function anotarPendiente(deviceUserId, kind) {
   } catch (_) { /* si falta pos_migration12.sql, no rompe el resto */ }
 }
 
-// ── SINCRONIZACIÓN: vencidos fuera del aparato, renovados de vuelta ────
+// ── SINCRONIZACIÓN: YA NO se usa para borrar/dar de alta usuarios ──────
+// Antes, cuando a alguien se le vencía la membresía, este barrido le
+// mandaba al aparato la orden de BORRARLO — pero eso también le borraba
+// su cara/huella guardada, obligando a volver a registrarla cada vez que
+// renovara. Innecesario: con "Ratificar servidor: Sí" (ya confirmado
+// funcionando en ambas sucursales) el aparato pregunta EN TIEMPO REAL, en
+// cada pasada, si esa persona puede entrar — la decisión sale de la
+// membresía vigente AHORA MISMO, sin importar si su usuario sigue en la
+// lista del aparato. Por eso la cara/huella se registra UNA sola vez, para
+// siempre: nunca se vuelve a tocar, y renovar no requiere pararse de nuevo.
 async function syncUsuarios() {
-  try {
-    // 1. Clientes de ESTA sucursal que tienen cara o huella registrada
-    const cRes = await fetch(
-      SB_URL + '/rest/v1/customers?branch_id=eq.' + BRANCH_ID + '&or=(face_id.not.is.null,fingerprint_id.not.is.null)&select=id,full_name,profile_id,suspended,face_id,fingerprint_id',
-      { headers: H }
-    );
-    const clientes = await cRes.json();
-    if (!Array.isArray(clientes)) return;
-
-    // 2. El personal (coach/cajera/encargado/admin) NUNCA se borra del aparato
-    const pids = clientes.map((c) => c.profile_id).filter(Boolean);
-    const roles = {};
-    if (pids.length) {
-      const pRes = await fetch(SB_URL + '/rest/v1/profiles?id=in.(' + pids.join(',') + ')&select=id,role', { headers: H });
-      const pRows = await pRes.json();
-      if (Array.isArray(pRows)) pRows.forEach((p) => { roles[p.id] = p.role; });
-    }
-
-    // 3. Mejor vigencia por cliente en ESTA sucursal
-    const sRes = await fetch(
-      SB_URL + '/rest/v1/subscriptions?branch_id=eq.' + BRANCH_ID + '&status=neq.canceled&select=customer_id,end_date&order=end_date.desc',
-      { headers: H }
-    );
-    const subs = await sRes.json();
-    const mejorFin = {};
-    if (Array.isArray(subs)) subs.forEach((s) => { if (!mejorFin[s.customer_id]) mejorFin[s.customer_id] = s.end_date; });
-
-    const ahora = new Date();
-    for (const c of clientes) {
-      const esStaff = c.profile_id && roles[c.profile_id] && roles[c.profile_id] !== 'member';
-      const fin = mejorFin[c.id];
-      const activo = esStaff || (!c.suspended && fin && new Date(fin + 'T23:59:59') >= ahora);
-      const pins = [...new Set([c.face_id, c.fingerprint_id].filter(Boolean))];
-
-      for (const pin of pins) {
-        const b = state.borrados[pin];
-        if (!activo) {
-          // Vencido/suspendido → fuera del aparato (re-intenta si quedó pendiente >10 min)
-          const pendienteViejo = b && b.status === 'pendiente' && (ahora - new Date(b.t)) > 10 * 60000;
-          if (!b || pendienteViejo) {
-            const enviado = queueForAllDevices('DATA DELETE USERINFO PIN=' + pin);
-            state.borrados[pin] = { status: enviado ? 'pendiente' : 'sin-aparato', t: ahora.toISOString() };
-            saveState();
-            console.log('MEMBRESÍA VENCIDA → borrar del aparato:', c.full_name, '(código ' + pin + ')');
-          } else if (b.status === 'sin-aparato' && Object.keys(state.aparatos).length) {
-            // ya hay aparato conectado — ahora sí mándalo
-            queueForAllDevices('DATA DELETE USERINFO PIN=' + pin);
-            state.borrados[pin] = { status: 'pendiente', t: ahora.toISOString() };
-            saveState();
-          }
-        } else if (b) {
-          // RENOVÓ → darlo de alta otra vez en el aparato.
-          // Ojo: el aparato borró también su plantilla de cara/huella, así
-          // que debe REGISTRARLA de nuevo una vez (mismo código de usuario,
-          // su ficha no cambia). En el POS saldrá como registro nuevo si el
-          // aparato le asigna otro código.
-          const nombre = String(c.full_name || 'Cliente').replace(/[\t\n\r]/g, ' ').slice(0, 24);
-          queueForAllDevices('DATA UPDATE USERINFO PIN=' + pin + '\tName=' + nombre + '\tPri=0');
-          delete state.borrados[pin];
-          saveState();
-          console.log('RENOVÓ → re-activado en el aparato:', c.full_name, '(código ' + pin + ' — debe registrar su cara/huella de nuevo una vez)');
-        }
-      }
-    }
-  } catch (e) { console.error('sync error:', e.message); }
+  // Se deja vacía a propósito (ver comentario de arriba). Si algún día se
+  // necesita empujar comandos al aparato por otro motivo, aquí es donde va.
 }
 
 // ── Protocolo push de ZKTeco (ADMS) — el dispositivo llama esto solo ──
