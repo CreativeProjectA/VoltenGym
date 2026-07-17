@@ -1455,10 +1455,13 @@ const Pos={
     this._acctCreated=null;
     const s=this.sale;const t=this.saleTotals();
     if(!s.method||!s.cart.length){this._checkingOut=false;return;}
-    // El admin/contador no manejan caja (no tienen turno abierto). Sin turno
-    // no se puede cobrar: antes esto tronaba al leer this.shift.id ("reading
-    // id"). Ahora avisa claro en vez de romperse a media venta.
-    if(!this.shift||!this.shift.id){toast('Esta cuenta no maneja caja. Para vender, entra con una cuenta de cajera o encargada y abre el turno.',true);this._checkingOut=false;return;}
+    // Cajera/encargada SÍ necesitan turno abierto (la venta tiene que
+    // cuadrar contra un corte de caja). Admin/contador no manejan caja —
+    // pueden vender igual, solo que su venta no queda ligada a ningún
+    // turno (shift_id null). Antes esto tronaba al leer this.shift.id
+    // ("reading id") para CUALQUIER cuenta sin turno; ahora solo bloquea
+    // a quien de verdad debe cuadrar caja.
+    if((!this.shift||!this.shift.id)&&!['admin','contador'].includes(this.role)){toast('Esta cuenta no maneja caja. Para vender, entra con una cuenta de cajera o encargada y abre el turno.',true);this._checkingOut=false;return;}
     if(s.method==='cash'&&!(Number(s.received)>0)){toast('Captura cuánto recibiste en efectivo antes de cobrar.',true);this._checkingOut=false;return;}
     const bc=$('btn-cobrar');if(bc){bc.disabled=true;bc.textContent='Cobrando...';}
     // Red de seguridad: si algo truena de forma inesperada a media venta (no
@@ -1478,7 +1481,7 @@ const Pos={
     };
     // 1) venta (con concepto = qué se vendió, para el desglose en reportes)
     const concept=s.cart.map(it=>it.name+(it.qty>1?' x'+it.qty:'')).join(', ');
-    const salePayload={id:saleId,branch_id:bId,shift_id:this.shift.id,customer_id:c?c.id:null,
+    const salePayload={id:saleId,branch_id:bId,shift_id:this.shift?this.shift.id:null,customer_id:c?c.id:null,
       member_id:(c&&c.profile_id)||null,staff_id:this.user.id,sold_by:this.user.id,
       payment_method:s.method,total:t.total,promo_id:s.promoId||null,concept,created_at:nowIso,
       is_courtesy:s.cart.some(it=>it.courtesy)};
@@ -1619,9 +1622,9 @@ const Pos={
     return{queued:true};
   },
   async legacyRegister(){
-    const k='legacyreg_'+this.shift.id;const c=cget(k);if(c)return c;
+    const k='legacyreg_'+(this.shift?this.shift.id:'sin-turno-'+this.user.id);const c=cget(k);if(c)return c;
     try{
-      const {data,error}=await withTimeout(sb.from('cash_registers').insert({opened_by:this.user.id,opening_amount:this.shift.opening_cash||0,notes:'auto-POS'}).select().single());
+      const {data,error}=await withTimeout(sb.from('cash_registers').insert({opened_by:this.user.id,opening_amount:(this.shift&&this.shift.opening_cash)||0,notes:'auto-POS'}).select().single());
       if(error||!data)return null;
       cset(k,data.id);return data.id;
     }catch(e){return null;}
@@ -1652,7 +1655,7 @@ const Pos={
       const end=new Date(base.getTime()+Number(plan.duration_days)*qty*864e5);
       const sub={id:uuid(),member_id:m.profile_id||null,customer_id:m.id,plan_id:plan.id,
         status:'active',start_date:todayISO(),end_date:dISO(end),
-        branch_id:this.branch?this.branch.id:null,sold_by:this.user.id,shift_id:this.shift.id,
+        branch_id:this.branch?this.branch.id:null,sold_by:this.user.id,shift_id:this.shift?this.shift.id:null,
         price_paid:m.id===customer.id?priceEach*qty:0,payment_method:method,family_id:m.family_id||null};
       const r=await put('subscriptions',sub);
       if(r.error){firstErr=r;continue;}
