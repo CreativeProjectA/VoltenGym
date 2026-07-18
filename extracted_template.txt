@@ -3539,10 +3539,17 @@ class Component extends DCLogic {
       .single();
     if (!data) return;
     const planName = data.plans ? data.plans.name : 'Plan';
-    const isActive = data.status === 'active';
     // Fecha solo-día (YYYY-MM-DD): agregar T12:00:00 para leerla en hora LOCAL.
     // Sin esto se leía como UTC y en México mostraba un día menos (POS decía 4, app decía 3).
     const _fixD = (d) => d && d.length === 10 ? d + 'T12:00:00' : d;
+    // Activa = status 'active' Y todavía no vencida. Antes solo miraba el
+    // status, pero una membresía vencida SIGUE con status 'active' en la base
+    // (el vencimiento se decide por la FECHA, no por el status). Sin esta
+    // comprobación, un socio vencido veía "ACTIVO" en su app aunque el POS y
+    // el acceso ya lo rechazaban — lo engañaba.
+    const _hoy0 = new Date(); _hoy0.setHours(0, 0, 0, 0);
+    const _endMs = data.end_date ? new Date(_fixD(data.end_date)).getTime() : 0;
+    const isActive = data.status === 'active' && _endMs >= _hoy0.getTime();
     const endDate = data.end_date ? new Date(_fixD(data.end_date)).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
     this.setState({
       subscriptionStatus: data.status,
