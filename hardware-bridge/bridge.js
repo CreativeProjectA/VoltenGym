@@ -160,9 +160,11 @@ function toDbMethod(kind) {
 // Regresa true si el acceso fue PERMITIDO (o si es una salida) — así los
 // aparatos que preguntan en tiempo real ("Ratificar servidor") saben si abrir.
 async function registerCheckin(customer, kind) {
-  // Mismo comportamiento que el POS: si ya está adentro, esto es su salida.
+  // Mismo comportamiento que el POS: si ya está adentro EN ESTA SUCURSAL, esto
+  // es su salida. Acotado a BRANCH_ID para que las sucursales sean autónomas:
+  // que alguien esté "adentro" en un gym no cierra su entrada del otro.
   const openRes = await fetch(
-    SB_URL + '/rest/v1/checkins?customer_id=eq.' + customer.id + '&checked_out_at=is.null&granted=eq.true&order=created_at.desc&limit=1',
+    SB_URL + '/rest/v1/checkins?customer_id=eq.' + customer.id + '&branch_id=eq.' + BRANCH_ID + '&checked_out_at=is.null&granted=eq.true&order=created_at.desc&limit=1',
     { headers: H }
   );
   const open = await openRes.json();
