@@ -1436,8 +1436,8 @@ const Pos={
           </div>
           ${fx?`<div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:14px">Si paga en dólares: total ≈ <b>USD ${(t.total/fx).toFixed(2)}</b> (TC ${fx})</div>`:''}
         `:''}
-        <button class="btn btn-primary btn-block" style="height:56px;font-size:16px;margin-top:8px" ${(s.method&&(s.method!=='cash'||Number(s.received)>0))?'':'disabled'} onclick="Pos.checkout()" id="btn-cobrar">Cobrar ${money(t.total)}</button>
-        ${s.method==='cash'&&!Number(s.received)?'<p style="font-size:12px;color:var(--red);font-weight:600;margin-top:6px">Captura cuánto recibiste en efectivo para poder cobrar.</p>':''}
+        <button class="btn btn-primary btn-block" style="height:56px;font-size:16px;margin-top:8px" ${(t.total<=0||(s.method&&(s.method!=='cash'||Number(s.received)>0)))?'':'disabled'} onclick="Pos.checkout()" id="btn-cobrar">${t.total<=0?(s.cart.some(x=>x.courtesy)?'Registrar cortesía (gratis)':'Registrar (gratis)'):'Cobrar '+money(t.total)}</button>
+        ${t.total>0&&s.method==='cash'&&!Number(s.received)?'<p style="font-size:12px;color:var(--red);font-weight:600;margin-top:6px">Captura cuánto recibiste en efectivo para poder cobrar.</p>':''}
         <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" onclick="Pos.sale.step=2;Pos.go('sale')">← Volver a artículos</button>
       </div>
       ${this.cartPanel(false)}
@@ -1454,7 +1454,13 @@ const Pos={
     if(this._checkingOut)return; this._checkingOut=true;   // candado: un solo cobro aunque piquen doble
     this._acctCreated=null;
     const s=this.sale;const t=this.saleTotals();
-    if(!s.method||!s.cart.length){this._checkingOut=false;return;}
+    if(!s.cart.length){this._checkingOut=false;return;}
+    // Cuando el total es $0 (una cortesía, o 100% de descuento) NO se cobra
+    // nada: no hace falta elegir forma de pago ni capturar efectivo. Antes el
+    // botón se quedaba trabado pidiendo "cuánto recibiste" aunque fuera gratis.
+    const esGratis=t.total<=0;
+    if(!esGratis&&!s.method){this._checkingOut=false;return;}
+    if(esGratis&&!s.method)s.method='cash'; // registro interno; no se cobra nada
     // Cajera/encargada SÍ necesitan turno abierto (la venta tiene que
     // cuadrar contra un corte de caja). Admin/contador no manejan caja —
     // pueden vender igual, solo que su venta no queda ligada a ningún
@@ -1462,7 +1468,7 @@ const Pos={
     // ("reading id") para CUALQUIER cuenta sin turno; ahora solo bloquea
     // a quien de verdad debe cuadrar caja.
     if((!this.shift||!this.shift.id)&&!['admin','contador'].includes(this.role)){toast('Esta cuenta no maneja caja. Para vender, entra con una cuenta de cajera o encargada y abre el turno.',true);this._checkingOut=false;return;}
-    if(s.method==='cash'&&!(Number(s.received)>0)){toast('Captura cuánto recibiste en efectivo antes de cobrar.',true);this._checkingOut=false;return;}
+    if(!esGratis&&s.method==='cash'&&!(Number(s.received)>0)){toast('Captura cuánto recibiste en efectivo antes de cobrar.',true);this._checkingOut=false;return;}
     const bc=$('btn-cobrar');if(bc){bc.disabled=true;bc.textContent='Cobrando...';}
     // Red de seguridad: si algo truena de forma inesperada a media venta (no
     // solo un tropiezo de red, que ya tiene su propio manejo abajo), el
@@ -1902,7 +1908,7 @@ const Pos={
     try{
       const {data}=await sb.from('checkins').select('created_at,method,granted,checked_out_at').or('customer_id.eq.'+c.id+(c.profile_id?',member_id.eq.'+c.profile_id:'')).order('created_at',{ascending:false}).limit(8);
       const el=$('cust-visits');
-      if(el)el.innerHTML=(data&&data.length)?'<table><thead><tr><th>Fecha</th><th>Método</th><th>Entrada</th><th>Salida</th><th></th></tr></thead><tbody>'+data.map(v=>`<tr><td>${fdate(v.created_at)}</td><td>${METHOD_LABEL[v.method]||v.method}</td><td>${ftime(v.created_at)}</td><td>${v.checked_out_at?ftime(v.checked_out_at):'—'}</td><td>${v.granted?'<span class="tag tag-green">OK</span>':'<span class="tag tag-red">Rechazado</span>'}</td></tr>`).join('')+'</tbody></table>':'Sin visitas registradas.';
+      if(el)el.innerHTML=(data&&data.length)?'<table><thead><tr><th>Fecha</th><th>Método</th><th>Entrada</th><th>Salida</th><th></th></tr></thead><tbody>'+data.map(v=>`<tr><td>${fdate(v.created_at)}</td><td>${this.accMethod({method:v.method,customer_id:c.id})}</td><td>${ftime(v.created_at)}</td><td>${v.checked_out_at?ftime(v.checked_out_at):'—'}</td><td>${v.granted?'<span class="tag tag-green">OK</span>':'<span class="tag tag-red">Rechazado</span>'}</td></tr>`).join('')+'</tbody></table>':'Sin visitas registradas.';
     }catch(e){const el=$('cust-visits');if(el)el.textContent='Sin conexión — no se pudo cargar el historial.';}
     // asistencia (8 semanas) async
     try{
@@ -2635,22 +2641,39 @@ const Pos={
     if(ci.member_id)return this.profName(ci.member_id);
     return '—';
   },
+  // Método REAL del acceso. El aparato NO distingue bien cara de huella (manda
+  // casi todo como "huella"), así que para los accesos biométricos lo
+  // corregimos según cómo se vinculó a la persona: si SOLO tiene cara
+  // registrada, fue cara; si SOLO huella, fue huella. QR/manual/código son
+  // confiables tal cual. Si tiene las dos (o ninguna), se deja lo guardado.
+  accMethod(ci){
+    const guardado=METHOD_LABEL[ci.method]||ci.method||'—';
+    if(ci.method!=='face'&&ci.method!=='fingerprint')return guardado;
+    const c=ci.customer_id?this.customers.find(x=>x.id===ci.customer_id)
+      :(ci.member_id?this.customers.find(x=>x.profile_id===ci.member_id):null);
+    if(!c)return guardado;
+    const tieneCara=c.face_id!=null&&c.face_id!=='';
+    const tieneHuella=c.fingerprint_id!=null&&c.fingerprint_id!=='';
+    if(tieneCara&&!tieneHuella)return 'Facial';
+    if(tieneHuella&&!tieneCara)return 'Huella';
+    return guardado;
+  },
   renderAccess(){
     const ic=$('inside-count');if(!ic)return;
     ic.textContent=this.accInside.length;
     $('inside-list').innerHTML=this.accInside.length?this.accInside.map(ci=>`
       <div class="row-line">
-        <div><div style="font-weight:700">${esc(this.accName(ci))}</div><div style="font-size:12px;color:var(--muted)">entró ${ftime(ci.created_at)} · ${METHOD_LABEL[ci.method]||ci.method}</div></div>
+        <div><div style="font-weight:700">${esc(this.accName(ci))}</div><div style="font-size:12px;color:var(--muted)">entró ${ftime(ci.created_at)} · ${this.accMethod(ci)}</div></div>
         <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.checkOut('${ci.id}')">Marcar salida</button>
       </div>`).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:10px 0">Nadie adentro ahora.</div>';
     const nOk=this.accHist.filter(c=>c.granted).length;
     $('acc-hist').innerHTML=this.accHist.length?`<div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:10px">${this.accHist.length} registro${this.accHist.length===1?'':'s'} · ${nOk} entrada${nOk===1?'':'s'} permitida${nOk===1?'':'s'} del ${fdate(this.accFrom)} al ${fdate(this.accTo)}</div><table><thead><tr><th>Cliente</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Método</th><th>Acceso</th></tr></thead><tbody>${
-      this.accHist.map(ci=>`<tr><td style="font-weight:700">${esc(this.accName(ci))}</td><td>${fdate(ci.created_at)}</td><td>${ftime(ci.created_at)}</td><td>${ci.checked_out_at?ftime(ci.checked_out_at):'—'}</td><td>${METHOD_LABEL[ci.method]||ci.method}</td><td>${ci.granted?'<span class="tag tag-green">Permitido</span>':'<span class="tag tag-red">Rechazado</span>'}</td></tr>`).join('')
+      this.accHist.map(ci=>`<tr><td style="font-weight:700">${esc(this.accName(ci))}</td><td>${fdate(ci.created_at)}</td><td>${ftime(ci.created_at)}</td><td>${ci.checked_out_at?ftime(ci.checked_out_at):'—'}</td><td>${this.accMethod(ci)}</td><td>${ci.granted?'<span class="tag tag-green">Permitido</span>':'<span class="tag tag-red">Rechazado</span>'}</td></tr>`).join('')
     }</tbody></table>`:'<div class="stub" style="padding:26px"><p>Sin accesos en este rango de fechas.</p></div>';
   },
   exportAccess(){
     csvExport('accesos_volten',['Cliente','Fecha','Entrada','Salida','Método','Acceso'],
-      this.accHist.map(ci=>[this.accName(ci),fdate(ci.created_at),ftime(ci.created_at),ci.checked_out_at?ftime(ci.checked_out_at):'',METHOD_LABEL[ci.method]||ci.method,ci.granted?'Permitido':'Rechazado']));
+      this.accHist.map(ci=>[this.accName(ci),fdate(ci.created_at),ftime(ci.created_at),ci.checked_out_at?ftime(ci.checked_out_at):'',this.accMethod(ci),ci.granted?'Permitido':'Rechazado']));
   },
   accessScan(code){
     code=(code||'').trim();
