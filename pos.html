@@ -1400,7 +1400,9 @@ const Pos={
     let accHtml='';
     const planDays=s.cart.filter(x=>x.kind==='plan').reduce((a,x)=>{const p=this.plans.find(y=>y.id===x.id);return a+(p?Number(p.duration_days)*x.qty:0);},0);
     if(planDays&&s.customer){
-      const cur=this.bestSub(s.customer);
+      // misma regla que la venta real: acumula solo con la membresía de ESTA sucursal
+      const bId=this.branch?this.branch.id:null;
+      const cur=bId?this.bestSubForBranch(s.customer,bId):this.bestSub(s.customer);
       const hasCur=cur&&daysLeft(cur.end_date)>=0;
       const base=hasCur?new Date(cur.end_date+'T12:00:00'):new Date();
       const newEnd=new Date(base.getTime()+planDays*864e5);
@@ -1654,8 +1656,12 @@ const Pos={
         toast('Ojo: la familia tiene '+fam.length+' miembros y este plan cubre máximo '+plan.max_members+'.',true);
     }
     let firstErr=null;
+    const bId=this.branch?this.branch.id:null;
     for(const m of targets){
-      const cur=this.bestSub(m);
+      // Acumula SOLO sobre la membresía de ESTA sucursal (las membresías son
+      // por sucursal: una de Gómez Morín no se apila sobre una de Tres Cantos,
+      // o se regalarían meses gratis). Sin membresía aquí = arranca hoy.
+      const cur=bId?this.bestSubForBranch(m,bId):this.bestSub(m);
       let base=new Date();
       if(cur&&daysLeft(cur.end_date)>=0)base=new Date(cur.end_date+'T12:00:00'); // acumula: arranca donde termina la actual
       const end=new Date(base.getTime()+Number(plan.duration_days)*qty*864e5);
