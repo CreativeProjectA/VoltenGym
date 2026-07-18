@@ -2869,9 +2869,15 @@ const Pos={
     }
     let granted=true,why='';
     const bId=this.branch?this.branch.id:null;
+    // El personal (coach/encargado/cajera/admin) con ficha SIEMPRE entra, no
+    // necesita membresía — igual que en el aparato facial. Antes, si lo
+    // escaneaban por QR en recepción, se le negaba por "sin membresía".
+    const prof=c.profile_id?this.appProfiles.find(p=>p.id===c.profile_id):null;
+    const esStaff=prof&&prof.role&&prof.role!=='member';
     const s=this.bestSubForBranch(c,bId);
     const other=!s?this.bestSubOtherBranch(c,bId):null;
     if(c.suspended){granted=false;why='Acceso suspendido por administración';}
+    else if(esStaff){granted=true;why=(ROLE_LABEL[prof.role]||'Personal')+' · acceso de trabajo';}
     else if(other){granted=false;why='Su membresía es de '+(this.branches.find(b=>b.id===other.branch_id)||{}).name+' — no válida aquí. Puede cambiar de sucursal en su ficha.';}
     else if(!s){granted=false;why='Sin membresía en esta sucursal — véndele una en Nueva venta';}
     else if(daysLeft(s.end_date)<0){granted=false;why='Membresía vencida el '+fdate(s.end_date);}
