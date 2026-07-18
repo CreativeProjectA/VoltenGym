@@ -349,6 +349,14 @@ const PAY_ICON={
 };
 const METHOD_LABEL={qr:'QR',fingerprint:'Huella',face:'Facial',manual:'Manual',barcode:'Código'};
 const ROLE_LABEL={admin:'Admin',encargado:'Encargado',cajera:'Cajera',coach:'Coach',limpieza:'Limpieza',contador:'Contador',member:'Miembro'};
+// Cortesía = UN acceso. Al darla, courtesy_used_at queda con esta fecha muy
+// futura = "otorgada, pendiente de usar". El aparato la concede una sola vez
+// y ahí la cambia por la fecha real (= usada). Fecha pasada = ya usada.
+const COURTESY_PENDING='2999-01-01T00:00:00.000Z';
+const courtesyState=(c)=>{ // 'none' | 'pending' | 'used'
+  if(!c||!c.courtesy_used_at)return 'none';
+  return new Date(c.courtesy_used_at)>new Date()?'pending':'used';
+};
 const QR_PREFIX='volten-gym:member:';
 
 function toast(msg,err){const t=$('toast');t.textContent=msg;t.className=err?'err show':'show';clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),3200);}
@@ -1310,12 +1318,14 @@ const Pos={
       if(s.quick||!s.customer){toast('Para vender membresía primero elige al cliente.',true);return;}
       const p=this.plans.find(x=>x.id===id);if(!p)return;
       if(courtesy){
-        // Cortesía: solo planes de 1 día, datos completos y máximo 1 vez por persona.
+        // Cortesía = UN acceso gratis, datos completos, 1 sola vez por persona (nunca dos).
         if(Number(p.duration_days)!==1){toast('La cortesía solo aplica al plan de Día.',true);return;}
         const c=s.customer;
         if(!c.phone||!c.email||!c.gender){toast('Faltan datos del cliente (teléfono/correo/género) para dar la cortesía.',true);return;}
-        if(c.courtesy_used_at){toast('Este cliente ya usó su día de cortesía el '+fdate(c.courtesy_used_at)+'.',true);return;}
-        s.cart.push({kind:'plan',id,name:'Membresía '+p.name+' (Cortesía)',price:0,qty:1,courtesy:true});
+        const est=courtesyState(c);
+        if(est==='pending'){toast('Este cliente ya tiene una cortesía pendiente de usar.',true);return;}
+        if(est==='used'){toast('Este cliente ya usó su cortesía el '+fdate(c.courtesy_used_at)+'.',true);return;}
+        s.cart.push({kind:'plan',id,name:p.name+' (Cortesía · 1 acceso)',price:0,qty:1,courtesy:true});
         this.go('sale');return;
       }
       const ex=s.cart.find(x=>x.kind==='plan'&&x.id===id&&!x.courtesy);
@@ -1398,7 +1408,7 @@ const Pos={
     const change=received?received-t.total:0;
     // acumulación de días: mostrarla ANTES de cobrar para que no confunda
     let accHtml='';
-    const planDays=s.cart.filter(x=>x.kind==='plan').reduce((a,x)=>{const p=this.plans.find(y=>y.id===x.id);return a+(p?Number(p.duration_days)*x.qty:0);},0);
+    const planDays=s.cart.filter(x=>x.kind==='plan'&&!x.courtesy).reduce((a,x)=>{const p=this.plans.find(y=>y.id===x.id);return a+(p?Number(p.duration_days)*x.qty:0);},0);
     if(planDays&&s.customer){
       // misma regla que la venta real: acumula solo con la membresía de ESTA sucursal
       const bId=this.branch?this.branch.id:null;
@@ -1499,17 +1509,21 @@ const Pos={
     // 2) partidas + efectos
     for(const it of s.cart){
       let productId=it.id;
-      if(it.kind==='plan'){
+      if(it.kind==='plan'&&it.courtesy&&c){
+        // CORTESÍA = UN acceso (no un día). No crea membresía: deja una
+        // cortesía PENDIENTE (courtesy_used_at con fecha muy futura = otorgada,
+        // sin usar). El aparato la concede UNA sola vez y ahí la marca usada.
+        // Sigue siendo 1 por persona para siempre (una vez otorgada, ya no se
+        // puede dar otra). Se registra igual como venta $0 (is_courtesy).
+        try{await Q.update('customers',{id:c.id},{courtesy_used_at:COURTESY_PENDING});}catch(e){}
+        c.courtesy_used_at=COURTESY_PENDING;cset('customers',this.customers);
+        productId=await this.ensureMembershipProduct(this.plans.find(x=>x.id===it.id),put);
+      }else if(it.kind==='plan'){
         const plan=this.plans.find(x=>x.id===it.id);
         productId=await this.ensureMembershipProduct(plan,put);
         const rs=await this.sellMembership(c,plan,it.qty,it.price,s.method,put);
         if(rs&&rs.error){toast('Venta cobrada pero la membresía falló: '+rs.error.message+' — ¿ya corriste pos_migration2.sql?',true);}
         else if(c&&c.profile_id){this.sendPush(c.profile_id,'Membresía activada ✓',(plan?plan.name:'Tu membresía')+' ya está activa');}
-        if(it.courtesy&&c){
-          // Marca el uso de la cortesía — 1 sola vez por persona.
-          try{await Q.update('customers',{id:c.id},{courtesy_used_at:new Date().toISOString()});}catch(e){}
-          c.courtesy_used_at=new Date().toISOString();cset('customers',this.customers);
-        }
         // Al pagar su membresía, si aún no tiene cuenta de la app, se le crea
         // sola (edge function con la service key — nunca en el navegador).
         // Límite de 8s: si el internet tiene un tropiezo, esto NO debe dejar
@@ -1562,7 +1576,7 @@ const Pos={
       branch:this.branch?this.branch.name:'',items:s.cart.map(x=>({name:x.name,qty:x.qty,price:x.price})),
       discount:t.discount,total:t.total,method:s.method,received:Number(s.received)||0,
       customer:c?c.full_name:'',staff:this.profileName,
-      membershipEnd:(bs&&s.cart.some(x=>x.kind==='plan'))?fdate(bs.end_date):null};
+      membershipEnd:(bs&&s.cart.some(x=>x.kind==='plan'&&!x.courtesy))?fdate(bs.end_date):null};
     // 4) si venía de una solicitud de la app, marcarla como cobrada
     if(this._reqId){
       Q.update('pos_requests',{id:this._reqId},{status:'cobrada'});
@@ -1686,7 +1700,8 @@ const Pos={
       <div style="width:74px;height:74px;border-radius:50%;background:#DCFCE7;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:34px;">✓</div>
       <h2 style="font-size:30px;">Venta cobrada</h2>
       <div class="psub" style="margin-bottom:6px">${money(t.total)} · ${PAY_LABEL[s.method]||''}${c?' · '+esc(c.full_name):''}</div>
-      ${sub&&s.cart.some(x=>x.kind==='plan')?`<div style="font-size:15px;font-weight:700;color:var(--orange);margin-bottom:6px">Membresía vigente hasta el ${fdate(sub.end_date)} (le quedan ${daysLeft(sub.end_date)} días en total)</div>`:''}
+      ${sub&&s.cart.some(x=>x.kind==='plan'&&!x.courtesy)?`<div style="font-size:15px;font-weight:700;color:var(--orange);margin-bottom:6px">Membresía vigente hasta el ${fdate(sub.end_date)} (le quedan ${daysLeft(sub.end_date)} días en total)</div>`:''}
+      ${s.cart.some(x=>x.courtesy)?`<div style="font-size:15px;font-weight:700;color:#16A34A;margin-bottom:6px">Cortesía lista · 1 acceso gratis (se usa al entrar la primera vez)</div>`:''}
       ${this._acctCreated?`
       <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:16px;padding:18px 20px;margin-top:16px;text-align:left;">
         <div style="font-size:13px;font-weight:800;color:#15803D;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Cuenta de la app creada ✓</div>
@@ -2590,22 +2605,18 @@ const Pos={
   async confirmAssignEnroll(custId){
     const kindGuess=this._pendingEnrollKind||'huella';
     const code=this._pendingEnrollDeviceId;
+    // El puente ahora busca el código DENTRO de cada sucursal (autónomo): el
+    // "2" de un gym ya no se cruza con el "2" del otro, así que el mismo número
+    // en dos gyms distintos ya NO es problema (por eso ya no hay bloqueo aquí).
     if(kindGuess!=='qr'){
-      // SALVAGUARDA anti-colisión entre sucursales: los dos aparatos numeran
-      // desde el 1, así que el mismo número (ej. "2") puede caer en dos
-      // personas distintas — una en cada gym — y el sistema las confundiría
-      // (busca por número sin ver la sucursal). Si el número YA lo tiene OTRA
-      // persona, no se deja: hay que darle a esa persona otro número en el
-      // aparato. (Si es la MISMA persona, ej. el dueño con el mismo número en
-      // los dos gyms para entrar en ambos, sí se permite.)
-      const choca=code?this.customers.find(c=>c.id!==custId&&((c.face_id!=null&&c.face_id!==''&&String(c.face_id)===String(code))||(c.fingerprint_id!=null&&c.fingerprint_id!==''&&String(c.fingerprint_id)===String(code)))):null;
-      if(choca){toast('El número '+code+' ya lo tiene '+choca.full_name+'. En el aparato, dale a esta persona OTRO número distinto (para que no se confundan entre sucursales) y vuelve a asignarlo.',true);return;}
       const field=kindGuess==='rostro'?'face_id':'fingerprint_id';
       const r1=await Q.update('customers',{id:custId},{[field]:code});
       if(r1.error){toast('Error: '+r1.error.message,true);return;}
       const c=this.customers.find(x=>x.id===custId);if(c)c[field]=code;cset('customers',this.customers);
     }
-    await sb.from('device_enrollments').update({assigned_to:custId}).eq('id',this._pendingEnrollId);
+    // Guardar el tipo CONFIRMADO en la vinculación (device_enrollments), que es
+    // de donde el puente saca si fue cara o huella — no la adivinanza del aparato.
+    await sb.from('device_enrollments').update({assigned_to:custId,kind:kindGuess}).eq('id',this._pendingEnrollId);
     closeModal();toast('Vinculado ✓ — ya puede entrar con eso');this.loadPendingEnrollments();
   },
   async discardEnrollment(enrollId){
@@ -2886,13 +2897,19 @@ const Pos={
     const esStaff=prof&&prof.role&&prof.role!=='member';
     const s=this.bestSubForBranch(c,bId);
     const other=!s?this.bestSubOtherBranch(c,bId):null;
+    // ¿tiene una cortesía pendiente? (1 acceso gratis, aún sin usar)
+    const cortPend=courtesyState(c)==='pending';
+    let usaCortesia=false;
     if(c.suspended){granted=false;why='Acceso suspendido por administración';}
     else if(esStaff){granted=true;why=(ROLE_LABEL[prof.role]||'Personal')+' · acceso de trabajo';}
+    else if(s&&daysLeft(s.end_date)>=0){granted=true;why='Membresía al corriente · le quedan '+daysLeft(s.end_date)+' día'+(daysLeft(s.end_date)===1?'':'s')+' ('+fdate(s.end_date)+')';}
+    else if(cortPend){granted=true;usaCortesia=true;why='Día de cortesía · 1 acceso gratis';}
     else if(other){granted=false;why='Su membresía es de '+(this.branches.find(b=>b.id===other.branch_id)||{}).name+' — no válida aquí. Puede cambiar de sucursal en su ficha.';}
-    else if(!s){granted=false;why='Sin membresía en esta sucursal — véndele una en Nueva venta';}
-    else if(daysLeft(s.end_date)<0){granted=false;why='Membresía vencida el '+fdate(s.end_date);}
-    else why='Membresía al corriente · le quedan '+daysLeft(s.end_date)+' día'+(daysLeft(s.end_date)===1?'':'s')+' ('+fdate(s.end_date)+')';
+    else if(s&&daysLeft(s.end_date)<0){granted=false;why='Membresía vencida el '+fdate(s.end_date);}
+    else {granted=false;why='Sin membresía en esta sucursal — véndele una en Nueva venta';}
     const now=new Date().toISOString();
+    // gastar la cortesía (mismo criterio que el aparato: se usa al entrar)
+    if(usaCortesia){try{await Q.update('customers',{id:c.id},{courtesy_used_at:now});}catch(e){}c.courtesy_used_at=now;cset('customers',this.customers);}
     const payload={id:uuid(),member_id:c.profile_id||null,customer_id:c.id,branch_id:this.branch?this.branch.id:null,
       method,verified_by:this.user.id,granted,created_at:now,checked_in_at:now};
     let r=await Q.insert('checkins',payload);

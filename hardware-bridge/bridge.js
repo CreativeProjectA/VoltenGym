@@ -93,13 +93,47 @@ function queueForAllDevices(cmd) {
 }
 
 // ── Consultas a Supabase ────────────────────────────────────────────────
-async function findCustomerByDeviceId(deviceUserId) {
-  const r = await fetch(
-    SB_URL + '/rest/v1/customers?or=(fingerprint_id.eq.' + deviceUserId + ',face_id.eq.' + deviceUserId + ')&select=id,profile_id,full_name&limit=1',
-    { headers: H }
-  );
-  const rows = await r.json();
-  return rows && rows[0];
+const CUST_SEL = 'id,profile_id,full_name,suspended,face_id,fingerprint_id,courtesy_used_at';
+
+// Busca a quién pertenece un código del aparato — AUTÓNOMO POR SUCURSAL.
+// Cada aparato numera desde 1, así que el código "2" de un gym NO es el "2"
+// del otro. Por eso se busca SOLO dentro de ESTA sucursal (BRANCH_ID), usando
+// la tabla device_enrollments que guarda qué código es de quién en cada gym.
+// Devuelve { customer, kind } donde kind (cara/huella) es el que se CONFIRMÓ
+// en el POS al asignarlo — no la adivinanza del aparato.
+async function findByDeviceCode(deviceUserId) {
+  // 1) Autoritativo: la vinculación código→cliente de ESTA sucursal.
+  try {
+    const er = await fetch(
+      SB_URL + '/rest/v1/device_enrollments?branch_id=eq.' + BRANCH_ID +
+      '&device_user_id=eq.' + encodeURIComponent(deviceUserId) +
+      '&assigned_to=not.is.null&order=first_seen_at.desc&limit=1',
+      { headers: H }
+    );
+    const ers = await er.json();
+    if (ers && ers[0] && ers[0].assigned_to) {
+      const cr = await fetch(SB_URL + '/rest/v1/customers?id=eq.' + ers[0].assigned_to + '&select=' + CUST_SEL + '&limit=1', { headers: H });
+      const crs = await cr.json();
+      if (crs && crs[0]) return { customer: crs[0], kind: ers[0].kind === 'huella' ? 'huella' : (ers[0].kind === 'qr' ? 'qr' : 'rostro') };
+    }
+  } catch (_) {}
+  // 2) Respaldo (fichas viejas donde se escribió el número a mano, sin pasar
+  //    por "Registros nuevos"): por face_id/huella, pero ACOTADO a esta
+  //    sucursal para no cruzar códigos entre gyms.
+  try {
+    const r = await fetch(
+      SB_URL + '/rest/v1/customers?or=(fingerprint_id.eq.' + deviceUserId + ',face_id.eq.' + deviceUserId + ')&branch_id=eq.' + BRANCH_ID + '&select=' + CUST_SEL + '&limit=1',
+      { headers: H }
+    );
+    const rows = await r.json();
+    if (rows && rows[0]) {
+      const c = rows[0];
+      const kind = (c.face_id != null && String(c.face_id) === String(deviceUserId)) ? 'rostro'
+        : ((c.fingerprint_id != null && String(c.fingerprint_id) === String(deviceUserId)) ? 'huella' : 'rostro');
+      return { customer: c, kind };
+    }
+  } catch (_) {}
+  return null;
 }
 
 // El torniquete TAMBIÉN trae su propio lector de QR (pasas el teléfono por
@@ -111,7 +145,7 @@ async function findCustomerByQr(raw) {
   if (code.toLowerCase().startsWith(QR_PREFIX)) code = code.slice(QR_PREFIX.length);
   if (!code) return null;
   const r = await fetch(
-    SB_URL + '/rest/v1/customers?or=(id.eq.' + code + ',profile_id.eq.' + code + ')&select=id,profile_id,full_name&limit=1',
+    SB_URL + '/rest/v1/customers?or=(id.eq.' + code + ',profile_id.eq.' + code + ')&select=' + CUST_SEL + '&limit=1',
     { headers: H }
   );
   const rows = await r.json();
@@ -167,6 +201,15 @@ async function registerCheckin(customer, kind) {
     const sub = subs && subs[0];
     granted = !!(sub && new Date(sub.end_date + 'T23:59:59') >= new Date()) && !customer.suspended;
   }
+  // Día de cortesía = UN acceso (no un día entero). El POS deja la cortesía
+  // "pendiente" (courtesy_used_at con fecha futura = otorgada, sin usar). Si no
+  // entró por membresía ni es personal, se le concede ESA entrada y se marca
+  // usada (courtesy_used_at = ahora) para que no pueda volver a entrar con ella.
+  let consumirCortesia = false;
+  if (!granted && !customer.suspended && customer.courtesy_used_at && new Date(customer.courtesy_used_at) > new Date()) {
+    granted = true;
+    consumirCortesia = true;
+  }
   await fetch(SB_URL + '/rest/v1/checkins', {
     method: 'POST', headers: HJ,
     body: JSON.stringify({
@@ -174,6 +217,11 @@ async function registerCheckin(customer, kind) {
       method: toDbMethod(kind), granted, created_at: new Date().toISOString(), checked_in_at: new Date().toISOString(),
     }),
   });
+  if (consumirCortesia) {
+    // gastar la cortesía: de aquí en adelante ya no abre con ella
+    try { await fetch(SB_URL + '/rest/v1/customers?id=eq.' + customer.id, { method: 'PATCH', headers: HJ, body: JSON.stringify({ courtesy_used_at: new Date().toISOString() }) }); } catch (_) {}
+    console.log('CORTESÍA usada (1 acceso):', customer.full_name);
+  }
   console.log((granted ? 'ACCESO PERMITIDO' : 'ACCESO DENEGADO') + ':', customer.full_name);
   return granted;
 }
@@ -243,8 +291,9 @@ app.post('/iclock/cdata', async (req, res) => {
       // 1=huella, 15=cara, 2=tarjeta/QR. Se confirma con el equipo real.
       const verifyCode = fields[3];
       const kind = verifyCode === '15' ? 'rostro' : (verifyCode === '2' ? 'qr' : 'huella');
-      const customer = (await findCustomerByDeviceId(deviceUserId)) || (await findCustomerByQr(deviceUserId));
-      if (customer) { await registerCheckin(customer, kind); continue; }
+      const found = await findByDeviceCode(deviceUserId);
+      const customer = found ? found.customer : (await findCustomerByQr(deviceUserId));
+      if (customer) { await registerCheckin(customer, found ? found.kind : kind); continue; }
       console.log('Sin cliente vinculado — anotado como pendiente:', deviceUserId, kind);
       await anotarPendiente(deviceUserId, kind);
     }
@@ -326,8 +375,9 @@ app.post(/^(?!\/iclock).*/, async (req, res) => {
       if (!deviceUserId || deviceUserId.startsWith('ID=')) continue; // no confundir con devicecmd
       const verifyCode = fields[3];
       const kind = verifyCode === '15' ? 'rostro' : (verifyCode === '2' ? 'qr' : 'huella');
-      const customer = (await findCustomerByDeviceId(deviceUserId)) || (await findCustomerByQr(deviceUserId));
-      if (customer) { await registerCheckin(customer, kind); continue; }
+      const found = await findByDeviceCode(deviceUserId);
+      const customer = found ? found.customer : (await findCustomerByQr(deviceUserId));
+      if (customer) { await registerCheckin(customer, found ? found.kind : kind); continue; }
       await anotarPendiente(deviceUserId, kind);
     }
     res.send('OK');
@@ -378,8 +428,9 @@ async function procesarAiFace(msg) {
       const pin = String(r.enrollid != null ? r.enrollid : (r.userid != null ? r.userid : ''));
       if (!pin) continue;
       const kind = r.mode != null ? kindFromBackup(r.mode) : 'rostro';
-      const customer = (await findCustomerByDeviceId(pin)) || (await findCustomerByQr(pin));
-      if (customer) { granted = (await registerCheckin(customer, kind)) || granted; }
+      const found = await findByDeviceCode(pin);
+      const customer = found ? found.customer : (await findCustomerByQr(pin));
+      if (customer) { granted = (await registerCheckin(customer, found ? found.kind : kind)) || granted; }
       else { console.log('Acceso de código sin vincular:', pin); await anotarPendiente(pin, kind); }
     }
     return { ret: 'sendlog', result: true, count: records.length, logindex: msg.logindex != null ? msg.logindex : 0, cloudtime: nowCloud(), access: granted ? 1 : 0 };
