@@ -2589,11 +2589,21 @@ const Pos={
   },
   async confirmAssignEnroll(custId){
     const kindGuess=this._pendingEnrollKind||'huella';
+    const code=this._pendingEnrollDeviceId;
     if(kindGuess!=='qr'){
+      // SALVAGUARDA anti-colisión entre sucursales: los dos aparatos numeran
+      // desde el 1, así que el mismo número (ej. "2") puede caer en dos
+      // personas distintas — una en cada gym — y el sistema las confundiría
+      // (busca por número sin ver la sucursal). Si el número YA lo tiene OTRA
+      // persona, no se deja: hay que darle a esa persona otro número en el
+      // aparato. (Si es la MISMA persona, ej. el dueño con el mismo número en
+      // los dos gyms para entrar en ambos, sí se permite.)
+      const choca=code?this.customers.find(c=>c.id!==custId&&((c.face_id!=null&&c.face_id!==''&&String(c.face_id)===String(code))||(c.fingerprint_id!=null&&c.fingerprint_id!==''&&String(c.fingerprint_id)===String(code)))):null;
+      if(choca){toast('El número '+code+' ya lo tiene '+choca.full_name+'. En el aparato, dale a esta persona OTRO número distinto (para que no se confundan entre sucursales) y vuelve a asignarlo.',true);return;}
       const field=kindGuess==='rostro'?'face_id':'fingerprint_id';
-      const r1=await Q.update('customers',{id:custId},{[field]:this._pendingEnrollDeviceId});
+      const r1=await Q.update('customers',{id:custId},{[field]:code});
       if(r1.error){toast('Error: '+r1.error.message,true);return;}
-      const c=this.customers.find(x=>x.id===custId);if(c)c[field]=this._pendingEnrollDeviceId;cset('customers',this.customers);
+      const c=this.customers.find(x=>x.id===custId);if(c)c[field]=code;cset('customers',this.customers);
     }
     await sb.from('device_enrollments').update({assigned_to:custId}).eq('id',this._pendingEnrollId);
     closeModal();toast('Vinculado ✓ — ya puede entrar con eso');this.loadPendingEnrollments();
