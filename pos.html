@@ -566,9 +566,15 @@ const Pos={
     await this.loadCore();
     // sucursal fija para no-admin (staff_branches), admin elige
     if(this.role!=='admin'){
-      const {data:sbr}=await sb.from('staff_branches').select('branch_id').eq('staff_id',this.user.id).limit(1);
-      const mine=sbr&&sbr[0]&&this.branches.find(b=>b.id===sbr[0].branch_id);
-      this.branch=mine||this.branches[0]||null;
+      const {data:sbr}=await sb.from('staff_branches').select('branch_id').eq('staff_id',this.user.id);
+      const mineIds=(sbr||[]).map(x=>x.branch_id);
+      // sin ninguna asignada = las dos (ej. técnico marcado "todas"); con 1 o 2
+      // marcadas, solo esas — así alguien con ambas sucursales (ej. dueño con
+      // rol técnico) puede cambiar entre ellas igual que el admin.
+      this.myBranches=mineIds.length?this.branches.filter(b=>mineIds.indexOf(b.id)!==-1):this.branches.slice();
+      const saved=cget('branch_sel');
+      const savedOk=saved&&this.myBranches.find(b=>b.id===saved);
+      this.branch=savedOk||this.myBranches[0]||this.branches[0]||null;
     }else{
       const saved=cget('branch_sel');
       // "Todas" es una eleccion explicita del admin (le da clic al selector),
@@ -957,9 +963,16 @@ const Pos={
     try{await sb.functions.invoke('send-push',{body:{profile_id:profileId,title,body:body||''}});}catch(e){}
   },
   branchSelector(){
-    if(!['admin','contador'].includes(this.role)||this.branches.length<=1)
-      return this.branch?`<span class="tag tag-gray" style="height:44px;display:inline-flex;align-items:center;padding:0 18px;">${esc(this.branch.name)}</span>`:'';
-    return `<div class="branch-pick"><select onchange="Pos.setBranch(this.value)"><option value="all" ${this.brAll?'selected':''}>Todas las sucursales</option>${this.branches.map(b=>`<option value="${b.id}" ${!this.brAll&&this.branch&&this.branch.id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`;
+    if(['admin','contador'].includes(this.role)){
+      if(this.branches.length<=1)return this.branch?`<span class="tag tag-gray" style="height:44px;display:inline-flex;align-items:center;padding:0 18px;">${esc(this.branch.name)}</span>`:'';
+      return `<div class="branch-pick"><select onchange="Pos.setBranch(this.value)"><option value="all" ${this.brAll?'selected':''}>Todas las sucursales</option>${this.branches.map(b=>`<option value="${b.id}" ${!this.brAll&&this.branch&&this.branch.id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`;
+    }
+    // personal con las 2 sucursales marcadas en su ficha (ej. técnico, dueño)
+    // también puede cambiar entre ellas — sin "Todas", porque el personal
+    // siempre trabaja en el contexto de UNA sucursal a la vez.
+    if(this.myBranches&&this.myBranches.length>1)
+      return `<div class="branch-pick"><select onchange="Pos.setBranch(this.value)">${this.myBranches.map(b=>`<option value="${b.id}" ${this.branch&&this.branch.id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`;
+    return this.branch?`<span class="tag tag-gray" style="height:44px;display:inline-flex;align-items:center;padding:0 18px;">${esc(this.branch.name)}</span>`:'';
   },
   setBranch(id){
     if(id==='all'){this.brAll=true;cset('branch_sel','all');}
@@ -2668,22 +2681,13 @@ const Pos={
     if(ci.member_id)return this.profName(ci.member_id);
     return '—';
   },
-  // Método REAL del acceso. El aparato NO distingue bien cara de huella (manda
-  // casi todo como "huella"), así que para los accesos biométricos lo
-  // corregimos según cómo se vinculó a la persona: si SOLO tiene cara
-  // registrada, fue cara; si SOLO huella, fue huella. QR/manual/código son
-  // confiables tal cual. Si tiene las dos (o ninguna), se deja lo guardado.
+  // Método del acceso. El aparato no distingue bien cara de huella (manda casi
+  // todo como "huella" sin importar cuál se usó), así que para biométrico se
+  // muestra una etiqueta combinada en vez de adivinar. QR/manual sí son
+  // confiables tal cual.
   accMethod(ci){
-    const guardado=METHOD_LABEL[ci.method]||ci.method||'—';
-    if(ci.method!=='face'&&ci.method!=='fingerprint')return guardado;
-    const c=ci.customer_id?this.customers.find(x=>x.id===ci.customer_id)
-      :(ci.member_id?this.customers.find(x=>x.profile_id===ci.member_id):null);
-    if(!c)return guardado;
-    const tieneCara=c.face_id!=null&&c.face_id!=='';
-    const tieneHuella=c.fingerprint_id!=null&&c.fingerprint_id!=='';
-    if(tieneCara&&!tieneHuella)return 'Facial';
-    if(tieneHuella&&!tieneCara)return 'Huella';
-    return guardado;
+    if(ci.method==='face'||ci.method==='fingerprint')return 'Facial/Huella';
+    return METHOD_LABEL[ci.method]||ci.method||'—';
   },
   renderAccess(){
     const ic=$('inside-count');if(!ic)return;
@@ -3913,15 +3917,20 @@ const Pos={
   },
   staffEditModal(id){
     const p=this.appProfiles.find(x=>x.id===id);if(!p)return;
-    const sbr=this.staffBranches.find(x=>x.staff_id===id);
+    const myIds=this.staffBranches.filter(x=>x.staff_id===id).map(x=>x.branch_id);
     openModal(`
       <h3>Editar empleado</h3><p class="msub">${esc(p.email||'')}</p>
       <div class="field"><label>Nombre completo</label><input class="inp" id="se-name" value="${esc(p.full_name||'')}"></div>
-      <div class="frow">
-        <div class="field"><label>Rol</label><select class="inp" id="se-role">
-          ${['cajera','encargado','coach','limpieza','tecnico','contador','admin'].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
-        </select></div>
-        <div class="field"><label>Sucursal</label><select class="inp" id="se-branch">${this.branches.map(b=>`<option value="${b.id}" ${sbr&&sbr.branch_id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Rol</label><select class="inp" id="se-role">
+        ${['cajera','encargado','coach','limpieza','tecnico','contador','admin'].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Sucursal(es)</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;padding-top:10px">
+          ${this.branches.map(b=>`<label style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;cursor:pointer">
+            <input type="checkbox" class="se-branch-cb" value="${b.id}" ${myIds.indexOf(b.id)!==-1?'checked':''} style="width:16px;height:16px"> ${esc(b.name)}
+          </label>`).join('')}
+        </div>
+        <p style="font-size:11.5px;color:var(--muted);font-weight:500;margin:6px 0 0">Marca las dos si trabaja o entra en ambas sucursales (ej. dueño, técnico). Ninguna marcada = todas.</p>
       </div>
       <div class="field"><label>Foto (se ve en el POS y en la app si es coach)</label><input class="inp" type="file" id="se-photo" accept="image/*" style="padding-top:11px"></div>
       <div class="frow">
@@ -3950,13 +3959,20 @@ const Pos={
     const custIds=this.customers.filter(c=>c.profile_id===profileId).map(c=>c.id);
     if(!custIds.length){el.innerHTML='Sin ficha para biometría todavía — usa "Dar de alta cara/huella" primero.';return;}
     try{
-      const {data}=await sb.from('device_enrollments').select('id,branch_id,device_user_id,kind,assigned_to').in('assigned_to',custIds).not('assigned_to','is',null);
-      const rows=data||[];
+      const {data}=await sb.from('device_enrollments').select('id,branch_id,device_user_id,kind,assigned_to,first_seen_at').in('assigned_to',custIds).not('assigned_to','is',null).order('first_seen_at',{ascending:false});
+      // el aparato a veces manda el mismo código dos veces (reconexión) y crea
+      // fila duplicada -- se muestra solo la más reciente de cada sucursal+código
+      const vistos=new Set();
+      const rows=(data||[]).filter(r=>{
+        const k=r.branch_id+'|'+r.device_user_id;
+        if(vistos.has(k))return false;
+        vistos.add(k);return true;
+      });
       el.innerHTML=this.branches.map(b=>{
         const enBranch=rows.filter(r=>r.branch_id===b.id);
         if(!enBranch.length)return `<div class="row-line"><span class="k">${esc(b.name)}</span><span style="color:var(--muted);font-size:12.5px">Sin registrar aquí</span></div>`;
         return `<div class="row-line"><span class="k">${esc(b.name)}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${enBranch.map(r=>`
-          <span class="tag tag-green" style="display:inline-flex;align-items:center;gap:6px">${r.kind==='rostro'?'Facial':(r.kind==='qr'?'QR':'Huella')} · código ${esc(r.device_user_id)}
+          <span class="tag tag-green" style="display:inline-flex;align-items:center;gap:6px">${r.kind==='qr'?'QR':'Facial/Huella'} · código ${esc(r.device_user_id)}
             <a onclick="Pos.unlinkStaffBio('${r.id}','${r.assigned_to}','${r.kind}','${esc(r.device_user_id)}','${profileId}')" style="cursor:pointer;font-weight:800;color:#15803D" title="Quitar este código">✕</a>
           </span>`).join('')}</span></div>`;
       }).join('');
@@ -4003,8 +4019,9 @@ const Pos={
     }
     if(error){toast(/constraint|check/i.test(error.message||'')?'Para el rol Contador corre pos_migration3.sql.':'Error: '+error.message,true);$('se-save').disabled=false;$('se-save').textContent='Guardar cambios';return;}
     try{
+      const checked=[...document.querySelectorAll('.se-branch-cb:checked')].map(cb=>cb.value);
       await sb.from('staff_branches').delete().eq('staff_id',id);
-      await sb.from('staff_branches').insert({staff_id:id,branch_id:$('se-branch').value});
+      if(checked.length)await sb.from('staff_branches').insert(checked.map(bid=>({staff_id:id,branch_id:bid})));
     }catch(e){}
     // si es coach, refleja el nombre/foto/precio en el directorio de la app
     if(patch.role==='coach'){
