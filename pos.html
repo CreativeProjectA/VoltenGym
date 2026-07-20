@@ -348,7 +348,7 @@ const PAY_ICON={
   transfer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>'
 };
 const METHOD_LABEL={qr:'QR',fingerprint:'Huella',face:'Facial',manual:'Manual',barcode:'Código'};
-const ROLE_LABEL={admin:'Admin',encargado:'Encargado',cajera:'Cajera',coach:'Coach',limpieza:'Limpieza',contador:'Contador',member:'Miembro'};
+const ROLE_LABEL={admin:'Admin',encargado:'Encargado',cajera:'Cajera',coach:'Coach',limpieza:'Limpieza',tecnico:'Técnico',contador:'Contador',member:'Miembro'};
 // Cortesía = UN acceso. Al darla, courtesy_used_at queda con esta fecha muy
 // futura = "otorgada, pendiente de usar". El aparato la concede una sola vez
 // y ahí la cambia por la fecha real (= usada). Fecha pasada = ya usada.
@@ -3872,7 +3872,7 @@ const Pos={
       <td>${br?esc(br.name):'Todas'}</td>
       <td style="color:var(--muted)">${fdate(p.created_at)}</td>
       <td style="text-align:right;white-space:nowrap">
-        ${yaTieneFicha?'<span class="tag tag-green" style="margin-right:6px">Face ID listo</span>':`<button class="btn-xs btn" style="background:var(--orange);color:#FFF;margin-right:6px" onclick="Pos.enableStaffFacial('${p.id}')">Dar de alta Face ID</button>`}
+        ${yaTieneFicha?'<span class="tag tag-green" style="margin-right:6px" title="Ya se puede asignar su cara y/o huella en Accesos">Acceso biométrico listo</span>':`<button class="btn-xs btn" style="background:var(--orange);color:#FFF;margin-right:6px" onclick="Pos.enableStaffFacial('${p.id}')" title="Habilita su ficha para poder asignarle cara, huella, o las dos">Dar de alta cara/huella</button>`}
         <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.staffEditModal('${p.id}')">Editar</button>
         ${p.id!==this.user.id&&p.role!=='admin'?`<button class="btn-xs btn btn-danger" onclick="Pos.removeStaff('${p.id}')">Quitar</button>`:''}
       </td></tr>`;
@@ -3880,7 +3880,7 @@ const Pos={
   },
   async enableStaffFacial(profileId){
     const p=this.appProfiles.find(x=>x.id===profileId);if(!p)return;
-    if(this.customers.some(c=>c.profile_id===profileId)){toast('Ya tiene ficha para el Face ID.',true);return;}
+    if(this.customers.some(c=>c.profile_id===profileId)){toast('Ya tiene ficha para acceso biométrico.',true);return;}
     const sbr=this.staffBranches.find(x=>x.staff_id===profileId);
     const bId=sbr?sbr.branch_id:(this.branch?this.branch.id:(this.branches[0]&&this.branches[0].id));
     const payload={id:uuid(),full_name:p.full_name||p.email||'Personal',email:p.email||null,
@@ -3919,7 +3919,7 @@ const Pos={
       <div class="field"><label>Nombre completo</label><input class="inp" id="se-name" value="${esc(p.full_name||'')}"></div>
       <div class="frow">
         <div class="field"><label>Rol</label><select class="inp" id="se-role">
-          ${['cajera','encargado','coach','limpieza','contador','admin'].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
+          ${['cajera','encargado','coach','limpieza','tecnico','contador','admin'].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
         </select></div>
         <div class="field"><label>Sucursal</label><select class="inp" id="se-branch">${this.branches.map(b=>`<option value="${b.id}" ${sbr&&sbr.branch_id===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
       </div>
@@ -4011,6 +4011,7 @@ const Pos={
           <option value="encargado">Encargado de sucursal</option>
           <option value="coach">Coach (aparece en la app)</option>
           <option value="limpieza">Limpieza</option>
+          <option value="tecnico">Técnico</option>
           <option value="contador">Contador (solo ve Reportes)</option>
           <option value="admin">Administrador</option>
         </select></div>
@@ -4030,7 +4031,7 @@ const Pos={
     $('st-save').disabled=false;$('st-save').textContent='Crear cuenta';
     if(error||!data.user){
       const msg=(error&&error.message)||'error desconocido';
-      toast(/check|constraint|violates/i.test(msg)?'Falta correr pos_migration2.sql para habilitar roles nuevos.':'No se pudo crear: '+msg,true);
+      toast(/check|constraint|violates/i.test(msg)?'Falta correr la última migración (pos_migrationXX.sql) en Supabase para habilitar este rol.':'No se pudo crear: '+msg,true);
       return;
     }
     const uid=data.user.id;
