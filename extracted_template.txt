@@ -3175,6 +3175,9 @@ class Component extends DCLogic {
       };
     });
     // filtra por la sucursal elegida por el miembro (staff_branches es lectura pública)
+    // -- estricto: un coach de Tres Cantos NUNCA debe aparecer en Gomez Morin
+    // (antes, si la sucursal no tenia coaches propios, se mostraban TODOS como
+    // respaldo, y eso colaba coaches de la sucursal equivocada)
     let visibles = real;
     try {
       const myBranch = this.state.memberBranchId;
@@ -3183,9 +3186,7 @@ class Component extends DCLogic {
         if (sbr && sbr.length) {
           const byCoach = {};
           sbr.forEach(x => { (byCoach[x.staff_id] = byCoach[x.staff_id] || []).push(x.branch_id); });
-          const filtered = real.filter(c => !byCoach[c.id] || byCoach[c.id].indexOf(myBranch) !== -1);
-          // si la sucursal no tiene coaches asignados, muestra todos (nunca dejar al miembro sin poder elegir)
-          visibles = filtered.length ? filtered : real;
+          visibles = real.filter(c => !byCoach[c.id] || byCoach[c.id].indexOf(myBranch) !== -1);
         }
       }
     } catch (e) {}
