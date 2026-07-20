@@ -3935,9 +3935,50 @@ const Pos={
           <div class="field"><label>Por</label><select class="inp" id="se-period"><option value="mes">Mes</option><option value="semana">Semana</option></select></div>
         </div>
       </div>
-      <button class="btn btn-primary btn-block" id="se-save" onclick="Pos.saveStaffEdit('${id}')">Guardar cambios</button>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 8px">Acceso biométrico por sucursal</div>
+      <div id="se-bio-panel" style="font-size:13px;color:var(--muted);font-weight:500">Cargando...</div>
+      <button class="btn btn-primary btn-block" style="margin-top:16px" id="se-save" onclick="Pos.saveStaffEdit('${id}')">Guardar cambios</button>
     `);
     const roleSel=$('se-role');if(roleSel)roleSel.onchange=()=>{$('se-coach-price').classList.toggle('hidden',roleSel.value!=='coach');};
+    this.loadStaffBioPanel(id);
+  },
+  // Muestra, por sucursal, si este empleado tiene cara/huella asignada — y
+  // deja quitarla (ej. Luis registró su cara de nuevo, o alguien quedó
+  // vinculado por error en la sucursal equivocada, como pasó con Mafer).
+  async loadStaffBioPanel(profileId){
+    const el=$('se-bio-panel');if(!el)return;
+    const custIds=this.customers.filter(c=>c.profile_id===profileId).map(c=>c.id);
+    if(!custIds.length){el.innerHTML='Sin ficha para biometría todavía — usa "Dar de alta cara/huella" primero.';return;}
+    try{
+      const {data}=await sb.from('device_enrollments').select('id,branch_id,device_user_id,kind,assigned_to').in('assigned_to',custIds).not('assigned_to','is',null);
+      const rows=data||[];
+      el.innerHTML=this.branches.map(b=>{
+        const enBranch=rows.filter(r=>r.branch_id===b.id);
+        if(!enBranch.length)return `<div class="row-line"><span class="k">${esc(b.name)}</span><span style="color:var(--muted);font-size:12.5px">Sin registrar aquí</span></div>`;
+        return `<div class="row-line"><span class="k">${esc(b.name)}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${enBranch.map(r=>`
+          <span class="tag tag-green" style="display:inline-flex;align-items:center;gap:6px">${r.kind==='rostro'?'Facial':(r.kind==='qr'?'QR':'Huella')} · código ${esc(r.device_user_id)}
+            <a onclick="Pos.unlinkStaffBio('${r.id}','${r.assigned_to}','${r.kind}','${esc(r.device_user_id)}','${profileId}')" style="cursor:pointer;font-weight:800;color:#15803D" title="Quitar este código">✕</a>
+          </span>`).join('')}</span></div>`;
+      }).join('');
+    }catch(e){el.textContent='Sin conexión — no se pudo cargar.';}
+  },
+  async unlinkStaffBio(enrollId,custId,kind,code,profileId){
+    if(!confirm('¿Quitar este acceso biométrico? La persona ya no podrá entrar con ese código hasta registrarlo de nuevo.'))return;
+    await sb.from('device_enrollments').delete().eq('id',enrollId);
+    // limpia el campo de la ficha SOLO si sigue reflejando ESTE código exacto
+    // (si otra sucursal ya lo sobrescribió con un código distinto, se respeta ese
+    // — dos sucursales pueden apuntar al mismo campo face_id/fingerprint_id de
+    // una ficha compartida, y quitar una no debe borrarle el código a la otra)
+    const field=kind==='rostro'?'face_id':(kind==='huella'?'fingerprint_id':null);
+    if(field){
+      const {data}=await sb.from('customers').select(field).eq('id',custId).maybeSingle();
+      if(data&&String(data[field])===String(code)){
+        await Q.update('customers',{id:custId},{[field]:null});
+        const c=this.customers.find(x=>x.id===custId);if(c){c[field]=null;cset('customers',this.customers);}
+      }
+    }
+    toast('Acceso quitado ✓');
+    this.loadStaffBioPanel(profileId);
   },
   async saveStaffEdit(id){
     if(!navigator.onLine){toast('Necesitas internet para editar personal.',true);return;}
