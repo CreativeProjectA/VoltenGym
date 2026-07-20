@@ -4034,11 +4034,16 @@ const Pos={
         certs.push('__period:'+per);
         const price=$('se-price')?Number($('se-price').value)||null:null;
         const cpPatch={certifications:certs};if(price!=null)cpPatch.monthly_price=price;
-        if(cp)await sb.from('coach_profiles').update(cpPatch).eq('profile_id',id);
-        else await sb.from('coach_profiles').insert(Object.assign({profile_id:id},cpPatch));
-        const local=this.coachProfiles.find(x=>x.profile_id===id);
-        if(local){if(price!=null)local.monthly_price=price;}else if(price!=null)this.coachProfiles.push({profile_id:id,monthly_price:price});
-        cset('coachProfiles',this.coachProfiles);
+        const r=cp?await sb.from('coach_profiles').update(cpPatch).eq('profile_id',id)
+                  :await sb.from('coach_profiles').insert(Object.assign({profile_id:id},cpPatch));
+        if(r.error){
+          toast('No se pudo guardar su ficha de coach: corre pos_migration24.sql en Supabase.',true);
+        }else{
+          const local=this.coachProfiles.find(x=>x.profile_id===id);
+          if(local){if(price!=null)local.monthly_price=price;}
+          else this.coachProfiles.push({profile_id:id,monthly_price:price,certifications:certs});
+          cset('coachProfiles',this.coachProfiles);
+        }
       }catch(e){}
     }
     const p=this.appProfiles.find(x=>x.id===id);if(p)Object.assign(p,patch);
@@ -4093,12 +4098,21 @@ const Pos={
       return;
     }
     const uid=data.user.id;
-    try{await sb.from('staff_branches').insert({staff_id:uid,branch_id:branchId});}catch(e){}
+    try{
+      const r=await sb.from('staff_branches').insert({staff_id:uid,branch_id:branchId});
+      if(!r.error){this.staffBranches.push({staff_id:uid,branch_id:branchId});cset('staffBranches',this.staffBranches);}
+    }catch(e){}
+    let cpErr=null;
     if(role==='coach'){
-      try{await sb.from('coach_profiles').insert({profile_id:uid,certifications:['__name:'+name]});}catch(e){}
+      try{
+        const r=await sb.from('coach_profiles').insert({profile_id:uid,certifications:['__name:'+name]});
+        cpErr=r.error;
+        if(!cpErr){this.coachProfiles.push({profile_id:uid,certifications:['__name:'+name],monthly_price:null});cset('coachProfiles',this.coachProfiles);}
+      }catch(e){cpErr=e;}
     }
     this.appProfiles.push({id:uid,role,full_name:name,email,created_at:new Date().toISOString()});
     cset('appProfiles',this.appProfiles);
+    if(cpErr)toast('Cuenta creada, pero falta su ficha de coach: corre pos_migration24.sql en Supabase y edítalo de nuevo.',true);
     openModal(`
       <h3>Cuenta creada ✓</h3><p class="msub">Anota o comparte estas credenciales</p>
       <div style="background:var(--gray);border-radius:16px;padding:20px;font-size:15px;font-weight:600;line-height:2;">
