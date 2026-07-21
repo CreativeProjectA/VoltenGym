@@ -2061,6 +2061,13 @@ const Pos={
     const val=($('bio-id-input')&&$('bio-id-input').value.trim())||null;
     const r=await Q.update('customers',{id:custId},{[field]:val});
     if(r.error){toast(/fingerprint_id|face_id/i.test(r.error.message||'')?'Corre pos_migration4.sql primero.':'Error: '+r.error.message,true);return;}
+    // si se está QUITANDO, también hay que borrar su vinculación en
+    // device_enrollments (la de "Registros nuevos") -- si no, el aparato lo
+    // sigue reconociendo con ese código aunque la ficha ya diga "sin registrar"
+    if(!val){
+      const kind=field==='face_id'?'rostro':'huella';
+      try{await sb.from('device_enrollments').delete().eq('assigned_to',custId).eq('kind',kind);}catch(e){}
+    }
     const c=this.customers.find(x=>x.id===custId);if(c)c[field]=val;cset('customers',this.customers);
     closeModal();toast(val?'Guardado ✓':'Quitado');this.go('customers');
   },
