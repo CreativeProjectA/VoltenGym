@@ -3077,7 +3077,8 @@ const Pos={
     <div class="topbar">
       <div><h1>Inventario</h1><div class="sub">Productos y stock de ${esc(this.branch?this.branch.name:'la sucursal')}</div></div>
       <div style="display:flex;gap:12px;align-items:center;">${this.branchSelector()}
-      ${canEdit?`<button class="btn btn-ghost" onclick="Pos.stockModal()">＋ Entrada de stock</button>
+      ${canEdit?`<button class="btn btn-ghost" onclick="Pos.countModal()">Conteo físico</button>
+      <button class="btn btn-ghost" onclick="Pos.stockModal()">＋ Entrada de stock</button>
       <button class="btn btn-primary" onclick="Pos.productModal()">+ Nuevo producto</button>`:''}</div>
     </div>
     ${low.length?`<div class="panel" style="background:#FEF3C7;box-shadow:none;"><b style="font-size:14px">⚠ Stock bajo:</b> <span style="font-size:14px;font-weight:600">${low.map(p=>esc(p.name)+' ('+this.stockOf(p.id)+')').join(' · ')}</span></div>`:''}
@@ -3176,6 +3177,67 @@ const Pos={
     }
     cset('products',this.products);cset('stock',this.stock);
     closeModal();toast((isSrv?'Servicio':'Producto')+' guardado ✓');this.go('inventory');
+  },
+  /* ── CONTEO FÍSICO ──────────────────────────────────────────────────
+     Cuadrar el inventario producto por producto era una lata: había que
+     abrir el modal de stock una vez por cada cosa. Esto es la hoja de
+     conteo completa: se captura lo que HAY de verdad en el anaquel, se ve
+     la diferencia contra el sistema al instante, y se aplica todo junto.
+     Cada ajuste queda en el historial de movimientos con su motivo, así que
+     después se puede ver qué se ajustó y quién lo hizo. */
+  countModal(){
+    const prods=this.products.filter(p=>p.type!=='membership'&&p.type!=='service');
+    if(!prods.length){toast('No hay productos con inventario en esta sucursal.',true);return;}
+    openModal(`
+      <h3>Conteo físico de inventario</h3>
+      <p class="msub">${esc(this.branch?this.branch.name:'')} · escribe cuántos hay de verdad. Lo que dejes en blanco no se toca.</p>
+      <div style="max-height:44vh;overflow-y:auto;margin:6px 0 14px">
+        <table><thead><tr><th>Producto</th><th style="text-align:right">Sistema</th><th style="text-align:right;width:96px">Contado</th><th style="text-align:right">Diferencia</th></tr></thead>
+        <tbody>${prods.map(p=>`<tr>
+          <td style="font-weight:700">${esc(p.name)}</td>
+          <td style="text-align:right;color:var(--muted)">${this.stockOf(p.id)}</td>
+          <td style="text-align:right"><input class="inp cnt-inp" type="number" data-p="${p.id}" data-sys="${this.stockOf(p.id)}" style="height:36px;text-align:right;padding:6px 8px" oninput="Pos.countDiff()"></td>
+          <td style="text-align:right;font-weight:800" id="cnt-d-${p.id}">—</td>
+        </tr>`).join('')}</tbody></table>
+      </div>
+      <div id="cnt-resumen" style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:14px">Sin capturar todavía.</div>
+      <button class="btn btn-primary btn-block" onclick="Pos.applyCount()">Aplicar ajustes</button>
+    `);
+  },
+  countDiff(){
+    let cambios=0,sobra=0,falta=0;
+    document.querySelectorAll('.cnt-inp').forEach(inp=>{
+      const cel=$('cnt-d-'+inp.dataset.p);if(!cel)return;
+      if(inp.value.trim()===''){cel.textContent='—';cel.style.color='';return;}
+      const d=Number(inp.value)-Number(inp.dataset.sys);
+      if(d===0){cel.textContent='igual';cel.style.color='#16A34A';return;}
+      cambios++;if(d>0)sobra+=d;else falta+=-d;
+      cel.textContent=(d>0?'+':'')+d;cel.style.color=d>0?'#16A34A':'#DC2626';
+    });
+    const r=$('cnt-resumen');if(!r)return;
+    r.innerHTML=cambios?`<b>${cambios}</b> producto${cambios===1?'':'s'} con diferencia · sobran <b style="color:#16A34A">${sobra}</b> · faltan <b style="color:#DC2626">${falta}</b>`
+      :'Todo lo capturado cuadra con el sistema.';
+  },
+  async applyCount(){
+    const filas=[...document.querySelectorAll('.cnt-inp')]
+      .filter(i=>i.value.trim()!=='')
+      .map(i=>({pid:i.dataset.p,delta:Number(i.value)-Number(i.dataset.sys)}))
+      .filter(x=>x.delta!==0);
+    if(!filas.length){toast('No hay diferencias que aplicar.',true);return;}
+    if(!confirm('Se van a ajustar '+filas.length+' producto'+(filas.length===1?'':'s')+' para que el sistema coincida con lo que contaste. Queda registrado en el historial de movimientos.'))return;
+    const bId=this.branch?this.branch.id:null;
+    let ok=0,err=0;
+    for(const f of filas){
+      const r=await Q.stockDelta(bId,f.pid,f.delta,'conteo físico',this.user.id);
+      if(r.error){err++;continue;}
+      const st=this.stock.find(x=>x.product_id===f.pid&&x.branch_id===bId);
+      if(st)st.qty=Number(st.qty)+f.delta;else this.stock.push({branch_id:bId,product_id:f.pid,qty:f.delta,min_qty:0});
+      ok++;
+    }
+    cset('stock',this.stock);
+    closeModal();
+    toast(err?ok+' ajustados, '+err+' con error':ok+' producto'+(ok===1?'':'s')+' ajustado'+(ok===1?'':'s')+' ✓',!!err);
+    this.go('inventory');
   },
   stockModal(productId){
     const prods=this.products.filter(p=>p.type!=='membership');
@@ -3648,6 +3710,21 @@ const Pos={
       <div id="emp-report" style="color:var(--muted);font-size:14px;font-weight:500;">Elige un empleado y el rango de fechas (día, semana, mes o el período que quieras).</div>
     </div>
     <div class="panel">
+      <div><h2>Asistencia del personal</h2><div class="psub">A qué hora entró y salió cada quien, comparado con su horario. El horario se configura en Personal → Editar.</div></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+        <select class="inp" style="max-width:230px;height:44px" id="asis-sel">
+          <option value="">Todo el personal</option>
+          ${this.appProfiles.filter(p=>p.role&&p.role!=='member').map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)}</option>`).join('')}
+        </select>
+        <input class="inp" type="date" style="height:44px;width:160px" id="asis-from" value="${dISO(new Date(Date.now()-13*864e5))}">
+        <span style="color:var(--muted);font-weight:700">→</span>
+        <input class="inp" type="date" style="height:44px;width:160px" id="asis-to" value="${todayISO()}">
+        <button class="btn btn-sm btn-primary" onclick="Pos.runAsistencia()">Ver asistencia</button>
+        <button class="btn btn-sm btn-ghost" onclick="Pos.exportAsistencia()">Exportar</button>
+      </div>
+      <div id="asis-report" style="color:var(--muted);font-size:14px;font-weight:500;">Elige el período. Sin elegir empleado, salen todos.</div>
+    </div>
+    <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;"><div><h2>Historial de turnos</h2><div class="psub" style="margin-bottom:0">Cortes de caja con diferencias</div></div>
       <div style="display:flex;gap:8px;"><button class="btn btn-sm btn-ghost" onclick="Pos.exportSalesCSV()">Exportar ventas</button><button class="btn btn-sm btn-ghost" onclick="Pos.exportShiftsCSV()">Exportar turnos</button></div></div>
       <div id="r-shifts" style="margin-top:14px">Cargando...</div>
@@ -3848,6 +3925,89 @@ const Pos={
     const name=this.profName(emp).replace(/\s+/g,'_');
     csvExport('reporte_'+name,['Fecha','Hora','Cliente','Concepto','Total','Método','Referencia'],
       this._empSales.map(s=>[fdate(s.created_at),ftime(s.created_at),this.custName(s.customer_id),s.concept||'',Number(s.total||0),PAY_LABEL[s.payment_method]||'',s.reference||s.payment_reference||'']));
+  },
+  /* ── ASISTENCIA DEL PERSONAL ────────────────────────────────────────
+     Junta los accesos del personal y los compara con el horario que tienen
+     configurado. Hay que buscar por DOS lados porque un empleado puede
+     quedar registrado de dos formas: si entró tecleando su nombre en
+     recepción queda con member_id; si entró con su cara o huella queda con
+     el customer_id de su ficha. Antes solo se veía una de las dos. */
+  async runAsistencia(){
+    const who=$('asis-sel').value,from=$('asis-from').value,to=$('asis-to').value;
+    const box=$('asis-report');
+    box.innerHTML='Cargando...';
+    const bId=this.viewBr();
+    const staff=this.appProfiles.filter(p=>p.role&&p.role!=='member'&&(!who||p.id===who));
+    if(!staff.length){box.innerHTML='Sin personal que mostrar.';return;}
+    const fichasDe=(pid)=>this.customers.filter(c=>c.profile_id===pid).map(c=>c.id);
+    let CH=[];
+    try{
+      let q=sb.from('checkins').select('*').gte('created_at',localDayStart(from)).lte('created_at',localDayEnd(to)).order('created_at',{ascending:true}).limit(3000);
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;CH=data||[];
+    }catch(e){box.innerHTML='Sin conexión — inténtalo con internet.';return;}
+
+    const filas=[];
+    for(const p of staff){
+      const ids=fichasDe(p.id);
+      const suyos=CH.filter(c=>c.member_id===p.id||(c.customer_id&&ids.includes(c.customer_id)));
+      // una fila por día trabajado: primera entrada y última salida de ese día
+      const porDia={};
+      suyos.forEach(c=>{const d=dISO(new Date(c.created_at));(porDia[d]=porDia[d]||[]).push(c);});
+      Object.keys(porDia).sort().forEach(d=>{
+        const evs=porDia[d];
+        const entrada=evs[0].created_at;
+        const salidas=evs.map(e=>e.checked_out_at).filter(Boolean).sort();
+        const salida=salidas.length?salidas[salidas.length-1]:null;
+        const horas=salida?((new Date(salida)-new Date(entrada))/3600000):null;
+        // comparación con su horario configurado (si lo tiene)
+        let tarde=null,temprano=null;
+        if(p.shift_start){
+          const [h,m]=p.shift_start.split(':').map(Number);
+          const esperado=new Date(entrada);esperado.setHours(h,m||0,0,0);
+          const dif=(new Date(entrada)-esperado)/60000;
+          if(dif>10)tarde=Math.round(dif);
+        }
+        if(p.shift_end&&salida){
+          const [h,m]=p.shift_end.split(':').map(Number);
+          const esperado=new Date(salida);esperado.setHours(h,m||0,0,0);
+          const dif=(esperado-new Date(salida))/60000;
+          if(dif>10)temprano=Math.round(dif);
+        }
+        filas.push({pid:p.id,nombre:p.full_name||p.email,rol:p.role,dia:d,entrada,salida,horas,tarde,temprano,
+          horario:p.shift_start&&p.shift_end?(p.shift_start+' a '+p.shift_end):null});
+      });
+    }
+    filas.sort((a,b)=>a.dia<b.dia?1:(a.dia>b.dia?-1:(a.nombre<b.nombre?-1:1)));
+    this._asis=filas;
+    if(!filas.length){box.innerHTML='<span style="color:var(--muted)">Sin accesos del personal en ese período. Recuerda que para que quede registro tienen que pasar su cara/huella o teclear su nombre en Accesos.</span>';return;}
+    const totalHoras=filas.reduce((a,f)=>a+(f.horas||0),0);
+    const conRetardo=filas.filter(f=>f.tarde).length;
+    const sinSalida=filas.filter(f=>!f.salida).length;
+    box.innerHTML=`
+      <div class="cards" style="margin-bottom:16px;">
+        <div class="card" style="background:var(--orange-soft);"><div class="lbl">Días registrados</div><div class="val" style="color:var(--orange-dark)">${filas.length}</div><div class="foot">${fdate(from)} → ${fdate(to)}</div></div>
+        <div class="card"><div class="lbl">Horas totales</div><div class="val">${totalHoras?totalHoras.toFixed(1):'—'}</div><div class="foot">solo días con entrada y salida</div></div>
+        <div class="card"><div class="lbl">Con retardo</div><div class="val" style="color:${conRetardo?'var(--red)':'inherit'}">${conRetardo}</div><div class="foot">más de 10 min tarde</div></div>
+        <div class="card"><div class="lbl">Sin marcar salida</div><div class="val" style="color:${sinSalida?'#D97706':'inherit'}">${sinSalida}</div><div class="foot">se les olvidó al salir</div></div>
+      </div>
+      <table><thead><tr><th>Fecha</th><th>Empleado</th><th>Entró</th><th>Salió</th><th>Horas</th><th>Su horario</th><th>Puntualidad</th></tr></thead><tbody>${
+        filas.map(f=>`<tr>
+          <td>${fdate(f.dia)}</td>
+          <td style="font-weight:700">${esc(f.nombre)}<div style="font-size:11.5px;color:var(--muted);font-weight:600">${esc(ROLE_LABEL[f.rol]||f.rol)}</div></td>
+          <td>${ftime(f.entrada)}</td>
+          <td>${f.salida?ftime(f.salida):'<span style="color:#D97706">no marcó</span>'}</td>
+          <td style="font-weight:700">${f.horas!=null?f.horas.toFixed(1)+' h':'—'}</td>
+          <td style="color:var(--muted)">${f.horario?esc(f.horario):'sin configurar'}</td>
+          <td>${f.tarde?'<span class="tag tag-red">'+f.tarde+' min tarde</span>':(f.horario?'<span class="tag tag-green">A tiempo</span>':'—')}${f.temprano?' <span class="tag tag-orange">salió '+f.temprano+' min antes</span>':''}</td>
+        </tr>`).join('')
+      }</tbody></table>`;
+  },
+  exportAsistencia(){
+    if(!this._asis||!this._asis.length){toast('Primero genera el reporte.',true);return;}
+    csvExport('asistencia_personal',['Fecha','Empleado','Rol','Entró','Salió','Horas','Horario','Minutos tarde','Salió antes (min)'],
+      this._asis.map(f=>[fdate(f.dia),f.nombre,ROLE_LABEL[f.rol]||f.rol,ftime(f.entrada),f.salida?ftime(f.salida):'',
+        f.horas!=null?f.horas.toFixed(2):'',f.horario||'',f.tarde||'',f.temprano||'']));
   },
   exportSalesCSV(){
     const bn=(id)=>(this.branches.find(b=>b.id===id)||{}).name||'';
@@ -4247,7 +4407,7 @@ const Pos={
   },
 };
 // Candado anti doble-click: un guardado a la vez (evita stock/ventas duplicados)
-['saveStockMove','saveCashMove','saveNewCustomer','savePlan','savePromo','saveAnn','saveFamily','saveCustomerEdit','doCloseShift','joinFamily','famAddMember','saveProduct'].forEach(m=>{
+['saveStockMove','saveCashMove','saveNewCustomer','savePlan','savePromo','saveAnn','saveFamily','saveCustomerEdit','doCloseShift','joinFamily','famAddMember','saveProduct','applyCount','closeOrphanEntries'].forEach(m=>{
   const orig=Pos[m].bind(Pos);
   Pos[m]=async function(){ if(Pos._lock)return; Pos._lock=true; try{ return await orig.apply(Pos,arguments); } finally{ Pos._lock=false; } };
 });
