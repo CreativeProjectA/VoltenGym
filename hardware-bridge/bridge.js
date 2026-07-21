@@ -56,13 +56,33 @@ app.use(express.text({ type: '*/*', limit: '5mb' })); // ZKTeco manda texto plan
 // para ver exactamente qué manda el aparato cuando no logramos identificar
 // su protocolo exacto. Se puede borrar este bloque una vez resuelto.
 const LOG_FILE = path.join(__dirname, 'log_conexiones.txt');
+// El log anota todo lo que llega — con meses corriendo crecería sin freno y
+// llenaría el disco de la PC de recepción. Si pasa de 5 MB, se reinicia solo.
+function logSeguro(linea) {
+  try {
+    if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > 5 * 1024 * 1024) {
+      fs.writeFileSync(LOG_FILE, '(log reiniciado por tamano ' + new Date().toLocaleString('es-MX') + ')\n');
+    }
+    fs.appendFileSync(LOG_FILE, linea);
+  } catch (_) {}
+}
 app.use((req, res, next) => {
   const linea = '\n[' + new Date().toLocaleString('es-MX') + '] ' + req.method + ' ' + req.originalUrl +
     '\n  headers: ' + JSON.stringify(req.headers) +
     '\n  body: ' + JSON.stringify(req.body || '').slice(0, 500) + '\n';
-  try { fs.appendFileSync(LOG_FILE, linea); } catch (_) {}
+  logSeguro(linea);
   console.log('LLEGÓ:', req.method, req.originalUrl);
   next();
+});
+
+// ── VERSIÓN, para saber QUÉ copia está corriendo sin adivinar ──────────
+// Los mensajes de consola de todas las versiones son iguales y el puente
+// corre oculto, así que no había forma de comprobar cuál quedó instalada
+// (nos pasó: se reinstalaba y la copia vieja seguía contestando). Ahora
+// desde cualquier celular en el WiFi del gym: http://IP-de-la-PC:4370/version
+const VERSION_PUENTE = '2026-07-21 definitivo (división por sucursal + anti-rebote)';
+app.get('/version', (req, res) => {
+  res.json({ puente: 'Volten Gym', version: VERSION_PUENTE, sucursal: BRANCH_ID, division_por_sucursal: true, anti_rebote: true });
 });
 
 // ── Estado persistente (sobrevive reinicios de la PC) ──────────────────
@@ -157,9 +177,24 @@ function toDbMethod(kind) {
   return kind === 'rostro' ? 'face' : (kind === 'qr' ? 'qr' : 'fingerprint');
 }
 
+// ── ANTI-REBOTE ────────────────────────────────────────────────────────
+// El aparato reenvía el MISMO pase varias veces en segundos (reintentos de
+// red, o la persona parada frente al lector). Cada reenvío alternaba
+// entrada→salida→entrada y un solo pase real terminaba como 63 registros.
+// Si la misma persona vuelve a llegar en menos de 45 segundos, se le
+// contesta LO MISMO que la primera vez sin escribir nada nuevo — de paso la
+// respuesta es instantánea, que es justo lo que "Ratificar servidor" quiere.
+const ultimoPase = new Map();
+const REBOTE_MS = 45000;
+
 // Regresa true si el acceso fue PERMITIDO (o si es una salida) — así los
 // aparatos que preguntan en tiempo real ("Ratificar servidor") saben si abrir.
 async function registerCheckin(customer, kind) {
+  const previo = ultimoPase.get(customer.id);
+  if (previo && Date.now() - previo.t < REBOTE_MS) {
+    console.log('(rebote ignorado):', customer.full_name, '— misma respuesta:', previo.granted ? 'permitido' : 'denegado');
+    return previo.granted;
+  }
   // Mismo comportamiento que el POS: si ya está adentro EN ESTA SUCURSAL, esto
   // es su salida. Acotado a BRANCH_ID para que las sucursales sean autónomas:
   // que alguien esté "adentro" en un gym no cierra su entrada del otro.
@@ -174,6 +209,7 @@ async function registerCheckin(customer, kind) {
       body: JSON.stringify({ checked_out_at: new Date().toISOString() }),
     });
     console.log('SALIDA registrada:', customer.full_name);
+    ultimoPase.set(customer.id, { t: Date.now(), granted: true });
     return true;
   }
   // El personal (coach/cajera/encargado/admin) SIEMPRE entra — no necesita
@@ -225,6 +261,7 @@ async function registerCheckin(customer, kind) {
     console.log('CORTESÍA usada (1 acceso):', customer.full_name);
   }
   console.log((granted ? 'ACCESO PERMITIDO' : 'ACCESO DENEGADO') + ':', customer.full_name);
+  ultimoPase.set(customer.id, { t: Date.now(), granted });
   return granted;
 }
 
@@ -403,7 +440,7 @@ const nowCloud = () => {
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
 };
 const wsLog = (txt) => {
-  try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] WS ' + txt + '\n'); } catch (_) {}
+  logSeguro('[' + new Date().toLocaleString('es-MX') + '] WS ' + txt + '\n');
   console.log('WS:', String(txt).slice(0, 250));
 };
 // según lo observado en esta familia de aparatos: modo 0-9 huella, 11 tarjeta, 50+ cara
@@ -479,7 +516,7 @@ function attachWs(srv, puerto) {
 // de inmediato — por eso el aparato tocaba y tocaba sin recibir respuesta.
 // Ahora: mantenemos la conexión ABIERTA y le contestamos en su idioma.
 function logFacial(txt) {
-  try { fs.appendFileSync(LOG_FILE, '[' + new Date().toLocaleString('es-MX') + '] FACIAL ' + txt + '\n'); } catch (_) {}
+  logSeguro('[' + new Date().toLocaleString('es-MX') + '] FACIAL ' + txt + '\n');
   console.log('FACIAL:', String(txt).slice(0, 200));
 }
 // El número de serie viene en ASCII dentro del paquete (letras + dígitos).
@@ -638,6 +675,7 @@ for (const puerto of PUERTOS) {
     .on('error', (e) => console.log('AVISO: no se pudo abrir el puerto ' + puerto + ' (' + e.message + ') — probablemente ya está en uso por Windows, se ignora y sigue con los demás.'));
   servidores.push(mux);
 }
+console.log('VERSIÓN DEL PUENTE:', VERSION_PUENTE);
 console.log('Protocolos activos: binario a5 5a (facial) + ZKTeco push (HTTP)' + (wsOk ? ' + AiFace (WebSocket JSON)' : ' — AiFace DESACTIVADO, falta paquete ws'));
 if (MODO_ESPIA) {
   console.log('*** MODO ESPÍA ENCENDIDO -> ' + ESPIA_DESTINO + ' ***');

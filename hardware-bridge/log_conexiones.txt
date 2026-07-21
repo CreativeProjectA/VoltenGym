@@ -1,0 +1,40 @@
+
+[21/7/2026, 12:12:11 p.m.] POST /iclock/cdata
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","content-type":"text/plain","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"140"}
+  body: "{\"cmd\":\"sendlog\",\"sn\":\"APARATO-TEST\",\"count\":1,\"logindex\":1,\"record\":[{\"enrollid\":5,\"time\":\"2026-07-21T18:12:09.136Z\",\"mode\":50,\"inout\":0}]}"
+
+[21/7/2026, 12:12:12 p.m.] POST /iclock/cdata
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","content-type":"text/plain","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"140"}
+  body: "{\"cmd\":\"sendlog\",\"sn\":\"APARATO-TEST\",\"count\":1,\"logindex\":1,\"record\":[{\"enrollid\":5,\"time\":\"2026-07-21T18:12:12.605Z\",\"mode\":50,\"inout\":0}]}"
+
+[21/7/2026, 12:12:13 p.m.] POST /iclock/cdata
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","content-type":"text/plain","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"140"}
+  body: "{\"cmd\":\"sendlog\",\"sn\":\"APARATO-TEST\",\"count\":1,\"logindex\":1,\"record\":[{\"enrollid\":5,\"time\":\"2026-07-21T18:12:13.132Z\",\"mode\":50,\"inout\":0}]}"
+
+[21/7/2026, 12:12:13 p.m.] POST /iclock/cdata
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","content-type":"text/plain","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"140"}
+  body: "{\"cmd\":\"sendlog\",\"sn\":\"APARATO-TEST\",\"count\":1,\"logindex\":1,\"record\":[{\"enrollid\":5,\"time\":\"2026-07-21T18:12:13.190Z\",\"mode\":50,\"inout\":0}]}"
+
+[21/7/2026, 12:12:13 p.m.] POST /iclock/cdata
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","content-type":"text/plain","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"140"}
+  body: "{\"cmd\":\"sendlog\",\"sn\":\"APARATO-TEST\",\"count\":1,\"logindex\":1,\"record\":[{\"enrollid\":5,\"time\":\"2026-07-21T18:12:13.279Z\",\"mode\":50,\"inout\":0}]}"
+
+[21/7/2026, 12:12:13 p.m.] POST /iclock/cdata
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","content-type":"text/plain","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"140"}
+  body: "{\"cmd\":\"sendlog\",\"sn\":\"APARATO-TEST\",\"count\":1,\"logindex\":1,\"record\":[{\"enrollid\":5,\"time\":\"2026-07-21T18:12:13.350Z\",\"mode\":50,\"inout\":0}]}"
+
+[21/7/2026, 12:12:13 p.m.] POST /iclock/cdata
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","content-type":"text/plain","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"140"}
+  body: "{\"cmd\":\"sendlog\",\"sn\":\"APARATO-TEST\",\"count\":1,\"logindex\":1,\"record\":[{\"enrollid\":5,\"time\":\"2026-07-21T18:12:13.520Z\",\"mode\":50,\"inout\":0}]}"
+
+[21/7/2026, 12:12:13 p.m.] POST /iclock/cdata
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","content-type":"text/plain","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"140"}
+  body: "{\"cmd\":\"sendlog\",\"sn\":\"APARATO-TEST\",\"count\":1,\"logindex\":1,\"record\":[{\"enrollid\":5,\"time\":\"2026-07-21T18:12:13.672Z\",\"mode\":50,\"inout\":0}]}"
+
+[21/7/2026, 12:12:13 p.m.] GET /version
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate"}
+  body: ""
+
+[21/7/2026, 12:12:17 p.m.] POST /iclock/cdata
+  headers: {"host":"127.0.0.1:4370","connection":"keep-alive","content-type":"text/plain","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"140"}
+  body: "{\"cmd\":\"sendlog\",\"sn\":\"APARATO-TEST\",\"count\":1,\"logindex\":1,\"record\":[{\"enrollid\":5,\"time\":\"2026-07-21T18:12:17.775Z\",\"mode\":50,\"inout\":0}]}"
