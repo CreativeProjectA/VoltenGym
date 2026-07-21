@@ -254,7 +254,20 @@
 <div id="gate">
   <div style="display:flex;flex-direction:column;align-items:center" class="fade">
     <div class="login-logo" style="margin-bottom:22px"><img src="voltengym-logo.png" alt="Volten Gym" class="logo-full"></div>
-    <div class="gate-card">
+    <!-- Turno que se quedó abierto de otro día: no se deja entrar al POS hasta
+         hacerle su corte, porque si se sigue vendiendo encima, ese corte junta
+         las ventas de varios días y ya no cuadra con nada. -->
+    <div class="gate-card" id="gate-stale" style="display:none">
+      <h1>Cierra el turno anterior</h1>
+      <div class="who" id="gate-stale-msg">—</div>
+      <p style="font-size:13.5px;color:var(--muted);font-weight:500;line-height:1.55;margin:14px 0 18px">
+        Quedó un turno abierto de un día anterior. Hay que hacerle su corte antes de seguir vendiendo:
+        si no, todo lo de hoy se le suma a ese turno y la caja no va a cuadrar.
+      </p>
+      <button class="btn btn-primary btn-block" onclick="Pos.closeShiftModal()">Hacer el corte de ese turno</button>
+      <button class="btn btn-ghost btn-block btn-sm" style="margin-top:14px" onclick="Pos.logout()">Cerrar sesión</button>
+    </div>
+    <div class="gate-card" id="gate-open">
       <h1>Iniciar turno</h1>
       <div class="who" id="gate-hello">Bienvenido, <b>—</b></div>
       <label class="lab-up">Fondo fijo de caja</label>
@@ -368,8 +381,17 @@ const courtesyState=(c)=>{ // 'none' | 'pending' | 'used'
 const QR_PREFIX='volten-gym:member:';
 
 function toast(msg,err){const t=$('toast');t.textContent=msg;t.className=err?'err show':'show';clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),3200);}
-function openModal(html,wide){$('modal-box').className='modal'+(wide?' wide':'');$('modal-box').innerHTML='<button class="modal-x" onclick="closeModal()">✕</button>'+html;$('modal-root').style.display='flex';}
-function closeModal(){$('modal-root').style.display='none';}
+// bloq = modal OBLIGATORIO: sin tache, y no se cierra picando afuera. Se usa
+// para el turno que quedó abierto de otro día, donde seguir vendiendo sin
+// hacer el corte descuadra la caja.
+let modalBloqueado=false;
+function openModal(html,wide,bloq){
+  modalBloqueado=!!bloq;
+  $('modal-box').className='modal'+(wide?' wide':'');
+  $('modal-box').innerHTML=(bloq?'':'<button class="modal-x" onclick="closeModal()">✕</button>')+html;
+  $('modal-root').style.display='flex';
+}
+function closeModal(force){if(modalBloqueado&&!force)return;modalBloqueado=false;$('modal-root').style.display='none';}
 $('modal-root')&&($('modal-root').onclick=(e)=>{if(e.target.id==='modal-root')closeModal();});
 
 function csvExport(name,headers,rows){
@@ -708,6 +730,17 @@ const Pos={
       cset('shift_'+bId+'_'+this.user.id,shift);
     }catch(e){shift=cget('shift_'+bId+'_'+this.user.id);}
     this.shift=shift;
+    // ¿El turno abierto es de un día ANTERIOR? Entonces no se entra al POS
+    // hasta hacerle su corte. Antes solo se avisaba con un aviso que se podía
+    // cerrar, y se seguía vendiendo encima del turno viejo.
+    const viejo=this.shift&&dISO(new Date(this.shift.opened_at))!==todayISO();
+    if(viejo){
+      $('shell').style.display='none';$('gate').style.display='flex';
+      $('gate-open').style.display='none';$('gate-stale').style.display='block';
+      $('gate-stale-msg').innerHTML='Hola <b>'+esc(this.profileName)+'</b> — turno abierto desde el '+fdate(this.shift.opened_at)+' a las '+ftime(this.shift.opened_at);
+      return;
+    }
+    $('gate-stale').style.display='none';$('gate-open').style.display='block';
     if(!this.shift){
       $('shell').style.display='none';$('gate').style.display='flex';
       $('gate-hello').innerHTML='Bienvenido, <b>'+esc(this.profileName)+'</b>';
@@ -715,19 +748,6 @@ const Pos={
     }else{
       $('gate').style.display='none';$('shell').style.display='grid';
       this.go(this.nav||'dashboard');this.refreshChip();
-      // Turno que se quedó abierto de un día anterior: si se sigue usando, el
-      // corte de hoy arrastra las ventas de todos esos días y no cuadra nada.
-      // No se cierra solo (es dinero) — se avisa y se ofrece hacer su corte.
-      const abierto=new Date(this.shift.opened_at);
-      if(dISO(abierto)!==todayISO()){
-        setTimeout(()=>openModal(`
-          <h3>Tienes un turno sin cerrar</h3>
-          <p class="msub">Se abrió el ${fdate(this.shift.opened_at)} a las ${ftime(this.shift.opened_at)} y nunca se le hizo su corte.</p>
-          <p style="font-size:13.5px;color:#1F2937;font-weight:500;line-height:1.5;margin-bottom:16px">Mientras siga abierto, todo lo que vendas hoy se suma a ese turno y el corte no va a cuadrar. Lo mejor es hacerle su corte ahora y empezar uno nuevo.</p>
-          <button class="btn btn-primary btn-block" onclick="Pos.closeShiftModal()">Hacer el corte de ese turno</button>
-          <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="closeModal()">Ahora no</button>
-        `),400);
-      }
     }
   },
   async openShift(){
