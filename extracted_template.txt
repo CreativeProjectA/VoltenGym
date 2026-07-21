@@ -6452,10 +6452,16 @@ class Component extends DCLogic {
           cwPanelStyle: { display: this.state.cwOpen ? 'flex' : 'none', position: 'absolute', inset: 0, zIndex: 252, flexDirection: 'column', background: '#FFFFFF' },
           cwTitle: isProg ? 'Asignar programa' : 'Enviar dieta',
           cwStepText: 'Paso ' + (step + 1) + ' de ' + totalSteps,
-          cwOpenProg: () => this.setState({ cwOpen: true, cwType: 'prog', cwStep: 0, cwClientIds: [], coachAssignPicked: [], coachAssignDays: [], caSelectedPhotoIdx: 0, caDurationMin: 45, coachAssignLevel: 'Intermedio' }),
-          cwOpenDiet: () => this.setState({ cwOpen: true, cwType: 'diet', cwStep: 0, cwClientIds: [], coachDietDays: [], cdDurationWeeks: 1 }),
+          // cwEditProgramId dice "estoy modificando ESTA rutina". Antes solo se
+          // limpiaba al guardar bien, así que si el coach entraba a Editar y se
+          // salía sin guardar, quedaba marcado: la siguiente rutina NUEVA que
+          // hiciera pisaba la vieja (le borraba ejercicios y atletas) en lugar
+          // de crearse aparte. Por eso ahora se limpia al abrir una nueva y al
+          // cerrar el asistente.
+          cwOpenProg: () => this.setState({ cwOpen: true, cwType: 'prog', cwStep: 0, cwClientIds: [], coachAssignPicked: [], coachAssignDays: [], caSelectedPhotoIdx: 0, caDurationMin: 45, coachAssignLevel: 'Intermedio', cwEditProgramId: null }),
+          cwOpenDiet: () => this.setState({ cwOpen: true, cwType: 'diet', cwStep: 0, cwClientIds: [], coachDietDays: [], cdDurationWeeks: 1, cwEditProgramId: null }),
           cwBack: () => {
-            if (step === 0) { this.setState({ cwOpen: false }); return; }
+            if (step === 0) { this.setState({ cwOpen: false, cwEditProgramId: null }); return; }
             this.setState({ cwStep: step - 1 });
           },
           cwNext: () => {
