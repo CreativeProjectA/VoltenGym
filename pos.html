@@ -715,6 +715,19 @@ const Pos={
     }else{
       $('gate').style.display='none';$('shell').style.display='grid';
       this.go(this.nav||'dashboard');this.refreshChip();
+      // Turno que se quedó abierto de un día anterior: si se sigue usando, el
+      // corte de hoy arrastra las ventas de todos esos días y no cuadra nada.
+      // No se cierra solo (es dinero) — se avisa y se ofrece hacer su corte.
+      const abierto=new Date(this.shift.opened_at);
+      if(dISO(abierto)!==todayISO()){
+        setTimeout(()=>openModal(`
+          <h3>Tienes un turno sin cerrar</h3>
+          <p class="msub">Se abrió el ${fdate(this.shift.opened_at)} a las ${ftime(this.shift.opened_at)} y nunca se le hizo su corte.</p>
+          <p style="font-size:13.5px;color:#1F2937;font-weight:500;line-height:1.5;margin-bottom:16px">Mientras siga abierto, todo lo que vendas hoy se suma a ese turno y el corte no va a cuadrar. Lo mejor es hacerle su corte ahora y empezar uno nuevo.</p>
+          <button class="btn btn-primary btn-block" onclick="Pos.closeShiftModal()">Hacer el corte de ese turno</button>
+          <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="closeModal()">Ahora no</button>
+        `),400);
+      }
     }
   },
   async openShift(){
@@ -814,7 +827,15 @@ const Pos={
       (d>0?'<span style="color:#16A34A">Sobran '+money(d)+'</span>':'<span style="color:#DC2626">Faltan '+money(-d)+'</span>');
   },
   async doCloseShift(expected){
-    const counted=Number($('cs-counted').value)||0;
+    // Si el campo se deja vacío, antes se cerraba con $0 contra lo esperado y
+    // el corte quedaba con un faltante fantasma (pasó 5 veces en producción).
+    // Ahora hay que escribir el conteo; y si de verdad hay $0 en la caja, se
+    // confirma a propósito.
+    const crudo=($('cs-counted')?$('cs-counted').value:'').trim();
+    if(crudo===''){toast('Escribe cuánto efectivo hay físicamente en la caja antes de cerrar.',true);const e=$('cs-counted');if(e)e.focus();return;}
+    const counted=Number(crudo);
+    if(!isFinite(counted)||counted<0){toast('El efectivo contado no es un número válido.',true);return;}
+    if(counted===0&&Number(expected)>0&&!confirm('Vas a cerrar el turno con $0 en caja, cuando se esperaban '+money(expected)+'.\n\n¿Es correcto? Se registrará como faltante.'))return;
     const t=await this.shiftTotals();
     const r=await Q.update('cash_shifts',{id:this.shift.id},{status:'closed',closed_at:new Date().toISOString(),expected_cash:expected,counted_cash:counted});
     if(r.error){toast('Error: '+r.error.message,true);return;}
@@ -2633,9 +2654,20 @@ const Pos={
   async confirmAssignEnroll(custId){
     const kindGuess=this._pendingEnrollKind||'huella';
     const code=this._pendingEnrollDeviceId;
-    // El puente ahora busca el código DENTRO de cada sucursal (autónomo): el
-    // "2" de un gym ya no se cruza con el "2" del otro, así que el mismo número
-    // en dos gyms distintos ya NO es problema (por eso ya no hay bloqueo aquí).
+    // AVISO DE CÓDIGO REPETIDO. La versión del puente que filtra por sucursal
+    // tolera que el "2" de un gym y el "2" del otro sean personas distintas,
+    // pero mientras alguna recepción siga con una versión anterior, el código
+    // se busca en TODA la base y se lo queda la primera ficha que lo tenga.
+    // Eso ya pasó en producción: el código 2 de Tres Cantos abría como el
+    // administrador de Gómez Morín (personal = acceso siempre permitido).
+    // No se bloquea (con los puentes al día es legítimo), pero sí se avisa.
+    if(kindGuess!=='qr'){
+      const choca=this.customers.filter(c=>c.id!==custId&&(String(c.face_id||'')===String(code)||String(c.fingerprint_id||'')===String(code)));
+      if(choca.length){
+        const quien=choca.map(c=>{const b=this.branches.find(x=>x.id===c.branch_id);return (c.full_name||'?')+(b?' ('+b.name+')':'');}).join(', ');
+        if(!confirm('OJO: el código '+code+' ya está usado por: '+quien+'.\n\nSi la recepción de esa sucursal no tiene el puente actualizado, los accesos se pueden confundir entre las dos personas.\n\nLo recomendable es registrar a esta persona en el aparato con un número que no se repita (por ejemplo 101, 102...).\n\n¿Asignarlo de todas formas?'))return;
+      }
+    }
     if(kindGuess!=='qr'){
       const field=kindGuess==='rostro'?'face_id':'fingerprint_id';
       const r1=await Q.update('customers',{id:custId},{[field]:code});
@@ -2759,13 +2791,29 @@ const Pos={
       }
     }
     if(!cust){
-      // ¿es personal (cajera/coach/encargado/admin/limpieza)? el staff siempre entra
+      // ¿es personal (cajera/coach/encargado/admin/limpieza)? el staff siempre entra.
+      // Con varios empleados de nombre parecido antes se tomaba al PRIMERO sin
+      // preguntar, y quedaba registrada la entrada de quien no era.
       const q=code.toLowerCase();
-      const staff=this.appProfiles.find(x=>x.role&&x.role!=='member'&&(x.full_name||'').toLowerCase().includes(q));
-      if(staff){this.doStaffCheckin(staff);return;}
+      const staffs=this.appProfiles.filter(x=>x.role&&x.role!=='member'&&(x.full_name||'').toLowerCase().includes(q));
+      if(staffs.length===1){this.doStaffCheckin(staffs[0]);return;}
+      if(staffs.length>1){
+        $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Varios empleados coinciden — ¿quién es?</div>'+staffs.slice(0,6).map(s=>`
+          <button class="cust-row" onclick="Pos.pickStaffCheckin('${s.id}')">
+            <div class="av2">${esc((s.full_name||'?')[0].toUpperCase())}</div>
+            <div class="cd"><b>${esc(s.full_name)}</b><span>${esc(ROLE_LABEL[s.role]||s.role)}</span></div>
+            <span class="tag tag-orange">Es este</span>
+          </button>`).join('')+'</div>';
+        return;
+      }
       this.showAccessResult(false,'No encontrado','Verifica el QR/nombre o regístralo en Clientes',null);return;
     }
     this.doCheckin(cust.id,isUuid?'qr':'manual');
+  },
+  pickStaffCheckin(id){
+    const s=this.appProfiles.find(x=>x.id===id);
+    $('scan-picker').innerHTML='';
+    if(s)this.doStaffCheckin(s);
   },
   async doStaffCheckin(staff){
     const now=new Date().toISOString();
