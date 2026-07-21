@@ -1103,8 +1103,8 @@ const Pos={
           <div id="d-expiring-list"></div>
         </div>
         <div class="panel">
-          <h2 style="font-size:18px">Cumpleaños</h2>
-          <div class="psub">Hoy y mañana — mándales una felicitación</div>
+          <h2 style="font-size:18px">Cumpleaños próximos</h2>
+          <div class="psub">Los siguientes 15 días — mándales su felicitación por WhatsApp</div>
           <div id="d-birthdays"></div>
         </div>
         ${this.role==='admin'?`
@@ -1159,20 +1159,45 @@ const Pos={
       <div class="row-line"><div><div style="font-weight:700;font-size:14px">${esc(x.c.full_name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">vence ${fdate(x.s.end_date)}</div></div>
       ${x.c.phone?`<a class="btn btn-xs" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(x.c.phone,'Hola '+x.c.full_name.split(' ')[0]+' 💪 Te recordamos que tu membresía de Volten Gym vence el '+fdate(x.s.end_date)+'. ¡Renueva a tiempo para no perder tu racha!')}">WhatsApp</a>`:''}</div>`).join('')
       :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Nadie por vencer esta semana.</div>';
-    // cumpleaños — hoy y mañana (mes/día, sin importar el año de nacimiento)
+    // Cumpleaños de los PRÓXIMOS 15 DÍAS. Antes solo miraba hoy y mañana, así
+    // que si nadie se asomaba al tablero justo ese día, el cumpleaños se pasaba
+    // de largo y nunca se felicitaba a nadie. Con 15 días se ven venir y se
+    // pueden preparar (o felicitar antes si el cliente no va a venir ese día).
     const bEl=$('d-birthdays');
     if(bEl){
-      const now=new Date(),tom=new Date(Date.now()+864e5);
-      const mmdd=(d)=>String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      const todayKey=mmdd(now),tomKey=mmdd(tom);
-      const bdays=this.custForBranch().filter(c=>c.birth_date&&(mmdd(new Date(c.birth_date+'T12:00:00'))===todayKey||mmdd(new Date(c.birth_date+'T12:00:00'))===tomKey));
-      bEl.innerHTML=bdays.length?bdays.map(c=>{
-        const isToday=mmdd(new Date(c.birth_date+'T12:00:00'))===todayKey;
-        const msg='¡Feliz cumpleaños, '+c.full_name.split(' ')[0]+'! Todo el equipo de Volten Gym te desea un excelente día. ¡Que este nuevo año esté lleno de logros dentro y fuera del gym!';
-        return `<div class="row-line"><div><div style="font-weight:700;font-size:14px">${esc(c.full_name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${isToday?'Hoy':'Mañana'}</div></div>
-        ${c.phone?`<a class="btn btn-xs" style="background:#FEF3C7;color:#B45309;text-decoration:none" target="_blank" href="${waLink(c.phone,msg)}">WhatsApp</a>`:'<span class="tag tag-gray">sin teléfono</span>'}</div>`;
-      }).join('')+'<p style="font-size:11px;color:var(--muted);font-weight:500;margin-top:8px">El mensaje ya va escrito — si quieres mandar también la imagen de felicitación, adjúntala manualmente en el chat de WhatsApp (esa parte no se puede automatizar sin WhatsApp Business API).</p>'
-      :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Nadie cumple años hoy ni mañana.</div>';
+      const DIAS=15;
+      const hoy=new Date();hoy.setHours(0,0,0,0);
+      // Cuántos días faltan para su cumpleaños, sin importar el año de nacimiento
+      const faltan=(iso)=>{
+        const n=new Date(iso+'T12:00:00');
+        let prox=new Date(hoy.getFullYear(),n.getMonth(),n.getDate());
+        prox.setHours(0,0,0,0);
+        if(prox<hoy)prox=new Date(hoy.getFullYear()+1,n.getMonth(),n.getDate());
+        return Math.round((prox-hoy)/864e5);
+      };
+      // Se muestran los de los próximos 15 días; pero si en esos 15 días no
+      // cumple nadie (pasa seguido con pocos clientes), se enseñan de todos
+      // modos los 5 que siguen. Así el panel nunca queda vacío y siempre se
+      // sabe quién viene, aunque falten meses.
+      const todos=this.custForBranch().filter(c=>c.birth_date)
+        .map(c=>({c,d:faltan(c.birth_date)}))
+        .sort((a,b)=>a.d-b.d);
+      const cerca=todos.filter(x=>x.d<=DIAS);
+      const bdays=cerca.length>=3?cerca:todos.slice(0,5);
+      bEl.innerHTML=bdays.length?bdays.map(({c,d})=>{
+        const nace=new Date(c.birth_date+'T12:00:00');
+        const cumple=hoy.getFullYear()-nace.getFullYear()+(d===0?0:(new Date(hoy.getFullYear(),nace.getMonth(),nace.getDate())<hoy?1:0));
+        const cuando=d===0?'Hoy':(d===1?'Mañana':(d<=DIAS?'En '+d+' días · ':'')+fdate(dISO(new Date(Date.now()+d*864e5))));
+        const nombre=c.full_name.split(' ')[0];
+        const msg=d===0
+          ? '¡Feliz cumpleaños, '+nombre+'! Todo el equipo de Volten Gym te desea un excelente día. ¡Que este nuevo año esté lleno de logros dentro y fuera del gym!'
+          : '¡Hola '+nombre+'! Aquí en Volten Gym ya sabemos que se acerca tu cumpleaños. ¡Te lo queremos festejar! Pásate a entrenar ese día.';
+        return `<div class="row-line"><div><div style="font-weight:700;font-size:14px">${esc(c.full_name)}${d===0?' <span class="tag tag-orange" style="margin-left:6px">Hoy</span>':''}</div>
+          <div style="font-size:12px;color:var(--muted);font-weight:500">${esc(cuando)}${cumple>0&&cumple<110?' · cumple '+cumple:''}</div></div>
+        ${d>DIAS?'<span style="font-size:12px;color:var(--muted);font-weight:600">falta</span>'
+          :(c.phone?`<a class="btn btn-xs" style="background:#FEF3C7;color:#B45309;text-decoration:none" target="_blank" href="${waLink(c.phone,msg)}">WhatsApp</a>`:'<span class="tag tag-gray">sin teléfono</span>')}</div>`;
+      }).join('')+'<p style="font-size:11px;color:var(--muted);font-weight:500;margin-top:8px">El botón de WhatsApp aparece cuando ya falta poco, con el mensaje escrito. Si quieres mandar también una imagen de felicitación, adjúntala tú en el chat.</p>'
+      :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Todavía no hay cumpleaños que mostrar: ninguna ficha tiene fecha de nacimiento. Se agrega en Clientes → abrir la ficha → Editar.</div>';
     }
     // solicitudes hechas desde la app del cliente
     try{
