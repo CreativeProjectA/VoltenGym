@@ -2106,8 +2106,18 @@ const Pos={
     let list=this.custForBranch();
     if(q)list=list.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q));
     if(!list.length)return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
-    return `<table><thead><tr><th>Cliente</th><th>Teléfono</th><th>App</th><th>Membresía</th><th>Alta</th><th></th></tr></thead><tbody>${
-      list.slice(0,60).map(c=>`<tr>
+    // LOS MÁS NUEVOS PRIMERO. Antes salían por orden alfabético y solo los
+    // primeros 60: con miles de clientes, alguien recién dado de alta (ej.
+    // "Panchito") quedaba en el lugar 2000 y parecía que no se había guardado.
+    // Ahora el que acabas de crear aparece hasta arriba, que es lo que uno
+    // espera al volver de hacer una venta.
+    const total=list.length;
+    if(!q)list=list.slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+    const TOPE=200;
+    const aviso=total>TOPE?`<div style="font-size:12.5px;color:var(--muted);font-weight:600;margin-bottom:10px">Mostrando los ${TOPE} más recientes de <b>${total}</b> clientes${q?'':' — usa el buscador para encontrar a cualquiera'}.</div>`
+      :`<div style="font-size:12.5px;color:var(--muted);font-weight:600;margin-bottom:10px">${total} cliente${total===1?'':'s'}${q?' encontrado'+(total===1?'':'s'):''}.</div>`;
+    return aviso+`<table><thead><tr><th>Cliente</th><th>Teléfono</th><th>App</th><th>Membresía</th><th>Alta</th><th></th></tr></thead><tbody>${
+      list.slice(0,TOPE).map(c=>`<tr>
         <td style="cursor:pointer" onclick="Pos.openCustomer('${c.id}')"><div style="display:flex;align-items:center;gap:10px;">${this.custAvatar(c,32)}<b>${esc(c.full_name)}</b>${this.rolTag(c)}${c.suspended?' <span class="tag tag-red">Suspendido</span>':''}${c.family_id?' <span class="tag tag-orange">'+esc((this.families.find(f=>f.id===c.family_id)||{}).name||'Familia')+'</span>':''}</div></td>
         <td>${esc(c.phone||'—')}</td>
         <td>${c.profile_id?'<span class="tag tag-green">Vinculada</span>':'<span class="tag tag-gray">—</span>'}</td>
@@ -4553,6 +4563,19 @@ const Pos={
       <p style="font-size:12px;color:var(--muted);font-weight:500;margin-top:14px">Los <b>coaches</b> que des de alta aquí aparecen automáticamente en "Elige tu entrenador" dentro de la app, en su sucursal. El <b>contador</b> solo puede ver Reportes. Para borrar una cuenta por completo se hace desde el panel de Supabase — aquí puedes quitarle el rol.</p>
     </div>`;
   },
+  // Quiénes del personal YA tienen ficha, preguntado DIRECTO al servidor.
+  // Es una consulta chica (16 filas) y confiable, en vez de rastrear la lista
+  // de miles de clientes que a veces llega incompleta y hacía que el botón
+  // dijera "Dar de alta" a quien ya tenía acceso.
+  async cargarFichasStaff(){
+    if(!navigator.onLine)return;
+    const ids=this.appProfiles.filter(p=>p.role&&p.role!=='member').map(p=>p.id);
+    if(!ids.length)return;
+    try{
+      const {data}=await sb.from('customers').select('id,profile_id').in('profile_id',ids);
+      if(data)this.staffFichas=new Set(data.map(c=>c.profile_id));
+    }catch(e){}
+  },
   staffRows(){
     const staff=this.appProfiles.filter(p=>p.role&&p.role!=='member');
     return staff.map(p=>{
@@ -4561,7 +4584,9 @@ const Pos={
       // ¿ya tiene ficha para poder registrar su cara/huella? El personal NO
       // pasa por "Nuevo cliente" ni compra nada, así que sin esto no había
       // forma de darle de alta para el Face ID.
-      const yaTieneFicha=this.customers.some(c=>c.profile_id===p.id);
+      // La verdad viene de staffFichas (consulta directa). Solo si esa consulta
+      // aún no ha corrido se mira la lista en memoria, y nunca al revés.
+      const yaTieneFicha=this.staffFichas?this.staffFichas.has(p.id):this.customers.some(c=>c.profile_id===p.id);
       return `<tr>
       <td style="width:46px"><div class="av2" style="width:36px;height:36px;border-radius:50%;background:#E5E7EB;color:#6B7280;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;overflow:hidden;">${p.avatar_url?'<img src="'+esc(p.avatar_url)+'" style="width:100%;height:100%;object-fit:cover" alt="">':esc((p.full_name||'?')[0].toUpperCase())}</div></td>
       <td style="font-weight:700">${esc(p.full_name||'—')}</td>
@@ -4578,7 +4603,21 @@ const Pos={
   },
   async enableStaffFacial(profileId){
     const p=this.appProfiles.find(x=>x.id===profileId);if(!p)return;
-    if(this.customers.some(c=>c.profile_id===profileId)){toast('Ya tiene ficha para acceso biométrico.',true);return;}
+    // CONSULTA DIRECTA AL SERVIDOR, no a la lista en memoria. Con miles de
+    // clientes esa lista a veces llegaba incompleta, el botón decía "Dar de
+    // alta" a quien YA tenía ficha, y al picarlo se creaba una ficha
+    // DUPLICADA sin cuenta ligada. El aparato encontraba la duplicada, no
+    // sabía que era personal, le pedía membresía y lo DEJABA FUERA.
+    if(navigator.onLine){
+      const {data:yaHay}=await sb.from('customers').select('id').eq('profile_id',profileId).limit(1);
+      if(yaHay&&yaHay.length){
+        if(!this.customers.some(c=>c.id===yaHay[0].id)){
+          const {data:full}=await sb.from('customers').select('*').eq('id',yaHay[0].id).maybeSingle();
+          if(full)this.customers.push(full);
+        }
+        toast('Ya tiene ficha para acceso biométrico.',true);this.after_staff();return;
+      }
+    }else{toast('Necesitas internet para dar de alta.',true);return;}
     const sbr=this.staffBranches.find(x=>x.staff_id===profileId);
     const bId=sbr?sbr.branch_id:(this.branch?this.branch.id:(this.branches[0]&&this.branches[0].id));
     const payload={id:uuid(),full_name:p.full_name||p.email||'Personal',email:p.email||null,
@@ -4607,6 +4646,7 @@ const Pos={
       const {data:profs}=await sb.from('profiles').select('*');
       if(profs){this.appProfiles=profs;cset('appProfiles',profs);}
     }catch(e){}
+    await this.cargarFichasStaff();   // quién tiene ficha, preguntado al servidor
     const tb=$('staff-tbody');if(tb)tb.innerHTML=this.staffRows();
   },
   staffEditModal(id){
@@ -4650,7 +4690,15 @@ const Pos={
   // vinculado por error en la sucursal equivocada, como pasó con Mafer).
   async loadStaffBioPanel(profileId){
     const el=$('se-bio-panel');if(!el)return;
-    const custIds=this.customers.filter(c=>c.profile_id===profileId).map(c=>c.id);
+    // Las fichas se preguntan AL SERVIDOR: buscarlas en la lista de miles de
+    // clientes fallaba cuando esa lista llegaba incompleta, y el panel decía
+    // "sin ficha" a gente que sí tenía su acceso puesto.
+    let fichas=[];
+    try{
+      const {data}=await sb.from('customers').select('id,face_id,fingerprint_id,branch_id').eq('profile_id',profileId);
+      fichas=data||[];
+    }catch(e){fichas=this.customers.filter(c=>c.profile_id===profileId);}
+    const custIds=fichas.map(c=>c.id);
     if(!custIds.length){el.innerHTML='Sin ficha para biometría todavía — usa "Dar de alta cara/huella" primero.';return;}
     try{
       const {data}=await sb.from('device_enrollments').select('id,branch_id,device_user_id,kind,assigned_to,first_seen_at').in('assigned_to',custIds).not('assigned_to','is',null).order('first_seen_at',{ascending:false});
@@ -4664,7 +4712,16 @@ const Pos={
       });
       el.innerHTML=this.branches.map(b=>{
         const enBranch=rows.filter(r=>r.branch_id===b.id);
-        if(!enBranch.length)return `<div class="row-line"><span class="k">${esc(b.name)}</span><span style="color:var(--muted);font-size:12.5px">Sin registrar aquí</span></div>`;
+        if(!enBranch.length){
+          // Puede tener el código guardado en su ficha aunque no exista la fila
+          // de "registro del aparato" (fichas viejas, o el número se puso a
+          // mano). Con eso el aparato SÍ lo deja entrar, así que hay que
+          // mostrarlo — antes decía "sin registrar" y parecía que no tenía
+          // acceso cuando sí lo tenía. Pasó con Clarissa.
+          const f=fichas.find(x=>x.branch_id===b.id&&(x.face_id!=null||x.fingerprint_id!=null));
+          if(f)return `<div class="row-line"><span class="k">${esc(b.name)}</span><span class="tag tag-green">${f.face_id!=null?'Facial':'Huella'} · código ${esc(f.face_id!=null?f.face_id:f.fingerprint_id)}</span></div>`;
+          return `<div class="row-line"><span class="k">${esc(b.name)}</span><span style="color:var(--muted);font-size:12.5px">Sin registrar aquí</span></div>`;
+        }
         return `<div class="row-line"><span class="k">${esc(b.name)}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${enBranch.map(r=>`
           <span class="tag tag-green" style="display:inline-flex;align-items:center;gap:6px">${r.kind==='qr'?'QR':'Facial/Huella'} · código ${esc(r.device_user_id)}
             <a onclick="Pos.unlinkStaffBio('${r.id}','${r.assigned_to}','${r.kind}','${esc(r.device_user_id)}','${profileId}')" style="cursor:pointer;font-weight:800;color:#15803D" title="Quitar este código">✕</a>
