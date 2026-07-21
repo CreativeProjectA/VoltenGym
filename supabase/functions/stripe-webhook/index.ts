@@ -76,6 +76,32 @@ Deno.serve(async (req) => {
     const H = { apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY, 'Content-Type': 'application/json' };
     const amount = (session.amount_total || 0) / 100;
 
+    // La ficha del POS de este socio (si ya tiene). Sirve para que la venta
+    // quede a su nombre y la cajera lo vea en su historial.
+    let custId: string | null = null;
+    try {
+      const cRes = await fetch(SB_URL + '/rest/v1/customers?profile_id=eq.' + memberId + '&select=id&limit=1', { headers: H });
+      const cRows = await cRes.json();
+      if (cRows && cRows[0]) custId = cRows[0].id;
+    } catch (_) { /* si falla, la venta se registra sin ficha */ }
+
+    // Deja registrada la VENTA de lo que se pagó en línea. Antes solo se
+    // activaba la membresía o el coach: el dinero de Stripe entraba de verdad
+    // pero no aparecía en Ventas, ni en los reportes, ni en el corte, así que
+    // al dueño le faltaba ese ingreso en sus números.
+    const registrarVenta = async (concepto: string) => {
+      try {
+        await fetch(SB_URL + '/rest/v1/sales', {
+          method: 'POST', headers: { ...H, Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            branch_id: branchId, customer_id: custId, member_id: memberId,
+            payment_method: 'card', total: amount, concept: concepto,
+            created_at: new Date().toISOString(),
+          }),
+        });
+      } catch (_) { /* nunca debe tumbar el webhook: el pago ya se hizo */ }
+    };
+
     if (meta.kind === 'plan' && meta.plan_id) {
       const planRes = await fetch(SB_URL + '/rest/v1/plans?id=eq.' + meta.plan_id + '&select=duration_days', { headers: H });
       const planRows = await planRes.json();
@@ -96,6 +122,13 @@ Deno.serve(async (req) => {
           price_paid: amount, payment_method: 'stripe',
         }),
       });
+      let nombrePlan = 'Membresía';
+      try {
+        const pRes = await fetch(SB_URL + '/rest/v1/plans?id=eq.' + meta.plan_id + '&select=name', { headers: H });
+        const pRows = await pRes.json();
+        if (pRows && pRows[0] && pRows[0].name) nombrePlan = 'Membresía ' + pRows[0].name;
+      } catch (_) {}
+      await registrarVenta(nombrePlan + ' (pagada en línea)');
     } else if (meta.kind === 'coach' && meta.coach_id) {
       const days = Number(meta.coach_days) || 30;
       const until = dISO(new Date(Date.now() + days * 86400000));
@@ -108,6 +141,13 @@ Deno.serve(async (req) => {
         method: 'PATCH', headers: { ...H, Prefer: 'return=minimal' },
         body: JSON.stringify({ coach_id: meta.coach_id, coach_until: until, coach_cancelled: false }),
       });
+      let nombreCoach = 'Coach';
+      try {
+        const cRes2 = await fetch(SB_URL + '/rest/v1/profiles?id=eq.' + meta.coach_id + '&select=full_name', { headers: H });
+        const cRows2 = await cRes2.json();
+        if (cRows2 && cRows2[0] && cRows2[0].full_name) nombreCoach = 'Coach ' + cRows2[0].full_name;
+      } catch (_) {}
+      await registrarVenta(nombreCoach + ' · ' + days + ' días (pagado en línea)');
     }
 
     return new Response('ok', { status: 200 });

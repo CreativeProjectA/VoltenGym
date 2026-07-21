@@ -697,9 +697,38 @@ const Pos={
       .filter(p=>!byCoach[p.id]||!b||byCoach[p.id].indexOf(b)!==-1);
   },
   // clientes visibles: la sucursal en foco (o todas si el admin eligió "Todas")
+  // ¿Esta ficha es de un EMPLEADO? Al personal se le crea ficha nada más para
+  // poder guardarle su cara/huella ("Dar de alta cara/huella" en Personal), no
+  // porque sea cliente. Sin esto se colaban en la lista de Clientes, en los
+  // conteos, en "por vencer" y en cumpleaños — llegaron a ser 9 de 21.
+  // Cómo distinguir a dos personas que se llaman igual (pasa seguido: tres
+  // "Luis" con el mismo apellido). Se enseña lo primero que sirva para
+  // identificarlo: teléfono, correo, o su número de cuenta de la app.
+  quienEs(c){
+    if(!c)return '';
+    if(c.phone)return 'Tel. '+c.phone;
+    if(c.email)return c.email;
+    const num=(c.profile_id||c.id||'').slice(0,8).toUpperCase();
+    return num?'Nº de cuenta '+num:'sin teléfono ni correo';
+  },
+  // Si la ficha es de un empleado, se marca con su puesto para no confundirlo
+  // con un cliente que se llame parecido.
+  rolTag(c){
+    if(!this.esPersonal(c))return '';
+    const p=this.appProfiles.find(x=>x.id===c.profile_id);
+    return '<span class="tag tag-dark" style="margin-right:6px">'+esc(ROLE_LABEL[p.role]||p.role)+'</span>';
+  },
+  esPersonal(c){
+    if(!c||!c.profile_id)return false;
+    const p=this.appProfiles.find(x=>x.id===c.profile_id);
+    return !!(p&&p.role&&p.role!=='member');
+  },
+  // Clientes de la sucursal en foco, SIN el personal. Para Accesos se usa
+  // this.customers directo, porque ahí el personal sí tiene que aparecer.
   custForBranch(){
     const b=this.viewBr();
-    return b?this.customers.filter(c=>c.branch_id===b):this.customers;
+    const base=this.customers.filter(c=>!this.esPersonal(c));
+    return b?base.filter(c=>c.branch_id===b):base;
   },
   // ¿este coach atiende en la sucursal actual? (sin sucursal asignada = en todas)
   coachInBranch(pid){
@@ -3054,11 +3083,11 @@ const Pos={
       const matches=this.customers.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q));
       if(matches.length===1)cust=matches[0];
       else if(matches.length>1){
-        $('scan-picker').innerHTML='<div class="panel">'+matches.slice(0,5).map(c=>`
+        $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Hay varias personas con ese nombre — fíjate en el teléfono o el número de cuenta</div>'+matches.slice(0,6).map(c=>`
           <button class="cust-row" onclick="Pos.doCheckin('${c.id}','manual');$('scan-picker').innerHTML=''">
-            <div class="av2">${esc((c.full_name||'?')[0].toUpperCase())}</div>
-            <div class="cd"><b>${esc(c.full_name)}</b><span>${esc(c.phone||'')}</span></div>
-            ${this.membershipTag(c)}
+            ${this.custAvatar(c,34)}
+            <div class="cd"><b>${esc(c.full_name)}</b><span>${esc(this.quienEs(c))}</span></div>
+            ${this.rolTag(c)}${this.membershipTag(c)}
           </button>`).join('')+'</div>';
         return;
       }
@@ -3071,10 +3100,11 @@ const Pos={
       const staffs=this.appProfiles.filter(x=>x.role&&x.role!=='member'&&(x.full_name||'').toLowerCase().includes(q));
       if(staffs.length===1){this.doStaffCheckin(staffs[0]);return;}
       if(staffs.length>1){
-        $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Varios empleados coinciden — ¿quién es?</div>'+staffs.slice(0,6).map(s=>`
+        $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Varios empleados coinciden — fíjate en el puesto y el correo</div>'+staffs.slice(0,6).map(s=>`
           <button class="cust-row" onclick="Pos.pickStaffCheckin('${s.id}')">
-            <div class="av2">${esc((s.full_name||'?')[0].toUpperCase())}</div>
-            <div class="cd"><b>${esc(s.full_name)}</b><span>${esc(ROLE_LABEL[s.role]||s.role)}</span></div>
+            <div class="av2">${s.avatar_url?'<img src="'+esc(s.avatar_url)+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">':esc((s.full_name||'?')[0].toUpperCase())}</div>
+            <div class="cd"><b>${esc(s.full_name)}</b><span>${esc(s.email||'sin correo')}</span></div>
+            <span class="tag tag-dark" style="margin-right:6px">${esc(ROLE_LABEL[s.role]||s.role)}</span>
             <span class="tag tag-orange">Es este</span>
           </button>`).join('')+'</div>';
         return;
