@@ -331,6 +331,14 @@ const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').r
 const uuid=()=>crypto.randomUUID();
 const dISO=(d)=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
 const todayISO=()=>dISO(new Date());
+// Convierte una fecha "YYYY-MM-DD" (la que ve el usuario, en su hora LOCAL) al
+// instante UTC real de inicio/fin de ESE día local. Sin esto, un filtro de
+// "hoy" armado como texto ("...T00:00:00"/"...T23:59:59") se interpreta como
+// UTC — y como México es UTC-6, cualquier acceso o venta de la tarde/noche cae
+// ya en el día siguiente en UTC y desaparece del reporte de "hoy" (bug real:
+// confirmado con accesos de las 7pm que no salían en Historial).
+const localDayStart=(ymd)=>{const[y,m,d]=ymd.split('-').map(Number);return new Date(y,m-1,d,0,0,0,0).toISOString();};
+const localDayEnd=(ymd)=>{const[y,m,d]=ymd.split('-').map(Number);return new Date(y,m-1,d,23,59,59,999).toISOString();};
 const fdate=(d)=>d?new Date(d.length===10?d+'T12:00:00':d).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}):'—';
 const ftime=(d)=>d?new Date(d).toLocaleTimeString('es-MX',{hour:'numeric',minute:'2-digit'}):'—';
 const daysLeft=(end)=>Math.ceil((new Date(end+'T23:59:59')-new Date())/864e5);
@@ -747,7 +755,7 @@ const Pos={
     const noShift=!this.shift;
     try{
       let q=sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy').order('created_at',{ascending:false});
-      if(noShift){q=q.gte('created_at',todayISO()+'T00:00:00');if(this.branch)q=q.eq('branch_id',this.branch.id);}
+      if(noShift){q=q.gte('created_at',localDayStart(todayISO()));if(this.branch)q=q.eq('branch_id',this.branch.id);}
       else q=q.eq('shift_id',this.shift.id);
       const {data:sv}=await q;
       sales=sv||[];cset('shift_sales',sales);
@@ -817,7 +825,7 @@ const Pos={
     if(navigator.onLine){
       try{
         const bId=this.branch?this.branch.id:null;
-        let q=sb.from('checkins').select('id').eq('granted',true).is('checked_out_at',null).gte('created_at',todayISO()+'T00:00:00');
+        let q=sb.from('checkins').select('id').eq('granted',true).is('checked_out_at',null).gte('created_at',localDayStart(todayISO()));
         if(bId)q=q.eq('branch_id',bId);
         const {data:openOnes}=await q;
         if(openOnes&&openOnes.length){
@@ -1101,7 +1109,7 @@ const Pos={
     const bId=this.branch?this.branch.id:null;
     let CI=[];
     try{
-      let q=sb.from('checkins').select('*').gte('created_at',todayISO()+'T00:00:00');
+      let q=sb.from('checkins').select('*').gte('created_at',localDayStart(todayISO()));
       if(bId)q=q.eq('branch_id',bId);
       const {data}=await q;CI=data||[];cset('today_ci',CI);
     }catch(e){CI=cget('today_ci')||[];}
@@ -2649,12 +2657,12 @@ const Pos={
   async loadAccess(){
     const bId=this.viewBr();
     try{
-      let q=sb.from('checkins').select('*').gte('created_at',this.accFrom+'T00:00:00').lte('created_at',this.accTo+'T23:59:59').order('created_at',{ascending:false}).limit(2000);
+      let q=sb.from('checkins').select('*').gte('created_at',localDayStart(this.accFrom)).lte('created_at',localDayEnd(this.accTo)).order('created_at',{ascending:false}).limit(2000);
       if(bId)q=q.eq('branch_id',bId);
       const {data}=await q;this.accHist=data||[];cset('acc_hist',this.accHist);
     }catch(e){this.accHist=cget('acc_hist')||[];}
     try{
-      let q2=sb.from('checkins').select('*').gte('created_at',todayISO()+'T00:00:00').eq('granted',true).is('checked_out_at',null).order('created_at',{ascending:false});
+      let q2=sb.from('checkins').select('*').gte('created_at',localDayStart(todayISO())).eq('granted',true).is('checked_out_at',null).order('created_at',{ascending:false});
       if(bId)q2=q2.eq('branch_id',bId);
       const {data:d2}=await q2;
       // Sin lector de salida (el torniquete deja salir libre, sin escanear),
@@ -3694,13 +3702,13 @@ const Pos={
     const bId=this.branch?this.branch.id:null;
     let S=[],SU=[],SH=[];
     try{
-      let q=sb.from('sales').select('*').eq('sold_by',emp).gte('created_at',from+'T00:00:00').lte('created_at',to+'T23:59:59').order('created_at',{ascending:false});
+      let q=sb.from('sales').select('*').eq('sold_by',emp).gte('created_at',localDayStart(from)).lte('created_at',localDayEnd(to)).order('created_at',{ascending:false});
       if(bId)q=q.eq('branch_id',bId);
       const {data}=await q;S=data||[];
       let q2=sb.from('subscriptions').select('*').eq('sold_by',emp).gte('start_date',from).lte('start_date',to).order('start_date',{ascending:false});
       if(bId)q2=q2.eq('branch_id',bId);
       const {data:d2}=await q2;SU=d2||[];
-      let q3=sb.from('cash_shifts').select('*').eq('staff_id',emp).gte('opened_at',from+'T00:00:00').lte('opened_at',to+'T23:59:59').order('opened_at',{ascending:false});
+      let q3=sb.from('cash_shifts').select('*').eq('staff_id',emp).gte('opened_at',localDayStart(from)).lte('opened_at',localDayEnd(to)).order('opened_at',{ascending:false});
       if(bId)q3=q3.eq('branch_id',bId);
       const {data:d3}=await q3;SH=d3||[];
     }catch(e){box.innerHTML='Sin conexión — inténtalo con internet.';return;}
