@@ -787,7 +787,9 @@ const Pos={
     // las de un turno propio que no existe.
     const noShift=!this.shift;
     try{
-      let q=sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy').order('created_at',{ascending:false});
+      // is('cancelled_at',null): una venta cancelada no entra al corte ni a
+      // las tarjetas de Inicio — si no, la caja pediría un dinero que se devolvió.
+      let q=sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy').is('cancelled_at',null).order('created_at',{ascending:false});
       if(noShift){q=q.gte('created_at',localDayStart(todayISO()));if(this.branch)q=q.eq('branch_id',this.branch.id);}
       else q=q.eq('shift_id',this.shift.id);
       const {data:sv}=await q;
@@ -1035,15 +1037,18 @@ const Pos={
   subsOf(c){ // todas las subscripciones de un cliente (por ficha o por cuenta app)
     return this.subs.filter(s=>(c.id&&s.customer_id===c.id)||(c.profile_id&&s.member_id===c.profile_id));
   },
+  // Una membresía CONGELADA (frozen_at) no cuenta como vigente en ningún
+  // lado: no abre la puerta ni se muestra como activa. Sus días no se
+  // pierden, se le devuelven al reactivarla.
   bestSub(c){
-    const list=this.subsOf(c).filter(s=>s.status!=='canceled');
+    const list=this.subsOf(c).filter(s=>s.status!=='canceled'&&!s.frozen_at);
     if(!list.length)return null;
     return list.reduce((a,b)=>a.end_date>b.end_date?a:b);
   },
   // Membresía SOLO válida en la sucursal donde se compró — un cliente que pagó
   // en Gómez Morín no puede entrar con esa membresía en Tres Cantos.
   bestSubForBranch(c,branchId){
-    const list=this.subsOf(c).filter(s=>s.status!=='canceled'&&s.branch_id===branchId);
+    const list=this.subsOf(c).filter(s=>s.status!=='canceled'&&!s.frozen_at&&s.branch_id===branchId);
     if(!list.length)return null;
     return list.reduce((a,b)=>a.end_date>b.end_date?a:b);
   },
@@ -1549,6 +1554,119 @@ const Pos={
     const bc=$('btn-cobrar');if(bc)bc.disabled=!(r>0);
   },
 
+  /* ── CONGELAR / REACTIVAR MEMBRESÍA ─────────────────────────────────
+     Para vacaciones o lesión: se pausa la vigencia y no se pierden los días
+     pagados. Mientras está congelada NO da acceso (bestSubForBranch la
+     ignora). Al reactivar, los días que estuvo detenida se le suman a la
+     fecha de vencimiento. */
+  async freezeSub(subId,custId){
+    if(!navigator.onLine){toast('Necesitas internet para congelar una membresía.',true);return;}
+    if(!confirm('¿Congelar esta membresía?\n\nDeja de correr la vigencia y NO va a poder entrar hasta que la reactives. Al reactivarla se le devuelven los días que estuvo congelada.'))return;
+    const {error}=await sb.from('subscriptions').update({frozen_at:new Date().toISOString()}).eq('id',subId);
+    if(error){toast(/column/i.test(error.message||'')?'Falta correr pos_migration26.sql en Supabase.':'Error: '+error.message,true);return;}
+    const s=this.subs.find(x=>x.id===subId);if(s)s.frozen_at=new Date().toISOString();cset('subs',this.subs);
+    toast('Membresía congelada ✓ — no podrá entrar hasta reactivarla');
+    this.openCustomer(custId);
+  },
+  async unfreezeSub(subId,custId){
+    if(!navigator.onLine){toast('Necesitas internet para reactivar una membresía.',true);return;}
+    const s=(this.subs||[]).find(x=>x.id===subId)||{};
+    let cong=s.frozen_at;
+    if(!cong){
+      try{const {data}=await sb.from('subscriptions').select('frozen_at,frozen_days,end_date').eq('id',subId).maybeSingle();if(data){cong=data.frozen_at;s.frozen_days=data.frozen_days;s.end_date=data.end_date;}}catch(e){}
+    }
+    if(!cong){toast('Esa membresía no está congelada.',true);return;}
+    // días completos que estuvo detenida (mínimo 1 para que congelar y
+    // reactivar el mismo día no le quite nada)
+    const dias=Math.max(1,Math.round((Date.now()-new Date(cong).getTime())/864e5));
+    const nuevoFin=new Date(new Date(s.end_date+'T12:00:00').getTime()+dias*864e5);
+    const patch={frozen_at:null,frozen_days:(Number(s.frozen_days)||0)+dias,end_date:dISO(nuevoFin)};
+    const {error}=await sb.from('subscriptions').update(patch).eq('id',subId);
+    if(error){toast('Error: '+error.message,true);return;}
+    Object.assign(s,patch);cset('subs',this.subs);
+    toast('Reactivada ✓ — se le devolvieron '+dias+' día'+(dias===1?'':'s')+', ahora vence el '+fdate(patch.end_date));
+    this.openCustomer(custId);
+  },
+  cancelSubModal(subId,custId){
+    openModal(`
+      <h3>Cancelar esta membresía</h3>
+      <p style="font-size:13.5px;color:#1F2937;font-weight:500;line-height:1.55;margin-bottom:14px">
+        Deja de ser válida de inmediato y el cliente ya no va a poder entrar con ella. No se borra: queda marcada como cancelada.
+        Si además hay que devolverle dinero, eso se hace a mano.
+      </p>
+      <div class="field"><label>¿Por qué se cancela?</label>
+        <input class="inp" id="csub-reason" placeholder="Ej. se vendió el plan equivocado"></div>
+      <button class="btn btn-primary btn-block" style="background:var(--red)" onclick="Pos.doCancelSub('${subId}','${custId}')">Sí, cancelar la membresía</button>
+      <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" onclick="closeModal()">No, dejarla así</button>
+    `);
+    setTimeout(()=>{const e=$('csub-reason');if(e)e.focus();},50);
+  },
+  async doCancelSub(subId,custId){
+    if(!navigator.onLine){toast('Necesitas internet para cancelar una membresía.',true);return;}
+    const {error}=await sb.from('subscriptions').update({status:'canceled'}).eq('id',subId);
+    if(error){toast('Error: '+error.message,true);return;}
+    const s=this.subs.find(x=>x.id===subId);if(s)s.status='canceled';cset('subs',this.subs);
+    closeModal();toast('Membresía cancelada ✓');
+    this.openCustomer(custId);
+  },
+
+  /* ── CANCELAR UNA VENTA MAL COBRADA ─────────────────────────────────
+     No se borra nada: la venta se marca cancelada con motivo y quién la
+     canceló, para que quede el rastro. Al cancelar se deshacen sus efectos:
+     el stock de los productos regresa, y si la venta generó una membresía,
+     esa membresía se cancela. La venta cancelada deja de contar en la caja
+     y en los reportes. Solo admin y encargado pueden hacerlo. */
+  cancelSaleModal(saleId,custId){
+    const t=(this._custTickets||[]).find(x=>x.id===saleId);
+    openModal(`
+      <h3>Cancelar esta venta</h3>
+      <p class="msub">${t?esc(t.concept||'')+' · '+money(t.total):''}</p>
+      <p style="font-size:13.5px;color:#1F2937;font-weight:500;line-height:1.55;margin-bottom:14px">
+        Se va a deshacer: el stock de los productos regresa al inventario y, si esta venta activó una membresía, esa membresía se cancela.
+        La venta no se borra, queda marcada como cancelada y deja de contar en la caja y en los reportes.
+        <b>El dinero se devuelve a mano</b>, el sistema no lo hace por ti.
+      </p>
+      <div class="field"><label>¿Por qué se cancela?</label>
+        <input class="inp" id="cs-reason" placeholder="Ej. se cobró el plan equivocado" onkeydown="if(event.key==='Enter')Pos.doCancelSale('${saleId}','${custId}')"></div>
+      <button class="btn btn-primary btn-block" style="background:var(--red)" onclick="Pos.doCancelSale('${saleId}','${custId}')">Sí, cancelar la venta</button>
+      <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" onclick="closeModal()">No, dejarla como está</button>
+    `);
+    setTimeout(()=>{const e=$('cs-reason');if(e)e.focus();},50);
+  },
+  async doCancelSale(saleId,custId){
+    if(!navigator.onLine){toast('Necesitas internet para cancelar una venta.',true);return;}
+    const motivo=($('cs-reason')?$('cs-reason').value.trim():'');
+    if(!motivo){toast('Escribe por qué se cancela — queda en el registro.',true);return;}
+    const bId=this.branch?this.branch.id:null;
+    // 1) marcar la venta como cancelada (si esto falla, no se toca nada más)
+    const {error}=await sb.from('sales').update({cancelled_at:new Date().toISOString(),cancelled_by:this.user.id,cancel_reason:motivo}).eq('id',saleId);
+    if(error){toast(/column/i.test(error.message||'')?'Falta correr pos_migration26.sql en Supabase.':'Error: '+error.message,true);return;}
+    // 2) devolver el stock de los productos de esa venta
+    let devueltos=0;
+    try{
+      const {data:items}=await sb.from('sale_items').select('product_id,quantity').eq('sale_id',saleId);
+      for(const it of (items||[])){
+        const prod=this.products.find(p=>p.id===it.product_id);
+        if(!prod||prod.type==='membership'||prod.type==='service')continue;
+        await Q.stockDelta(bId,it.product_id,Number(it.quantity)||0,'cancelación de venta',this.user.id);
+        const st=this.stock.find(x=>x.product_id===it.product_id&&x.branch_id===bId);
+        if(st)st.qty=Number(st.qty)+(Number(it.quantity)||0);
+        devueltos++;
+      }
+      cset('stock',this.stock);
+    }catch(e){}
+    // 3) ¿traía membresía? La base NO guarda de qué venta salió cada
+    // membresía, así que adivinarla podría cancelar la equivocada (por
+    // ejemplo si el cliente compró dos el mismo día). En vez de eso se avisa
+    // y se cancela a mano desde la lista de membresías, que está ahí abajo.
+    const t=(this._custTickets||[]).find(x=>x.id===saleId);
+    const traiaMembresia=/membres/i.test((t&&t.concept)||'');
+    closeModal();
+    toast('Venta cancelada ✓'+(devueltos?' · '+devueltos+' producto'+(devueltos===1?'':'s')+' de vuelta al inventario':''));
+    this.openCustomer(custId);
+    if(traiaMembresia)setTimeout(()=>toast('Ojo: esta venta incluía una membresía. Si también hay que quitarla, cancélala en la lista de Membresías de su ficha.',true),1200);
+  },
+
   async checkout(){
     if(this._checkingOut)return; this._checkingOut=true;   // candado: un solo cobro aunque piquen doble
     this._acctCreated=null;
@@ -1997,9 +2115,25 @@ const Pos={
         </div>`).join('')
       }</div>`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin pagos registrados todavía.</div>'}
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Historial de membresías</div>
-      ${subs.length?`<table><thead><tr><th>Plan</th><th>Vigencia</th><th>Pagó</th><th>Estado</th></tr></thead><tbody>${
-        subs.map(s=>`<tr><td style="font-weight:700">${esc(this.planName(s.plan_id))}</td><td>${fdate(s.start_date)} → ${fdate(s.end_date)}</td><td>${s.price_paid!=null?money(s.price_paid):'—'}</td><td>${daysLeft(s.end_date)>=0&&s.status!=='canceled'?'<span class="tag tag-green">Vigente</span>':'<span class="tag tag-gray">Vencida</span>'}</td></tr>`).join('')
-      }</tbody></table>`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin membresías todavía.</div>'}
+      ${subs.length?`<table><thead><tr><th>Plan</th><th>Vigencia</th><th>Pagó</th><th>Estado</th><th></th></tr></thead><tbody>${
+        subs.map(s=>{
+          const cancelada=s.status==='canceled';
+          const congelada=!!s.frozen_at;
+          const vigente=daysLeft(s.end_date)>=0&&!cancelada;
+          const estado=cancelada?'<span class="tag tag-red">Cancelada</span>'
+            :(congelada?'<span class="tag tag-orange">Congelada</span>'
+            :(vigente?'<span class="tag tag-green">Vigente</span>':'<span class="tag tag-gray">Vencida</span>'));
+          return `<tr><td style="font-weight:700">${esc(this.planName(s.plan_id))}</td>
+          <td>${fdate(s.start_date)} → ${fdate(s.end_date)}${congelada?'<div style="font-size:11.5px;color:#B45309;font-weight:700">congelada desde el '+fdate(s.frozen_at)+'</div>':''}${Number(s.frozen_days)>0&&!congelada?'<div style="font-size:11.5px;color:var(--muted);font-weight:600">+'+s.frozen_days+' días recuperados</div>':''}</td>
+          <td>${s.price_paid!=null?money(s.price_paid):'—'}</td>
+          <td>${estado}</td>
+          <td style="text-align:right;white-space:nowrap">${cancelada||this.role==='cajera'?'':`
+            ${vigente?(congelada
+              ? `<button class="btn-xs btn" style="background:#DCFCE7;color:#15803D" onclick="Pos.unfreezeSub('${s.id}','${c.id}')">Reactivar</button>`
+              : `<button class="btn-xs btn" style="background:#FEF3C7;color:#B45309" onclick="Pos.freezeSub('${s.id}','${c.id}')">Congelar</button>`):''}
+            <button class="btn-xs btn btn-danger" onclick="Pos.cancelSubModal('${s.id}','${c.id}')">Cancelar</button>`}
+          </td></tr>`;}).join('')
+      }</tbody></table>${this.role==='cajera'?'':'<p style="font-size:11.5px;color:var(--muted);font-weight:500;margin-top:8px">Congelar pausa los días (vacaciones, lesión): mientras esté congelada no puede entrar, y al reactivarla se le devuelven los días que estuvo detenida.</p>'}`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin membresías todavía.</div>'}
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 8px">Historial de tickets</div>
       <div id="cust-tickets" style="font-size:13px;color:var(--muted);font-weight:500">Cargando...</div>
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 8px">Últimas visitas</div>
@@ -2007,10 +2141,24 @@ const Pos={
     `,true);
     // tickets del cliente async
     try{
-      const {data:tk}=await sb.from('sales').select('id,total,payment_method,concept,created_at').eq('customer_id',c.id).order('created_at',{ascending:false}).limit(15);
+      const {data:tk}=await sb.from('sales').select('id,total,payment_method,concept,created_at,cancelled_at,cancel_reason').eq('customer_id',c.id).order('created_at',{ascending:false}).limit(15);
       this._custTickets=tk||[];
       const el=$('cust-tickets');
-      if(el)el.innerHTML=(tk&&tk.length)?'<table><thead><tr><th>Fecha</th><th>Qué compró</th><th>Total</th><th>Pago</th><th></th></tr></thead><tbody>'+tk.map(t=>`<tr><td style="color:#3B82F6;font-weight:600">${fdate(t.created_at)} ${ftime(t.created_at)}</td><td style="font-size:12.5px">${esc(t.concept||'—')}</td><td style="font-weight:800;color:#16A34A">${money(t.total)}</td><td>${payTagHtml(t.payment_method)}</td><td>${c.phone?`<a class="btn-xs btn btn-ghost" style="text-decoration:none" target="_blank" href="${waLink(c.phone,'Tu ticket de Volten Gym — '+fdate(t.created_at)+'\\n'+(t.concept||'')+'\\nTotal: '+money(t.total)+'\\nPago: '+(PAY_LABEL[t.payment_method]||'')+'\\n¡Gracias por tu compra! 💪')}">WhatsApp</a>`:''}</td></tr>`).join('')+'</tbody></table>':'Sin tickets todavía.';
+      if(el)el.innerHTML=(tk&&tk.length)?'<table><thead><tr><th>Fecha</th><th>Qué compró</th><th>Total</th><th>Pago</th><th></th></tr></thead><tbody>'+tk.map(t=>{
+        const cancelada=!!t.cancelled_at;
+        // los botones se arman aparte para no anidar plantillas de más
+        const msgTicket='Tu ticket de Volten Gym — '+fdate(t.created_at)+'\n'+(t.concept||'')+'\nTotal: '+money(t.total)+'\nPago: '+(PAY_LABEL[t.payment_method]||'')+'\n¡Gracias por tu compra!';
+        const btnWa=(!cancelada&&c.phone)?'<a class="btn-xs btn btn-ghost" style="text-decoration:none" target="_blank" href="'+waLink(c.phone,msgTicket)+'">WhatsApp</a>':'';
+        const btnCancel=(!cancelada&&this.role!=='cajera')?'<button class="btn-xs btn btn-danger" onclick="Pos.cancelSaleModal(\''+t.id+'\',\''+c.id+'\')">Cancelar</button>':'';
+        const notaCancel=cancelada?'<div style="font-size:11.5px;color:var(--red);font-weight:700">CANCELADA'+(t.cancel_reason?' · '+esc(t.cancel_reason):'')+'</div>':'';
+        return `<tr style="${cancelada?'opacity:.55':''}">
+        <td style="color:#3B82F6;font-weight:600">${fdate(t.created_at)} ${ftime(t.created_at)}</td>
+        <td style="font-size:12.5px">${esc(t.concept||'—')}${notaCancel}</td>
+        <td style="font-weight:800;color:${cancelada?'var(--muted)':'#16A34A'};${cancelada?'text-decoration:line-through':''}">${money(t.total)}</td>
+        <td>${payTagHtml(t.payment_method)}</td>
+        <td style="white-space:nowrap">${btnWa} ${btnCancel}</td></tr>`;}).join('')+'</tbody></table>'
+        +(this.role==='cajera'?'<p style="font-size:11.5px;color:var(--muted);font-weight:500;margin-top:8px">Para cancelar una venta mal cobrada, pídeselo a la encargada o al administrador.</p>':'')
+        :'Sin tickets todavía.';
     }catch(e){const el=$('cust-tickets');if(el)el.textContent='Sin conexión — no se pudo cargar el historial.';}
     // visitas async
     try{
@@ -3606,7 +3754,7 @@ const Pos={
     // ── Ventas e ingresos (últimos 12 meses para el mes, últimos 30 días para el resto) ──
     const from12=new Date(now.getFullYear(),now.getMonth()-11,1);
     let S12=[];
-    try{let q=sb.from('sales').select('total,payment_method,created_at,customer_id').gte('created_at',from12.toISOString());if(bId)q=q.eq('branch_id',bId);const {data}=await q;S12=data||[];}catch(e){}
+    try{let q=sb.from('sales').select('total,payment_method,created_at,customer_id').is('cancelled_at',null).gte('created_at',from12.toISOString());if(bId)q=q.eq('branch_id',bId);const {data}=await q;S12=data||[];}catch(e){}
     const revByMonth=months.map(m=>S12.filter(s=>{const sd=new Date(s.created_at);return sd.getFullYear()===m.getFullYear()&&sd.getMonth()===m.getMonth();}).reduce((a,x)=>a+Number(x.total||0),0));
     const rMax=Math.max(1,...revByMonth);
     $('an-revmonth').innerHTML='<div style="display:flex;align-items:flex-end;gap:4px;height:130px;margin-bottom:8px;">'+
@@ -3784,7 +3932,7 @@ const Pos={
     const bId=(this.reportAllBranches&&['admin','contador'].includes(this.role))?null:(this.branch?this.branch.id:null);
     let S=[],CI=[],SH=[];
     try{
-      let q=sb.from('sales').select('*').gte('created_at',from.toISOString()).order('created_at');
+      let q=sb.from('sales').select('*').is('cancelled_at',null).gte('created_at',from.toISOString()).order('created_at');
       if(bId)q=q.eq('branch_id',bId);
       const {data}=await q;S=data||[];
     }catch(e){}
@@ -3833,7 +3981,7 @@ const Pos={
     // mini-gráfica dentro de la tarjeta + comparación vs período anterior
     try{
       const prevFrom=new Date(from.getTime()-days*864e5);
-      let qp=sb.from('sales').select('total,created_at').gte('created_at',prevFrom.toISOString()).lt('created_at',from.toISOString());
+      let qp=sb.from('sales').select('total,created_at').is('cancelled_at',null).gte('created_at',prevFrom.toISOString()).lt('created_at',from.toISOString());
       if(bId)qp=qp.eq('branch_id',bId);
       const {data:PS}=await qp;
       const prevTotal=(PS||[]).reduce((a,x)=>a+Number(x.total||0),0);
@@ -3933,7 +4081,7 @@ const Pos={
     const bId=this.branch?this.branch.id:null;
     let S=[],SU=[],SH=[];
     try{
-      let q=sb.from('sales').select('*').eq('sold_by',emp).gte('created_at',localDayStart(from)).lte('created_at',localDayEnd(to)).order('created_at',{ascending:false});
+      let q=sb.from('sales').select('*').is('cancelled_at',null).eq('sold_by',emp).gte('created_at',localDayStart(from)).lte('created_at',localDayEnd(to)).order('created_at',{ascending:false});
       if(bId)q=q.eq('branch_id',bId);
       const {data}=await q;S=data||[];
       let q2=sb.from('subscriptions').select('*').eq('sold_by',emp).gte('start_date',from).lte('start_date',to).order('start_date',{ascending:false});
