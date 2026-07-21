@@ -2560,6 +2560,7 @@ const Pos={
     </div>
     <p style="font-size:12px;color:var(--muted);font-weight:500;margin:-8px 0 16px">La cuenta de la app ya se crea sola al cobrar su membresía. Si un cliente antiguo aún no tiene cuenta, vincúlasela desde su ficha en Clientes.</p>
     <div id="device-enroll-panel"></div>
+    <div id="orphan-panel"></div>
     <div id="access-result"></div>
     <div id="scan-picker"></div>
     <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:16px;align-items:start;">
@@ -2589,7 +2590,45 @@ const Pos={
       </div>
     </div>`;
   },
-  async after_access(){const i=$('scan-inp');if(i)i.focus();await this.loadAccess();this.loadPendingEnrollments();},
+  async after_access(){const i=$('scan-inp');if(i)i.focus();await this.loadAccess();this.loadPendingEnrollments();this.loadOrphanEntries();},
+  // Entradas de días ANTERIORES que nunca marcaron salida. Pasa cuando el
+  // torniquete deja salir libre y además no se cerró el turno (que es lo que
+  // normalmente las cierra). Sin esto se quedan colgadas para siempre y no se
+  // puede medir cuánto tiempo se queda la gente. Solo se ofrecen las de días
+  // pasados: las de HOY pueden ser gente que de verdad sigue adentro.
+  async loadOrphanEntries(){
+    const el=$('orphan-panel');if(!el)return;
+    const bId=this.viewBr();
+    try{
+      let q=sb.from('checkins').select('id,created_at,customer_id,member_id').eq('granted',true)
+        .is('checked_out_at',null).lt('created_at',localDayStart(todayISO())).order('created_at',{ascending:false}).limit(200);
+      if(bId)q=q.eq('branch_id',bId);
+      const {data}=await q;
+      this._orphans=data||[];
+      if(!this._orphans.length){el.innerHTML='';return;}
+      const n=this._orphans.length;
+      el.innerHTML=`<div class="panel" style="background:#FFFBEB;border:1px solid #FDE68A;margin-bottom:16px;">
+        <h2 style="font-size:15px">Entradas sin salida de días anteriores (${n})</h2>
+        <div class="psub">Alguien entró y nunca se le registró la salida, casi siempre porque no se cerró el turno ese día. Se les puede poner la salida al final del día en que entraron.</div>
+        <div style="margin-top:10px;font-size:13px;color:var(--muted);font-weight:500">${this._orphans.slice(0,6).map(o=>esc(this.accName(o))+' · '+fdate(o.created_at)).join(' &nbsp;·&nbsp; ')}${n>6?' y '+(n-6)+' más':''}</div>
+        <button class="btn btn-sm btn-primary" style="margin-top:12px" onclick="Pos.closeOrphanEntries()">Cerrar estas ${n} entrada${n===1?'':'s'}</button>
+      </div>`;
+    }catch(e){el.innerHTML='';}
+  },
+  async closeOrphanEntries(){
+    const list=this._orphans||[];if(!list.length)return;
+    if(!confirm('Se les va a poner la salida al final del día en que entraron ('+list.length+' registro'+(list.length===1?'':'s')+'). Es para que el historial quede completo; no afecta ventas ni membresías.'))return;
+    let ok=0;
+    for(const o of list){
+      // salida = fin del día en que entró (no la hora actual, que sería falsa)
+      const fin=new Date(o.created_at);fin.setHours(23,59,59,0);
+      const r=await Q.update('checkins',{id:o.id},{checked_out_at:fin.toISOString()});
+      if(!r.error)ok++;
+      const h=this.accHist.find(x=>x.id===o.id);if(h)h.checked_out_at=fin.toISOString();
+    }
+    toast(ok+' entrada'+(ok===1?'':'s')+' cerrada'+(ok===1?'':'s')+' ✓');
+    this._orphans=[];this.loadOrphanEntries();this.renderAccess();
+  },
   accPreset(days){
     const to=new Date();const from=new Date(Date.now()-(days-1)*864e5);
     this.accFrom=dISO(from);this.accTo=dISO(to);
@@ -2728,12 +2767,24 @@ const Pos={
     if(ci.member_id)return this.profName(ci.member_id);
     return '—';
   },
-  // Método del acceso. El aparato no distingue bien cara de huella (manda casi
-  // todo como "huella" sin importar cuál se usó), así que para biométrico se
-  // muestra una etiqueta combinada en vez de adivinar. QR/manual sí son
-  // confiables tal cual.
+  // Método del acceso. El aparato NO distingue cara de huella: manda todo como
+  // "huella" aunque la persona esté registrada solo con la cara (verificado
+  // contra los datos reales). Por eso el método guardado no sirve, y en su
+  // lugar se deduce de lo que esa persona tiene REGISTRADO en su ficha, que sí
+  // se confirmó a mano al asignarlo:
+  //   solo cara -> Facial · solo huella -> Huella · las dos -> no se puede saber.
+  // QR y manual sí son confiables tal cual.
   accMethod(ci){
-    if(ci.method==='face'||ci.method==='fingerprint')return 'Facial/Huella';
+    if(ci.method==='face'||ci.method==='fingerprint'){
+      const c=ci.customer_id?this.customers.find(x=>x.id===ci.customer_id):null;
+      if(c){
+        const cara=c.face_id!=null&&c.face_id!=='';
+        const huella=c.fingerprint_id!=null&&c.fingerprint_id!=='';
+        if(cara&&!huella)return 'Facial';
+        if(huella&&!cara)return 'Huella';
+      }
+      return 'Facial/Huella';
+    }
     return METHOD_LABEL[ci.method]||ci.method||'—';
   },
   renderAccess(){
@@ -2947,6 +2998,16 @@ const Pos={
   },
   async doCheckin(custId,method){
     const c=this.customers.find(x=>x.id===custId);if(!c)return;
+    // ANTI-REBOTE: dos escaneos seguidos de la misma persona en segundos son un
+    // doble toque, no una entrada y una salida de verdad. Sin esto quedaban
+    // pares entrada/salida con un minuto de diferencia que ensucian la
+    // asistencia y las horas pico. (Los rebotes que manda el propio aparato se
+    // corrigen al actualizar el puente; esto cubre el escaneo en recepción.)
+    const ult=this.accHist.find(x=>x.customer_id===c.id);
+    if(ult&&(Date.now()-new Date(ult.created_at).getTime())<45000){
+      this.showAccessResult(true,'YA REGISTRADO','Se acaba de registrar hace unos segundos — no se duplicó',c.full_name);
+      const i0=$('scan-inp');if(i0)i0.focus();return;
+    }
     // si YA está adentro, el mismo escaneo (QR/huella) registra su SALIDA
     const open=this.accInside.find(x=>x.customer_id===c.id||(c.profile_id&&x.member_id===c.profile_id));
     if(open){
