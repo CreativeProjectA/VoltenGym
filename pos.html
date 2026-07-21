@@ -633,8 +633,12 @@ const Pos={
       if(this.nav==='sale')return;
       const ae=document.activeElement;
       if(ae&&['INPUT','TEXTAREA','SELECT'].includes(ae.tagName))return;
+      const antes=this.firmaDatos();
       await this.loadCore();
-      if($('shell').style.display!=='none')this.go(this.nav||'dashboard');
+      // Solo re-dibuja si de verdad llegó algo nuevo (una venta de otra caja,
+      // un cliente dado de alta, un precio cambiado...). Si nada cambió, no se
+      // toca la pantalla.
+      if(this.firmaDatos()!==antes&&$('shell').style.display!=='none')this.go(this.nav||'dashboard');
     },60000);
     // Cierre de sesión automático por inactividad (20 min sin tocar nada) —
     // evita que la sesión de una cajera se quede abierta y la siguiente
@@ -679,43 +683,63 @@ const Pos={
       return cget(key)||[];
     };
     // Igual que load pero por tandas, para tablas que pueden ser enormes.
-    const loadBig=async(key,hacerQuery)=>{
+    // Si falla (ej. se cayó el internet a media carga) NO se pisa lo que ya
+    // había en memoria con una lista vieja del caché: se conserva lo bueno.
+    const loadBig=async(key,hacerQuery,actual)=>{
       try{
         const data=await this.traerTodo(hacerQuery);
+        if(!data.length&&actual&&actual.length)return actual; // respuesta vacía sospechosa
         // Guardar en la PC solo si es de un tamaño razonable: si no cabe,
         // localStorage falla callado y se quedaría sirviendo una lista vieja.
         if(data.length<=4000)cset(key,data); else cset(key,data.slice(0,4000));
         return data;
-      }catch(e){return cget(key)||[];}
+      }catch(e){
+        if(actual&&actual.length)return actual;
+        return cget(key)||[];
+      }
     };
-    this.branches=await load('branches',sb.from('branches').select('*').order('name'));
-    this.plans=await load('plans',sb.from('plans').select('*').order('duration_days'));
-    this.products=await load('products',sb.from('products').select('*').order('name'));
-    this.stock=await load('stock',sb.from('stock').select('*'));
-    // Cajera/encargada solo cargan SU sucursal: con dos gyms de miles de
-    // clientes, traer los dos es el doble de espera para nada.
-    const miBr=(!['admin','contador'].includes(this.role)&&this.branch)?this.branch.id:null;
-    this.customers=await loadBig('customers',()=>{
-      let q=sb.from('customers').select('*').order('full_name');
-      if(miBr)q=q.eq('branch_id',miBr);
-      return q;
-    });
+    // Todo lo chico va EN PARALELO: antes eran 12 consultas una tras otra y
+    // con la base ya grande el refresco se sentía eterno.
+    const [_br,_pl,_pr,_st,_pm,_ap,_fa,_cp,_sb,_rq]=await Promise.all([
+      load('branches',sb.from('branches').select('*').order('name')),
+      load('plans',sb.from('plans').select('*').order('duration_days')),
+      load('products',sb.from('products').select('*').order('name')),
+      load('stock',sb.from('stock').select('*')),
+      load('promos',sb.from('promotions').select('*').order('created_at',{ascending:false})),
+      load('appProfiles',sb.from('profiles').select('*')),
+      load('families',sb.from('families').select('*')),
+      load('coachProfiles',sb.from('coach_profiles').select('profile_id,monthly_price')),
+      load('staffBranches',sb.from('staff_branches').select('*')),
+      load('requests',sb.from('pos_requests').select('*').eq('status','pendiente').order('created_at',{ascending:false})),
+    ]);
+    this.branches=_br;this.plans=_pl;this.products=_pr;this.stock=_st;this.promos=_pm;
+    this.appProfiles=_ap;this.families=_fa;this.coachProfiles=_cp;this.staffBranches=_sb;this.requests=_rq;
+    // OJO: NO filtrar por sucursal al CARGAR. Se intentó y rompió el POS en
+    // producción: loadCore() corre ANTES de que se defina this.branch (más
+    // abajo), así que al entrar cargaba todo y a los 60 segundos, cuando el
+    // refresco automático volvía a correr YA con sucursal, cargaba solo una.
+    // Resultado: las fichas del personal de la OTRA sucursal desaparecían
+    // (Personal decía "Dar de alta cara/huella" a quien ya tenía acceso) y
+    // los clientes nuevos de la otra sucursal no salían en Clientes. Se veía
+    // como si el sistema se rompiera y se arreglara solo cada minuto.
+    // El filtro por sucursal ya se aplica al MOSTRAR (custForBranch), que es
+    // donde debe estar. Cargar las dos son ~1.6 MB, perfectamente manejable.
+    this.customers=await loadBig('customers',()=>sb.from('customers').select('*').order('full_name'),this.customers);
     // Membresías: solo las que siguen sirviendo (vigentes o vencidas hace
     // poco). El historial completo de un cliente se consulta al abrir su
     // ficha, no hace falta tenerlo todo cargado siempre.
     const desdeSubs=new Date();desdeSubs.setDate(desdeSubs.getDate()-120);
-    this.subs=await loadBig('subs',()=>{
-      let q=sb.from('subscriptions').select('*').gte('end_date',dISO(desdeSubs)).order('end_date',{ascending:false});
-      if(miBr)q=q.eq('branch_id',miBr);
-      return q;
-    });
-    this.promos=await load('promos',sb.from('promotions').select('*').order('created_at',{ascending:false}));
-    this.appProfiles=await load('appProfiles',sb.from('profiles').select('*'));
-    this.families=await load('families',sb.from('families').select('*'));
-    this.coachProfiles=await load('coachProfiles',sb.from('coach_profiles').select('profile_id,monthly_price'));
-    this.staffBranches=await load('staffBranches',sb.from('staff_branches').select('*'));
-    this.requests=await load('requests',sb.from('pos_requests').select('*').eq('status','pendiente').order('created_at',{ascending:false}));
+    this.subs=await loadBig('subs',()=>sb.from('subscriptions').select('*').gte('end_date',dISO(desdeSubs)).order('end_date',{ascending:false}),this.subs);
     this.loadPendingRegs();
+  },
+  // Huella de los datos, para saber si el refresco automático trajo algo
+  // NUEVO. Si no cambió nada, no se re-dibuja la pantalla: antes se redibujaba
+  // cada 60s aunque no hubiera novedad y se sentía como si la página se
+  // recargara sola mientras uno estaba trabajando.
+  firmaDatos(){
+    return [this.customers.length,this.subs.length,this.products.length,this.plans.length,
+      this.appProfiles.length,this.requests.length,this.promos.length,
+      (this.stock||[]).reduce((a,s)=>a+Number(s.qty||0),0)].join('|');
   },
   // ── FILTRO POR SUCURSAL, UNA SOLA REGLA PARA TODO EL POS ──────────────
   // Devuelve la sucursal en foco para filtrar CUALQUIER pantalla, o null =
