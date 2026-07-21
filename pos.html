@@ -655,17 +655,60 @@ const Pos={
     }
   },
 
+  // Supabase entrega COMO MÁXIMO 1000 filas por consulta, y lo hace en
+  // silencio: pides 5000 clientes y te devuelve 1000 sin decir nada, así que
+  // los otros 4000 simplemente "no existen" para el POS. Esto trae la tabla
+  // completa en tandas hasta que se acaba. El tope evita que un error de
+  // datos deje al POS jalando para siempre.
+  async traerTodo(hacerQuery,tope){
+    const PAGINA=1000, MAX=tope||30000;
+    let todo=[],desde=0;
+    while(desde<MAX){
+      const {data,error}=await hacerQuery().range(desde,desde+PAGINA-1);
+      if(error)throw error;
+      if(!data||!data.length)break;
+      todo=todo.concat(data);
+      if(data.length<PAGINA)break;
+      desde+=PAGINA;
+    }
+    return todo;
+  },
   async loadCore(){
     const load=async(key,q)=>{
       try{const {data,error}=await q;if(!error&&data){cset(key,data);return data;}}catch(e){}
       return cget(key)||[];
     };
+    // Igual que load pero por tandas, para tablas que pueden ser enormes.
+    const loadBig=async(key,hacerQuery)=>{
+      try{
+        const data=await this.traerTodo(hacerQuery);
+        // Guardar en la PC solo si es de un tamaño razonable: si no cabe,
+        // localStorage falla callado y se quedaría sirviendo una lista vieja.
+        if(data.length<=4000)cset(key,data); else cset(key,data.slice(0,4000));
+        return data;
+      }catch(e){return cget(key)||[];}
+    };
     this.branches=await load('branches',sb.from('branches').select('*').order('name'));
     this.plans=await load('plans',sb.from('plans').select('*').order('duration_days'));
     this.products=await load('products',sb.from('products').select('*').order('name'));
     this.stock=await load('stock',sb.from('stock').select('*'));
-    this.customers=await load('customers',sb.from('customers').select('*').order('full_name'));
-    this.subs=await load('subs',sb.from('subscriptions').select('*').order('end_date',{ascending:false}));
+    // Cajera/encargada solo cargan SU sucursal: con dos gyms de miles de
+    // clientes, traer los dos es el doble de espera para nada.
+    const miBr=(!['admin','contador'].includes(this.role)&&this.branch)?this.branch.id:null;
+    this.customers=await loadBig('customers',()=>{
+      let q=sb.from('customers').select('*').order('full_name');
+      if(miBr)q=q.eq('branch_id',miBr);
+      return q;
+    });
+    // Membresías: solo las que siguen sirviendo (vigentes o vencidas hace
+    // poco). El historial completo de un cliente se consulta al abrir su
+    // ficha, no hace falta tenerlo todo cargado siempre.
+    const desdeSubs=new Date();desdeSubs.setDate(desdeSubs.getDate()-120);
+    this.subs=await loadBig('subs',()=>{
+      let q=sb.from('subscriptions').select('*').gte('end_date',dISO(desdeSubs)).order('end_date',{ascending:false});
+      if(miBr)q=q.eq('branch_id',miBr);
+      return q;
+    });
     this.promos=await load('promos',sb.from('promotions').select('*').order('created_at',{ascending:false}));
     this.appProfiles=await load('appProfiles',sb.from('profiles').select('*'));
     this.families=await load('families',sb.from('families').select('*'));
@@ -701,6 +744,27 @@ const Pos={
   // poder guardarle su cara/huella ("Dar de alta cara/huella" en Personal), no
   // porque sea cliente. Sin esto se colaban en la lista de Clientes, en los
   // conteos, en "por vencer" y en cumpleaños — llegaron a ser 9 de 21.
+  // Busca un cliente EN EL SERVIDOR cuando no está en la memoria del POS.
+  // Con miles de clientes ya no caben todos cargados, y con dos sucursales la
+  // cajera solo tiene los suyos. Sin esto, alguien que sí existe aparecería
+  // como "no encontrado" en recepción. Lo que encuentra se suma a la memoria,
+  // así que de ahí en adelante todo lo demás del POS lo ve normal.
+  async buscarEnServidor(texto){
+    const q=(texto||'').trim();
+    if(q.length<3||!navigator.onLine)return [];
+    try{
+      const patron='%'+q.replace(/[%_,]/g,' ')+'%';
+      let cons=sb.from('customers').select('*').or('full_name.ilike.'+patron+',phone.ilike.'+patron+',email.ilike.'+patron).limit(20);
+      // la cajera solo puede ver los de su sucursal, igual que en todo el POS
+      if(!['admin','contador'].includes(this.role)&&this.branch)cons=cons.eq('branch_id',this.branch.id);
+      const {data}=await cons;
+      if(!data||!data.length)return [];
+      const conocidos=new Set(this.customers.map(c=>c.id));
+      const nuevos=data.filter(c=>!conocidos.has(c.id));
+      if(nuevos.length)this.customers=this.customers.concat(nuevos);
+      return data;
+    }catch(e){return [];}
+  },
   // Cómo distinguir a dos personas que se llaman igual (pasa seguido: tres
   // "Luis" con el mismo apellido). Se enseña lo primero que sirva para
   // identificarlo: teléfono, correo, o su número de cuenta de la app.
@@ -1374,7 +1438,16 @@ const Pos={
     let list=this.custForBranch();
     if(q)list=list.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q));
     list=list.slice(0,8);
-    if(!list.length)return '<div class="stub" style="padding:30px"><p>'+(this.customers.length?'Sin resultados.':'Aún no hay clientes registrados. Crea el primero con "+ Nuevo cliente".')+'</p></div>';
+    if(!list.length){
+      // Con miles de clientes no están todos cargados: si no aparece aquí,
+      // se busca en el servidor y se vuelve a pintar la lista.
+      if(q.length>=3&&navigator.onLine&&this._buscadoSrv!==q){
+        this._buscadoSrv=q;
+        this.buscarEnServidor(q).then(res=>{if(res.length)this.renderSaleCust();});
+        return '<div class="stub" style="padding:30px"><p>Buscando en el sistema...</p></div>';
+      }
+      return '<div class="stub" style="padding:30px"><p>'+(this.customers.length?'Sin resultados.':'Aún no hay clientes registrados. Crea el primero con "+ Nuevo cliente".')+'</p></div>';
+    }
     return list.map(c=>`
       <button class="cust-row" onclick="Pos.pickSaleCustomer('${c.id}')">
         ${this.custAvatar(c)}
@@ -2113,7 +2186,14 @@ const Pos={
   async openCustomer(id){
     const c=this.customers.find(x=>x.id===id);if(!c)return;
     if(this.role!=='admin'&&c.branch_id!==(this.branch?this.branch.id:null)){toast('Ese cliente es de otra sucursal.',true);return;}
-    const subs=this.subsOf(c).slice(0,6);
+    // En memoria solo viven las membresías recientes (para no cargar años de
+    // historial de miles de clientes en cada arranque). Aquí sí se trae el
+    // historial completo de ESTA persona, que es lo que se viene a ver.
+    let subs=this.subsOf(c).slice(0,6);
+    try{
+      const {data}=await sb.from('subscriptions').select('*').eq('customer_id',c.id).order('end_date',{ascending:false}).limit(12);
+      if(data&&data.length)subs=data;
+    }catch(e){ /* sin internet se usa lo que hay en memoria */ }
     const appProf=c.profile_id?this.appProfiles.find(p=>p.id===c.profile_id):null;
     openModal(`
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
@@ -3105,6 +3185,17 @@ const Pos={
       const q=code.toLowerCase();
       const staffs=this.appProfiles.filter(x=>x.role&&x.role!=='member'&&(x.full_name||'').toLowerCase().includes(q));
       if(staffs.length===1){this.doStaffCheckin(staffs[0]);return;}
+      // Antes de rendirse: buscarlo en el servidor. Puede ser un cliente que
+      // no está cargado en esta PC (son miles) y sí existe.
+      if(!staffs.length&&code.length>=3&&navigator.onLine){
+        this.showAccessResult(true,'BUSCANDO...','Revisando en el sistema',null);
+        this.buscarEnServidor(code).then(res=>{
+          const el=$('access-result');if(el)el.style.display='none';
+          if(res.length)this.accessScan(code);
+          else this.showAccessResult(false,'No encontrado','Verifica el nombre o regístralo en Clientes',null);
+        });
+        return;
+      }
       if(staffs.length>1){
         $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Varios empleados coinciden — fíjate en el puesto y el correo</div>'+staffs.slice(0,6).map(s=>`
           <button class="cust-row" onclick="Pos.pickStaffCheckin('${s.id}')">
