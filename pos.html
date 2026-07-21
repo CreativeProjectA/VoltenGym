@@ -1013,6 +1013,34 @@ const Pos={
     if(!profileId)return;
     try{await sb.functions.invoke('send-push',{body:{profile_id:profileId,title,body:body||''}});}catch(e){}
   },
+  /* Aviso automático de vencimiento a la app del socio.
+     Se manda UNA sola vez por membresía: la fecha del aviso queda guardada en
+     expiry_notified_at, así aunque el POS se abra veinte veces al día, al
+     cliente no le llega la notificación veinte veces. Solo aplica a quien ya
+     tiene cuenta en la app (member_id) y le faltan 3 días o menos. Si algo
+     falla, se queda callado: un aviso no debe estorbar la operación. */
+  async avisarVencimientos(expiring){
+    if(this._avisosHechos||!navigator.onLine)return;
+    this._avisosHechos=true;
+    try{
+      for(const x of (expiring||[])){
+        const s=x.s;
+        if(!s||!s.member_id||s.expiry_notified_at)continue;
+        // OJO: daysLeft cuenta INCLUYENDO hoy — si vence hoy devuelve 1, no 0.
+        // Sin esto el aviso le decía "vence mañana" a quien vencía hoy.
+        const faltan=daysLeft(s.end_date);
+        if(faltan<1||faltan>4)continue;   // hoy, mañana, en 2 o en 3 días
+        const cuando=faltan===1?'hoy':(faltan===2?'mañana':'en '+(faltan-1)+' días');
+        await this.sendPush(s.member_id,'Tu membresía vence '+cuando,
+          'Vence el '+fdate(s.end_date)+'. Pásate a recepción para renovarla.');
+        const {error}=await sb.from('subscriptions').update({expiry_notified_at:new Date().toISOString()}).eq('id',s.id);
+        // Si no se pudo marcar, NO se vuelve a mandar en esta sesión (el
+        // candado _avisosHechos ya cerró) — mejor que arriesgar repetirlo.
+        if(!error)s.expiry_notified_at=new Date().toISOString();
+      }
+      cset('subs',this.subs);
+    }catch(e){}
+  },
   branchSelector(){
     if(['admin','contador'].includes(this.role)){
       if(this.branches.length<=1)return this.branch?`<span class="tag tag-gray" style="height:44px;display:inline-flex;align-items:center;padding:0 18px;">${esc(this.branch.name)}</span>`:'';
@@ -1184,6 +1212,7 @@ const Pos={
       <div class="row-line"><div><div style="font-weight:700;font-size:14px">${esc(x.c.full_name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">vence ${fdate(x.s.end_date)}</div></div>
       ${x.c.phone?`<a class="btn btn-xs" style="background:#DCFCE7;color:#16A34A;text-decoration:none" target="_blank" href="${waLink(x.c.phone,'Hola '+x.c.full_name.split(' ')[0]+' 💪 Te recordamos que tu membresía de Volten Gym vence el '+fdate(x.s.end_date)+'. ¡Renueva a tiempo para no perder tu racha!')}">WhatsApp</a>`:''}</div>`).join('')
       :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Nadie por vencer esta semana.</div>';
+    this.avisarVencimientos(expiring);
     // Cumpleaños de los PRÓXIMOS 15 DÍAS. Antes solo miraba hoy y mañana, así
     // que si nadie se asomaba al tablero justo ese día, el cumpleaños se pasaba
     // de largo y nunca se felicitaba a nadie. Con 15 días se ven venir y se
