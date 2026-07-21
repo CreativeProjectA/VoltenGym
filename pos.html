@@ -2891,6 +2891,7 @@ const Pos={
       <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:10px">Primera vez = entra · segunda vez = sale. Valida la membresía sola. (Con QR/huella/facial cuando esté el equipo, es automático.)</div>
     </div>
     <p style="font-size:12px;color:var(--muted);font-weight:500;margin:-8px 0 16px">La cuenta de la app ya se crea sola al cobrar su membresía. Si un cliente antiguo aún no tiene cuenta, vincúlasela desde su ficha en Clientes.</p>
+    <div id="cruce-panel"></div>
     <div id="device-enroll-panel"></div>
     <div id="orphan-panel"></div>
     <div id="access-result"></div>
@@ -2922,7 +2923,42 @@ const Pos={
       </div>
     </div>`;
   },
-  async after_access(){const i=$('scan-inp');if(i)i.focus();await this.loadAccess();this.loadPendingEnrollments();this.loadOrphanEntries();},
+  async after_access(){const i=$('scan-inp');if(i)i.focus();await this.loadAccess();this.loadPendingEnrollments();this.loadOrphanEntries();this.vigilarCruces();},
+  // ALARMA DE CÓDIGOS CRUZADOS. Si el puente de una recepción es de una
+  // versión anterior al filtro por sucursal, un código nuevo de este gym
+  // puede caer en la ficha de un cliente del OTRO gym: los accesos se
+  // registran a nombre de quien no es (y casi siempre DENEGADOS, porque esa
+  // persona no tiene membresía aquí). Eso fue exactamente lo del cliente
+  // nuevo de Gómez Morín que quedó como "Uriel, denegado" 63 veces.
+  // El POS no puede componer el puente, pero SÍ puede gritar el mismo día
+  // en vez de que se descubra cuando el cliente se queja.
+  vigilarCruces(){
+    const el=$('cruce-panel');if(!el)return;
+    const bId=this.viewBr();if(!bId){el.innerHTML='';return;}
+    const hoy=localDayStart(todayISO());
+    const sospechosos={};
+    (this.accHist||[]).forEach(ci=>{
+      if(ci.created_at<hoy||ci.branch_id!==bId||!ci.customer_id)return;
+      const c=this.customers.find(x=>x.id===ci.customer_id);
+      // ficha de OTRA sucursal registrando accesos aquí = huella del cruce.
+      // El personal no cuenta: ellos sí pueden andar en las dos.
+      if(!c||!c.branch_id||c.branch_id===bId||this.esPersonal(c))return;
+      (sospechosos[c.id]=sospechosos[c.id]||{c,n:0,neg:0}).n++;
+      if(!ci.granted)sospechosos[c.id].neg++;
+    });
+    const lista=Object.values(sospechosos).filter(x=>x.n>=2);
+    if(!lista.length){el.innerHTML='';return;}
+    el.innerHTML=`<div class="panel" style="background:#FEF2F2;border:1px solid #FECACA;margin-bottom:16px;">
+      <h2 style="font-size:15px;color:var(--red)">Posible cruce de códigos con la otra sucursal</h2>
+      <div class="psub">Están llegando accesos a nombre de clientes de la OTRA sucursal. Casi siempre significa que alguien registró su cara aquí y el aparato le dio un número que allá ya es de otra persona.</div>
+      <div style="margin-top:10px;font-size:13.5px;font-weight:600;color:#7F1D1D">
+        ${lista.map(x=>esc(x.c.full_name)+' — '+x.n+' acceso'+(x.n===1?'':'s')+' hoy'+(x.neg?' ('+x.neg+' denegados)':'')).join('<br>')}
+      </div>
+      <p style="font-size:12.5px;color:#7F1D1D;font-weight:500;margin-top:10px;line-height:1.5">
+        Qué hacer: registra de nuevo a la persona en el aparato con un número que no esté usado en ninguna de las dos sucursales, y asígnala aquí en "Registros nuevos del aparato". Se corrige de raíz actualizando el puente de esta recepción (INSTALAR.bat del ZIP actual).
+      </p>
+    </div>`;
+  },
   // Entradas de días ANTERIORES que nunca marcaron salida. Pasa cuando el
   // torniquete deja salir libre y además no se cerró el turno (que es lo que
   // normalmente las cierra). Sin esto se quedan colgadas para siempre y no se
