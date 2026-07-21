@@ -3066,18 +3066,19 @@ const Pos={
   async confirmAssignEnroll(custId){
     const kindGuess=this._pendingEnrollKind||'huella';
     const code=this._pendingEnrollDeviceId;
-    // AVISO DE CÓDIGO REPETIDO. La versión del puente que filtra por sucursal
-    // tolera que el "2" de un gym y el "2" del otro sean personas distintas,
-    // pero mientras alguna recepción siga con una versión anterior, el código
-    // se busca en TODA la base y se lo queda la primera ficha que lo tenga.
-    // Eso ya pasó en producción: el código 2 de Tres Cantos abría como el
-    // administrador de Gómez Morín (personal = acceso siempre permitido).
-    // No se bloquea (con los puentes al día es legítimo), pero sí se avisa.
+    // AVISO DE CÓDIGO REPETIDO — solo si el choque es EN ESTA MISMA sucursal.
+    // Con el puente definitivo (21-jul-2026) instalado en ambas recepciones,
+    // el "7" de un gym y el "7" del otro son personas distintas y conviven
+    // sin problema: cada sucursal identifica el suyo. Ese caso ya NO se avisa
+    // (el aviso viejo asustaba en falso y recomendaba números especiales).
+    // Lo que SÍ sigue siendo un error real es dos personas con el mismo
+    // código en LA MISMA sucursal — la puerta no sabría cuál de las dos es.
     if(kindGuess!=='qr'){
-      const choca=this.customers.filter(c=>c.id!==custId&&(String(c.face_id||'')===String(code)||String(c.fingerprint_id||'')===String(code)));
+      const brEnroll=this.viewBr()||(this.branch?this.branch.id:null);
+      const choca=this.customers.filter(c=>c.id!==custId&&c.branch_id===brEnroll&&(String(c.face_id||'')===String(code)||String(c.fingerprint_id||'')===String(code)));
       if(choca.length){
-        const quien=choca.map(c=>{const b=this.branches.find(x=>x.id===c.branch_id);return (c.full_name||'?')+(b?' ('+b.name+')':'');}).join(', ');
-        if(!confirm('OJO: el código '+code+' ya está usado por: '+quien+'.\n\nSi la recepción de esa sucursal no tiene el puente actualizado, los accesos se pueden confundir entre las dos personas.\n\nLo recomendable es registrar a esta persona en el aparato con un número que no se repita (por ejemplo 101, 102...).\n\n¿Asignarlo de todas formas?'))return;
+        const quien=choca.map(c=>c.full_name||'?').join(', ');
+        if(!confirm('OJO: en ESTA sucursal el código '+code+' ya es de: '+quien+'.\n\nDos personas con el mismo código en la misma sucursal se confunden en la puerta. Lo correcto es borrar el registro viejo del aparato o registrar a esta persona de nuevo (el aparato le dará otro número).\n\n¿Asignarlo de todas formas?'))return;
       }
     }
     if(kindGuess!=='qr'){
