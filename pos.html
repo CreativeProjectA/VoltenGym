@@ -2935,10 +2935,15 @@ const Pos={
     q=(q||'').trim().toLowerCase();
     const box=$('assign-enroll-res');
     if(q.length<2){box.innerHTML='Escribe al menos 2 letras.';return;}
+    // Al asignar una cara/huella hay que estar SEGURO de a quién se le pone:
+    // si hay tres personas con el mismo nombre y se le asigna al que no era,
+    // esa persona entra con el acceso de otra. Por eso se muestra el puesto
+    // (si es empleado) y su teléfono, correo o número de cuenta.
     const res=this.customers.filter(c=>(c.full_name||'').toLowerCase().includes(q)).slice(0,6);
     box.innerHTML=res.length?res.map(c=>`
       <button class="cust-row" onclick="Pos.confirmAssignEnroll('${c.id}')">
-        ${this.custAvatar(c,32)}<div class="cd"><b>${esc(c.full_name)}</b><span>${esc(c.phone||'')}</span></div>
+        ${this.custAvatar(c,32)}<div class="cd"><b>${esc(c.full_name)}</b><span>${esc(this.quienEs(c))}</span></div>
+        ${this.rolTag(c)}
       </button>`).join(''):'Sin coincidencias.';
   },
   async confirmAssignEnroll(custId){
