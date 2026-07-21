@@ -723,12 +723,13 @@ const Pos={
     const p=this.appProfiles.find(x=>x.id===c.profile_id);
     return !!(p&&p.role&&p.role!=='member');
   },
-  // Clientes de la sucursal en foco, SIN el personal. Para Accesos se usa
-  // this.customers directo, porque ahí el personal sí tiene que aparecer.
+  // Todas las fichas de la sucursal en foco, incluido el personal: un empleado
+  // también compra proteína o le venden una membresía, así que NO se puede
+  // sacar de aquí. Para que no se confunda con un cliente, en la lista sale
+  // marcado con su puesto (ver rolTag).
   custForBranch(){
     const b=this.viewBr();
-    const base=this.customers.filter(c=>!this.esPersonal(c));
-    return b?base.filter(c=>c.branch_id===b):base;
+    return b?this.customers.filter(c=>c.branch_id===b):this.customers;
   },
   // ¿este coach atiende en la sucursal actual? (sin sucursal asignada = en todas)
   coachInBranch(pid){
@@ -2010,7 +2011,7 @@ const Pos={
     if(!list.length)return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
     return `<table><thead><tr><th>Cliente</th><th>Teléfono</th><th>App</th><th>Membresía</th><th>Alta</th><th></th></tr></thead><tbody>${
       list.slice(0,60).map(c=>`<tr>
-        <td style="cursor:pointer" onclick="Pos.openCustomer('${c.id}')"><div style="display:flex;align-items:center;gap:10px;">${this.custAvatar(c,32)}<b>${esc(c.full_name)}</b>${c.suspended?' <span class="tag tag-red">Suspendido</span>':''}${c.family_id?' <span class="tag tag-orange">'+esc((this.families.find(f=>f.id===c.family_id)||{}).name||'Familia')+'</span>':''}</div></td>
+        <td style="cursor:pointer" onclick="Pos.openCustomer('${c.id}')"><div style="display:flex;align-items:center;gap:10px;">${this.custAvatar(c,32)}<b>${esc(c.full_name)}</b>${this.rolTag(c)}${c.suspended?' <span class="tag tag-red">Suspendido</span>':''}${c.family_id?' <span class="tag tag-orange">'+esc((this.families.find(f=>f.id===c.family_id)||{}).name||'Familia')+'</span>':''}</div></td>
         <td>${esc(c.phone||'—')}</td>
         <td>${c.profile_id?'<span class="tag tag-green">Vinculada</span>':'<span class="tag tag-gray">—</span>'}</td>
         <td>${this.membershipTag(c)}</td>
