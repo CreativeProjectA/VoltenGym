@@ -1,19 +1,10 @@
--- ═══════════════════════════════════════════════════════════════════
---  VOLTEN GYM — Migración POS #25  (correr en Supabase → SQL Editor)
+-- VOLTEN GYM - Migracion 25: TARJETA DE REGALO
+-- Correr en Supabase -> SQL Editor -> New query -> pegar todo -> Run.
+-- Se puede correr varias veces sin problema.
 --
---  TARJETA DE REGALO (gift card).
---  Era la única funcionalidad del plan maestro que todavía no existía
---  en la base de datos, así que el POS no la podía vender ni canjear.
---
---  Cómo va a funcionar:
---    · Se vende una tarjeta por un monto (ej. $500). Queda con un código
---      corto que se le entrega al cliente.
---    · Al cobrar, se puede pagar con ese código: se descuenta del saldo.
---      Si no alcanza, el resto se paga con otro método.
---    · El saldo nunca queda negativo y cada uso queda registrado.
---
---  Seguro de correr varias veces.
--- ═══════════════════════════════════════════════════════════════════
+-- Crea las tarjetas de regalo: se vende una por un monto, queda con un
+-- codigo que se le da al cliente, y ese codigo se puede usar para pagar.
+-- Si el saldo no alcanza, el resto se paga con otro metodo.
 
 create table if not exists gift_cards (
   id            uuid primary key default gen_random_uuid(),
@@ -30,7 +21,7 @@ create table if not exists gift_cards (
   created_at    timestamptz not null default now()
 );
 
--- Cada vez que se usa una tarjeta queda el rastro de cuánto y en qué venta.
+-- Cada vez que se usa una tarjeta queda el rastro de cuanto y en que venta.
 create table if not exists gift_card_uses (
   id           uuid primary key default gen_random_uuid(),
   gift_card_id uuid not null references gift_cards(id) on delete cascade,
@@ -44,8 +35,8 @@ create table if not exists gift_card_uses (
 create index if not exists gift_cards_code_idx on gift_cards (upper(code));
 create index if not exists gift_card_uses_card_idx on gift_card_uses (gift_card_id);
 
-alter table gift_cards      enable row level security;
-alter table gift_card_uses  enable row level security;
+alter table gift_cards     enable row level security;
+alter table gift_card_uses enable row level security;
 
 -- Solo el personal las vende, consulta y canjea. Los socios no las tocan.
 drop policy if exists "gift_cards_staff_all" on gift_cards;
@@ -56,9 +47,10 @@ drop policy if exists "gift_card_uses_staff_all" on gift_card_uses;
 create policy "gift_card_uses_staff_all" on gift_card_uses
   for all using (is_staff()) with check (is_staff());
 
--- Descuenta de forma segura: bloquea la fila mientras cobra, para que dos
--- cajas no puedan gastar el mismo saldo al mismo tiempo. Devuelve cuánto se
--- alcanzó a usar (0 si el código no existe, está inactivo, vencido o en ceros).
+-- Descuenta el saldo de forma segura: bloquea la tarjeta mientras cobra,
+-- para que dos cajas no puedan gastar el mismo saldo al mismo tiempo.
+-- Devuelve cuanto se alcanzo a usar (0 si el codigo no existe, esta
+-- inactivo, vencido, o ya no tiene saldo).
 create or replace function redeem_gift_card(p_code text, p_amount numeric, p_sale uuid, p_branch uuid)
 returns numeric
 language plpgsql
