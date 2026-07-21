@@ -1131,6 +1131,59 @@ const Pos={
     if(!profileId)return;
     try{await sb.functions.invoke('send-push',{body:{profile_id:profileId,title,body:body||''}});}catch(e){}
   },
+  /* ── QUIÉN NO HA LLEGADO A SU HORA ─────────────────────────────────
+     Para el admin y las encargadas: compara el horario configurado de cada
+     empleado (Personal → Editar → "Entra a trabajar") contra sus accesos de
+     HOY. Si ya pasaron 15 minutos de su hora y no ha marcado entrada, sale
+     en un panel ámbar en Inicio con los minutos de retraso. Sin horario
+     configurado no se le juzga (por eso el panel también recuerda ponerlo). */
+  async pintarRetardos(){
+    const el=$('d-latecomers');if(!el)return;
+    if(!['admin','encargado'].includes(this.role)){el.innerHTML='';return;}
+    const bId=this.viewBr();
+    const staff=this.appProfiles.filter(p=>{
+      if(!p.role||p.role==='member'||!p.shift_start)return false;
+      if(!bId)return true;
+      const suyas=(this.staffBranches||[]).filter(x=>x.staff_id===p.id).map(x=>x.branch_id);
+      return !suyas.length||suyas.includes(bId); // sin sucursal marcada = todas
+    });
+    const conHorario=this.appProfiles.filter(p=>p.role&&p.role!=='member'&&p.shift_start).length;
+    if(!staff.length){
+      el.innerHTML=conHorario?'' :`<div class="panel"><h2 style="font-size:18px">Llegadas del personal</h2>
+        <div class="psub">Nadie tiene horario configurado todavía. Ponlo en Personal → Editar → "Entra a trabajar" y aquí verás quién no ha llegado.</div></div>`;
+      return;
+    }
+    // accesos de HOY del personal (por su cuenta o por su ficha)
+    let hoyCh=[];
+    try{
+      const {data}=await sb.from('checkins').select('customer_id,member_id').eq('granted',true).gte('created_at',localDayStart(todayISO()));
+      hoyCh=data||[];
+    }catch(e){el.innerHTML='';return;}
+    const yaLlego=(p)=>{
+      if(hoyCh.some(c=>c.member_id===p.id))return true;
+      const fichas=this.customers.filter(c=>c.profile_id===p.id).map(c=>c.id);
+      return hoyCh.some(c=>fichas.includes(c.customer_id));
+    };
+    const ahora=new Date();
+    const tarde=[];
+    for(const p of staff){
+      const [h,m]=String(p.shift_start).split(':').map(Number);
+      const esperado=new Date();esperado.setHours(h,m||0,0,0);
+      const min=Math.round((ahora-esperado)/60000);
+      if(min>15&&!yaLlego(p))tarde.push({p,min});
+    }
+    if(!tarde.length){el.innerHTML='';return;}
+    tarde.sort((a,b)=>b.min-a.min);
+    el.innerHTML=`<div class="panel" style="background:#FFFBEB;border:1px solid #FDE68A;">
+      <h2 style="font-size:18px">Aún no llegan</h2>
+      <div class="psub">Ya pasó su hora de entrada y no han marcado acceso</div>
+      ${tarde.map(({p,min})=>`<div class="row-line">
+        <div><div style="font-weight:700">${esc(p.full_name)}</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:500">${esc(ROLE_LABEL[p.role]||p.role)} · entraba a las ${esc(p.shift_start)}</div></div>
+        <span class="tag tag-red">${min>=60?Math.floor(min/60)+' h '+(min%60)+' min':min+' min'} tarde</span>
+      </div>`).join('')}
+    </div>`;
+  },
   /* Aviso automático de vencimiento a la app del socio.
      Se manda UNA sola vez por membresía: la fecha del aviso queda guardada en
      expiry_notified_at, así aunque el POS se abra veinte veces al día, al
@@ -1278,6 +1331,7 @@ const Pos={
           <div class="psub">Los siguientes 15 días — mándales su felicitación por WhatsApp</div>
           <div id="d-birthdays"></div>
         </div>
+        <div id="d-latecomers"></div>
         ${this.role==='admin'?`
         <div class="panel">
           <h2 style="font-size:18px">Cambios del personal</h2>
@@ -1371,6 +1425,7 @@ const Pos={
       }).join('')+'<p style="font-size:11px;color:var(--muted);font-weight:500;margin-top:8px">El botón de WhatsApp aparece cuando ya falta poco, con el mensaje escrito. Si quieres mandar también una imagen de felicitación, adjúntala tú en el chat.</p>'
       :'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:12px 0">Todavía no hay cumpleaños que mostrar: ninguna ficha tiene fecha de nacimiento. Se agrega en Clientes → abrir la ficha → Editar.</div>';
     }
+    this.pintarRetardos();
     // solicitudes hechas desde la app del cliente
     try{
       const {data:rq}=await sb.from('pos_requests').select('*').eq('status','pendiente').order('created_at',{ascending:false});
@@ -2092,9 +2147,12 @@ const Pos={
       </div>
     </div>
     <div class="panel">
-      <div style="display:flex;gap:12px;margin-bottom:18px;">
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">
         <div class="search-wrap"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input class="inp" placeholder="Buscar por nombre, teléfono o correo..." value="${esc(this.custQuery)}" oninput="Pos.custQuery=this.value;Pos.renderCustTable()"></div>
+        <div class="pick-tabs" style="margin:0">
+          ${[['clientes','Clientes'],['personal','Personal'],['todos','Todos']].map(([v,t])=>`<button class="pick-tab ${(this.custVista||'clientes')===v?'on':''}" onclick="Pos.custVista='${v}';Pos.go('customers')">${t}</button>`).join('')}
+        </div>
       </div>
       <div id="cust-table">${this.custTable()}</div>
     </div>`;
@@ -2104,6 +2162,15 @@ const Pos={
     // Clientes de la sucursal en foco (el selector de arriba manda; admin
     // puede elegir "Todas" para ver el conjunto).
     let list=this.custForBranch();
+    // Por defecto SOLO clientes de verdad: el personal (coaches, cajeras,
+    // limpieza...) tiene ficha nada más para su cara/huella y para poderle
+    // vender, pero mezclado aquí confundía — parecía que eran clientes. El
+    // chip "Personal" los enseña cuando haga falta. OJO: esto es solo un
+    // filtro de ESTA vista; en Nueva venta y Accesos siguen saliendo todos
+    // (quitar al personal de la lista de venta rompió el POS una vez).
+    const modo=this.custVista||'clientes';
+    if(modo==='clientes')list=list.filter(c=>!this.esPersonal(c));
+    else if(modo==='personal')list=list.filter(c=>this.esPersonal(c));
     if(q)list=list.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q));
     if(!list.length)return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
     // LOS MÁS NUEVOS PRIMERO. Antes salían por orden alfabético y solo los
