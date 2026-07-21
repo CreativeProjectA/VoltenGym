@@ -799,6 +799,12 @@ const Pos={
     const num=(c.profile_id||c.id||'').slice(0,8).toUpperCase();
     return num?'Nº de cuenta '+num:'sin teléfono ni correo';
   },
+  // Sucursal(es) donde trabaja un empleado, para mostrarla junto a su nombre.
+  sucDeStaff(profileId){
+    const suyas=(this.staffBranches||[]).filter(x=>x.staff_id===profileId)
+      .map(x=>(this.branches.find(b=>b.id===x.branch_id)||{}).name).filter(Boolean);
+    return suyas.join(' y ')||'todas las sucursales';
+  },
   // Si la ficha es de un empleado, se marca con su puesto para no confundirlo
   // con un cliente que se llame parecido.
   rolTag(c){
@@ -2172,7 +2178,22 @@ const Pos={
     if(modo==='clientes')list=list.filter(c=>!this.esPersonal(c));
     else if(modo==='personal')list=list.filter(c=>this.esPersonal(c));
     if(q)list=list.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q));
-    if(!list.length)return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
+    if(!list.length){
+      // ¿Existe pero en OTRA sucursal o en otro chip? Decirlo evita el susto
+      // de "desapareció": pasó con un coach de Gómez buscado desde Tres Cantos.
+      if(q){
+        const enOtra=this.customers.filter(c=>(c.full_name||'').toLowerCase().includes(q));
+        if(enOtra.length){
+          const c=enOtra[0];
+          const b=(this.branches.find(x=>x.id===c.branch_id)||{}).name||'otra sucursal';
+          const esP=this.esPersonal(c);
+          return '<div class="stub"><div class="st">'+esc(c.full_name)+' sí existe</div><p>'
+            +(esP?'Es <b>personal</b> de <b>'+esc(b)+'</b> — véelo con el chip "Personal" y esa sucursal seleccionada arriba, o en la pestaña Personal.'
+                 :'Su ficha está en <b>'+esc(b)+'</b> — cambia la sucursal en el selector de arriba para verlo.')+'</p></div>';
+        }
+      }
+      return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
+    }
     // LOS MÁS NUEVOS PRIMERO. Antes salían por orden alfabético y solo los
     // primeros 60: con miles de clientes, alguien recién dado de alta (ej.
     // "Panchito") quedaba en el lugar 2000 y parecía que no se había guardado.
@@ -3307,10 +3328,10 @@ const Pos={
       const matches=this.customers.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q));
       if(matches.length===1)cust=matches[0];
       else if(matches.length>1){
-        $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Hay varias personas con ese nombre — fíjate en el teléfono o el número de cuenta</div>'+matches.slice(0,6).map(c=>`
+        $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Hay varias personas con ese nombre — fíjate en el teléfono y la sucursal</div>'+matches.slice(0,6).map(c=>`
           <button class="cust-row" onclick="Pos.doCheckin('${c.id}','manual');$('scan-picker').innerHTML=''">
             ${this.custAvatar(c,34)}
-            <div class="cd"><b>${esc(c.full_name)}</b><span>${esc(this.quienEs(c))}</span></div>
+            <div class="cd"><b>${esc(c.full_name)}</b><span>${esc(this.quienEs(c))} · ${esc((this.branches.find(b=>b.id===c.branch_id)||{}).name||'sin sucursal')}</span></div>
             ${this.rolTag(c)}${this.membershipTag(c)}
           </button>`).join('')+'</div>';
         return;
@@ -3335,10 +3356,13 @@ const Pos={
         return;
       }
       if(staffs.length>1){
-        $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Varios empleados coinciden — fíjate en el puesto y el correo</div>'+staffs.slice(0,6).map(s=>`
+        // El personal sale AUNQUE sea de la otra sucursal (puede visitar y
+        // marcar entrada donde sea) — pero se dice CLARITO de dónde es, para
+        // que nadie crea que "se cruzó" al verlo desde la otra sucursal.
+        $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Varios empleados coinciden — fíjate en el puesto y la sucursal</div>'+staffs.slice(0,6).map(s=>`
           <button class="cust-row" onclick="Pos.pickStaffCheckin('${s.id}')">
             <div class="av2">${s.avatar_url?'<img src="'+esc(s.avatar_url)+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">':esc((s.full_name||'?')[0].toUpperCase())}</div>
-            <div class="cd"><b>${esc(s.full_name)}</b><span>${esc(s.email||'sin correo')}</span></div>
+            <div class="cd"><b>${esc(s.full_name)}</b><span>${esc(s.email||'sin correo')} · ${esc(this.sucDeStaff(s.id))}</span></div>
             <span class="tag tag-dark" style="margin-right:6px">${esc(ROLE_LABEL[s.role]||s.role)}</span>
             <span class="tag tag-orange">Es este</span>
           </button>`).join('')+'</div>';
