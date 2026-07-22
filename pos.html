@@ -4814,7 +4814,13 @@ const Pos={
         if(vistos.has(k))return false;
         vistos.add(k);return true;
       });
-      el.innerHTML=this.branches.map(b=>{
+      // SOLO las sucursales donde este empleado TRABAJA. Antes se listaban
+      // las dos siempre, y la línea "Tres Cantos — Sin registrar aquí" en un
+      // coach de Gómez se leía como "está en Tres Cantos". Sin marcar = todas
+      // (admin, técnico), esas sí ven ambas líneas.
+      const marcadas=(this.staffBranches||[]).filter(x=>x.staff_id===profileId).map(x=>x.branch_id);
+      const sucursalesDelStaff=marcadas.length?this.branches.filter(b=>marcadas.includes(b.id)):this.branches;
+      el.innerHTML=sucursalesDelStaff.map(b=>{
         const enBranch=rows.filter(r=>r.branch_id===b.id);
         if(!enBranch.length){
           // Puede tener el código guardado en su ficha aunque no exista la fila
