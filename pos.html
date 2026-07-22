@@ -3375,6 +3375,24 @@ const Pos={
       });
     }catch(e){this.accInside=[];}
     this.renderAccess();
+    // Fichas creadas hace un momento (por la otra cajera, o por la de al lado)
+    // todavía no están en la lista que este navegador tiene en memoria — se
+    // refresca cada 60s. Mientras tanto su acceso salía con el nombre en
+    // blanco. Se piden al servidor solo las que faltan y se vuelve a pintar.
+    if(await this.traerFichasFaltantes())this.renderAccess();
+  },
+  async traerFichasFaltantes(){
+    const enMemoria=new Set(this.customers.map(c=>c.id));
+    const faltan=[...new Set([...(this.accHist||[]),...(this.accInside||[])]
+      .map(ci=>ci.customer_id).filter(id=>id&&!enMemoria.has(id)))];
+    if(!faltan.length)return false;
+    try{
+      const {data}=await withTimeout(sb.from('customers').select('*').in('id',faltan.slice(0,200)));
+      if(!data||!data.length)return false;
+      data.forEach(c=>{if(!enMemoria.has(c.id))this.customers.push(c);});
+      cset('customers',this.customers);
+      return true;
+    }catch(e){return false;}
   },
   // Si se pagó menos que el precio de lista del plan, decirlo con letras en vez
   // de dejar dos números distintos (ticket vs historial) sin explicación.
