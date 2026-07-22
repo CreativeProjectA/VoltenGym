@@ -1335,6 +1335,11 @@ const Pos={
           <div id="d-requests"><div style="color:var(--muted);font-size:13px;font-weight:500;padding:6px 0">Cargando...</div></div>
         </div>
         <div class="panel">
+          <h2 style="font-size:18px">Registros en línea</h2>
+          <div class="psub">Se registraron desde casa — confirma y queda su ficha</div>
+          <div id="d-pendingregs"><div style="color:var(--muted);font-size:13px;font-weight:500;padding:6px 0">Cargando...</div></div>
+        </div>
+        <div class="panel">
           <h2 style="font-size:18px">Por vencer pronto</h2>
           <div class="psub">Clientes para recordarles renovar</div>
           <div id="d-expiring-list"></div>
@@ -1445,6 +1450,7 @@ const Pos={
       if(rq){this.requests=rq;cset('requests',rq);}
     }catch(e){}
     this.renderRequests();
+    this.loadPendingRegs();
     // Bitácora: cambios que hicieron las encargadas (solo la ve el admin)
     const aEl=$('d-audit');
     if(aEl){
@@ -2704,7 +2710,7 @@ const Pos={
   /* ═══════ REGISTROS EN LÍNEA (pre-registro desde casa) ═══════ */
   async loadPendingRegs(){
     try{
-      const {data}=await sb.from('pending_registrations').select('*').eq('status','pending').order('created_at',{ascending:false});
+      const {data}=await withTimeout(sb.from('pending_registrations').select('*').eq('status','pending').order('created_at',{ascending:false}));
       this.pendingRegs=data||[];
     }catch(e){this.pendingRegs=[];}
     const badge=$('pendingregs-badge');
@@ -2712,6 +2718,23 @@ const Pos={
       if(this.pendingRegs.length){badge.textContent=this.pendingRegs.length;badge.classList.remove('hidden');}
       else badge.classList.add('hidden');
     }
+    this.renderPendingRegs();
+  },
+  // El aviso del menú lateral pasaba desapercibido: alguien se registraba desde
+  // casa y en recepción juraban que "no llegó nada". Ahora sale en Inicio, junto
+  // a las solicitudes de la app, que es donde sí se mira.
+  renderPendingRegs(){
+    const el=$('d-pendingregs');if(!el)return;
+    const bId=this.viewBr();
+    const regs=bId?this.pendingRegs.filter(r=>!r.branch_id||r.branch_id===bId):this.pendingRegs;
+    el.innerHTML=regs.length?regs.map(p=>{
+      const branch=this.branches.find(b=>b.id===p.branch_id);
+      return `<div class="row-line">
+        <div><div style="font-weight:700;font-size:14px">${esc(p.full_name)}</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:500">${esc(p.phone||'')}${p.email?' · '+esc(p.email):''}${branch?' · '+esc(branch.name):''}</div></div>
+        <button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.confirmPendingReg('${p.id}')">Crear ficha</button>
+      </div>`;
+    }).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:6px 0">Sin registros nuevos. Los clientes que llenan el formulario desde casa aparecen aquí.</div>';
   },
   view_pendingregs(){
     return `
