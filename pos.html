@@ -3968,6 +3968,7 @@ const Pos={
           ${canEdit?`<td style="text-align:right;white-space:nowrap">
             <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.promoModal('${p.id}')">Editar</button>
             <button class="btn-xs btn ${p.active?'btn-danger':''}" style="${p.active?'':'background:#DCFCE7;color:#16A34A'}" onclick="Pos.togglePromo('${p.id}')">${p.active?'Desactivar':'Activar'}</button>
+            ${this.role==='admin'?`<button class="btn-xs btn" style="background:#FEE2E2;color:#DC2626" title="Borrar definitivamente — solo el administrador" onclick="Pos.borrarPromo('${p.id}')">Borrar</button>`:''}
           </td>`:''}</tr>`).join('')
       }</tbody></table>`:'<div class="stub"><div class="st">Sin promociones</div><p>Crea descuentos por % o pesos y la cajera los aplica al cobrar. Las promos activas salen automáticamente al momento del pago.</p></div>'}
     </div>`:`
@@ -4079,6 +4080,25 @@ const Pos={
     const r=await Q.update('promotions',{id},{active:!p.active});
     if(r.error){toast('Error: '+r.error.message,true);return;}
     p.active=!p.active;cset('promos',this.promos);this.go('promos');
+  },
+  // Borrar una promoción de la lista para siempre. SOLO el administrador:
+  // desactivar ya la quita del cobro, pero la deja acumulándose en la pantalla
+  // año con año. Las ventas viejas que la usaron NO se tocan — su descuento ya
+  // quedó guardado en el total de cada venta, así que los cortes y reportes de
+  // antes siguen exactamente igual.
+  async borrarPromo(id){
+    if(this.role!=='admin'){toast('Solo el administrador puede borrar promociones.',true);return;}
+    const p=this.promos.find(x=>x.id===id);if(!p)return;
+    if(!navigator.onLine){toast('Necesitas internet para borrar una promoción.',true);return;}
+    // Un anuncio de la app puede estar amarrado a la promo, y la base lo borra
+    // junto con ella. Hay que decirlo ANTES, no que desaparezca por sorpresa.
+    const banners=(this.anns||[]).filter(a=>a.promo_id===id);
+    if(!confirm('¿Borrar la promoción "'+(p.name||'')+'" de la lista?\n\nDesaparece para siempre y ya no la va a ver nadie al cobrar.\n\nLas ventas viejas que la usaron NO cambian: su descuento ya quedó guardado, los cortes y reportes de antes siguen igual.'
+      +(banners.length?'\n\nOJO: también se va a borrar '+(banners.length===1?'el anuncio':'los '+banners.length+' anuncios')+' de la app que dependen de esta promoción:\n· '+banners.map(a=>a.title||'(sin título)').join('\n· '):'')))return;
+    const r=await sb.from('promotions').delete().eq('id',id);
+    if(r.error){toast('No se pudo borrar: '+r.error.message,true);return;}
+    this.promos=this.promos.filter(x=>x.id!==id);cset('promos',this.promos);
+    toast('Promoción borrada ✓');this.go('promos');
   },
   annModal(id){
     if(this.role==='cajera')return;
