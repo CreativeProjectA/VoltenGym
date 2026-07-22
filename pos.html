@@ -1784,49 +1784,35 @@ const Pos={
     const bc=$('btn-cobrar');if(bc)bc.disabled=!(r>0);
   },
 
-  /* ── CONGELAR / REACTIVAR MEMBRESÍA ─────────────────────────────────
-     Para vacaciones o lesión: se pausa la vigencia y no se pierden los días
-     pagados. Mientras está congelada NO da acceso (bestSubForBranch la
-     ignora). Al reactivar, los días que estuvo detenida se le suman a la
-     fecha de vencimiento. */
-  async freezeSub(subId,custId){
-    if(!navigator.onLine){toast('Necesitas internet para congelar una membresía.',true);return;}
-    if(!confirm('¿Congelar esta membresía?\n\nDeja de correr la vigencia y NO va a poder entrar hasta que la reactives. Al reactivarla se le devuelven los días que estuvo congelada.'))return;
-    const {error}=await sb.from('subscriptions').update({frozen_at:new Date().toISOString()}).eq('id',subId);
-    if(error){toast(/column/i.test(error.message||'')?'Falta correr pos_migration26.sql en Supabase.':'Error: '+error.message,true);return;}
-    const s=this.subs.find(x=>x.id===subId);if(s)s.frozen_at=new Date().toISOString();cset('subs',this.subs);
-    toast('Membresía congelada ✓ — no podrá entrar hasta reactivarla');
-    this.openCustomer(custId);
-  },
-  async unfreezeSub(subId,custId){
-    if(!navigator.onLine){toast('Necesitas internet para reactivar una membresía.',true);return;}
-    const s=(this.subs||[]).find(x=>x.id===subId)||{};
-    let cong=s.frozen_at;
-    if(!cong){
-      try{const {data}=await sb.from('subscriptions').select('frozen_at,frozen_days,end_date').eq('id',subId).maybeSingle();if(data){cong=data.frozen_at;s.frozen_days=data.frozen_days;s.end_date=data.end_date;}}catch(e){}
+  /* ── CANCELAR MEMBRESÍA ──────────────────────────────────────────────
+     Es la ÚNICA forma de dar de baja una membresía (ya no existe "congelar":
+     se quitó porque el equipo la confundía con cancelar y ya no se usaba).
+     Si la membresía se pagó y se le va a devolver el dinero, esto busca
+     automáticamente el ticket de esa venta para cancelarlo junto — así el
+     corte de caja no se queda con un cobro fantasma. */
+  async cancelSubModal(subId,custId){
+    const s=this.subs.find(x=>x.id===subId);
+    let matchSale=null;
+    if(s&&Number(s.price_paid)>0){
+      try{
+        const {data}=await withTimeout(sb.from('sales').select('id,total,concept,created_at').eq('customer_id',custId).is('cancelled_at',null).order('created_at',{ascending:false}).limit(30));
+        matchSale=(data||[]).find(v=>Number(v.total)===Number(s.price_paid))||null;
+      }catch(e){}
     }
-    if(!cong){toast('Esa membresía no está congelada.',true);return;}
-    // días completos que estuvo detenida (mínimo 1 para que congelar y
-    // reactivar el mismo día no le quite nada)
-    const dias=Math.max(1,Math.round((Date.now()-new Date(cong).getTime())/864e5));
-    const nuevoFin=new Date(new Date(s.end_date+'T12:00:00').getTime()+dias*864e5);
-    const patch={frozen_at:null,frozen_days:(Number(s.frozen_days)||0)+dias,end_date:dISO(nuevoFin)};
-    const {error}=await sb.from('subscriptions').update(patch).eq('id',subId);
-    if(error){toast('Error: '+error.message,true);return;}
-    Object.assign(s,patch);cset('subs',this.subs);
-    toast('Reactivada ✓ — se le devolvieron '+dias+' día'+(dias===1?'':'s')+', ahora vence el '+fdate(patch.end_date));
-    this.openCustomer(custId);
-  },
-  cancelSubModal(subId,custId){
+    this._cancelSubSale=matchSale;
     openModal(`
       <h3>Cancelar esta membresía</h3>
       <p style="font-size:13.5px;color:#1F2937;font-weight:500;line-height:1.55;margin-bottom:14px">
         Deja de ser válida de inmediato y el cliente ya no va a poder entrar con ella. No se borra: queda marcada como cancelada.
       </p>
+      ${matchSale?`
+      <label style="display:flex;gap:10px;align-items:flex-start;background:#FEF3C7;border-radius:12px;padding:12px 14px;margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" id="csub-alsosale" checked style="margin-top:3px;width:16px;height:16px;flex-shrink:0">
+        <span style="font-size:12.5px;color:#92400E;font-weight:600;line-height:1.5">También cancelar el cobro de ${money(matchSale.total)} del ${fdate(matchSale.created_at)} (se descuenta del corte de caja).</span>
+      </label>`:(s&&Number(s.price_paid)>0?`
       <div style="background:#FEF3C7;color:#92400E;border-radius:12px;padding:10px 14px;font-size:12.5px;font-weight:600;margin-bottom:14px;line-height:1.5">
-        OJO: esto NO quita el cobro del corte. Si se cobró mal y se le devolvió el dinero,
-        cancela también la VENTA (en esta misma ficha, abajo en Historial de tickets → Cancelar) para que la caja cuadre.
-      </div>
+        No encontré el ticket de esta membresía para cancelarlo junto — si se devolvió el dinero, cancélalo a mano en Historial de tickets.
+      </div>`:'')}
       <div class="field"><label>¿Por qué se cancela?</label>
         <input class="inp" id="csub-reason" placeholder="Ej. se vendió el plan equivocado"></div>
       <button class="btn btn-primary btn-block" style="background:var(--red)" onclick="Pos.doCancelSub('${subId}','${custId}')">Sí, cancelar la membresía</button>
@@ -1839,7 +1825,15 @@ const Pos={
     const {error}=await sb.from('subscriptions').update({status:'canceled'}).eq('id',subId);
     if(error){toast('Error: '+error.message,true);return;}
     const s=this.subs.find(x=>x.id===subId);if(s)s.status='canceled';cset('subs',this.subs);
-    closeModal();toast('Membresía cancelada ✓');
+    const alsoSale=$('csub-alsosale')&&$('csub-alsosale').checked;
+    let saleMsg='';
+    if(alsoSale&&this._cancelSubSale){
+      const reason=($('csub-reason')&&$('csub-reason').value.trim())||'Cancelada junto con la membresía';
+      const r2=await sb.from('sales').update({cancelled_at:new Date().toISOString(),cancelled_by:this.user.id,cancel_reason:reason}).eq('id',this._cancelSubSale.id);
+      saleMsg=r2.error?' (el ticket no se pudo cancelar: '+r2.error.message+')':' y su cobro también ✓';
+    }
+    this._cancelSubSale=null;
+    closeModal();toast('Membresía cancelada'+(saleMsg||' ✓'));
     this.openCustomer(custId);
   },
 
@@ -2395,22 +2389,17 @@ const Pos={
       ${subs.length?`<table><thead><tr><th>Plan</th><th>Vigencia</th><th>Pagó</th><th>Estado</th><th></th></tr></thead><tbody>${
         subs.map(s=>{
           const cancelada=s.status==='canceled';
-          const congelada=!!s.frozen_at;
           const vigente=daysLeft(s.end_date)>=0&&!cancelada;
           const estado=cancelada?'<span class="tag tag-red">Cancelada</span>'
-            :(congelada?'<span class="tag tag-orange">Congelada</span>'
-            :(vigente?'<span class="tag tag-green">Vigente</span>':'<span class="tag tag-gray">Vencida</span>'));
+            :(vigente?'<span class="tag tag-green">Vigente</span>':'<span class="tag tag-gray">Vencida</span>');
           return `<tr><td style="font-weight:700">${esc(this.planName(s.plan_id))}</td>
-          <td>${fdate(s.start_date)} → ${fdate(s.end_date)}${congelada?'<div style="font-size:11.5px;color:#B45309;font-weight:700">congelada desde el '+fdate(s.frozen_at)+'</div>':''}${Number(s.frozen_days)>0&&!congelada?'<div style="font-size:11.5px;color:var(--muted);font-weight:600">+'+s.frozen_days+' días recuperados</div>':''}</td>
+          <td>${fdate(s.start_date)} → ${fdate(s.end_date)}</td>
           <td>${s.price_paid!=null?money(s.price_paid):'—'}</td>
           <td>${estado}</td>
           <td style="text-align:right;white-space:nowrap">${cancelada||this.role==='cajera'?'':`
-            ${vigente?(congelada
-              ? `<button class="btn-xs btn" style="background:#DCFCE7;color:#15803D" onclick="Pos.unfreezeSub('${s.id}','${c.id}')">Reactivar</button>`
-              : `<button class="btn-xs btn" style="background:#FEF3C7;color:#B45309" onclick="Pos.freezeSub('${s.id}','${c.id}')">Congelar</button>`):''}
             <button class="btn-xs btn btn-danger" onclick="Pos.cancelSubModal('${s.id}','${c.id}')">Cancelar</button>`}
           </td></tr>`;}).join('')
-      }</tbody></table>${this.role==='cajera'?'':'<p style="font-size:11.5px;color:var(--muted);font-weight:500;margin-top:8px">Congelar pausa los días (vacaciones, lesión): mientras esté congelada no puede entrar, y al reactivarla se le devuelven los días que estuvo detenida.</p>'}`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin membresías todavía.</div>'}
+      }</tbody></table>`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin membresías todavía.</div>'}
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 8px">Historial de tickets</div>
       <div id="cust-tickets" style="font-size:13px;color:var(--muted);font-weight:500">Cargando...</div>
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 8px">Últimas visitas</div>
