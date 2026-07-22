@@ -2861,8 +2861,8 @@ const Pos={
       ${this.appProfiles.filter(p=>p.role==='coach'&&this.coachInBranch(p.id)).map(p=>{
         const cp=this.coachProfiles.find(x=>x.profile_id===p.id);
         const monthly=cp&&cp.monthly_price?Number(cp.monthly_price):0;
-        const sbr=this.staffBranches.find(x=>x.staff_id===p.id);
-        const bName=sbr?(this.branches.find(b=>b.id===sbr.branch_id)||{}).name:'—';
+        const misSuc=this.staffBranches.filter(x=>x.staff_id===p.id).map(x=>(this.branches.find(b=>b.id===x.branch_id)||{}).name).filter(Boolean);
+        const bName=misSuc.length?misSuc.join(' y '):'Todas';
         if(!monthly)return `<tr><td style="font-weight:700">${esc(p.full_name||'')}</td><td>${esc(bName||'—')}</td><td colspan="4" style="color:var(--muted)">Sin precio definido — ponlo en Personal</td></tr>`;
         return `<tr><td style="font-weight:700">${esc(p.full_name||'')}</td><td>${esc(bName||'—')}</td>
           <td>${money(Math.round(monthly/22))}</td><td>${money(Math.round(monthly/4))}</td><td style="font-weight:800;color:var(--orange)">${money(monthly)}</td><td>${money(Math.round(monthly*10.5))}</td></tr>`;
@@ -4683,8 +4683,11 @@ const Pos={
   staffRows(){
     const staff=this.appProfiles.filter(p=>p.role&&p.role!=='member');
     return staff.map(p=>{
-      const sbr=this.staffBranches.find(x=>x.staff_id===p.id);
-      const br=sbr?this.branches.find(b=>b.id===sbr.branch_id):null;
+      // TODAS sus sucursales, no solo la primera. Con .find() alguien marcado
+      // en las dos (ej. luis, técnico) mostraba nomás una — se veía como si
+      // el cambio no hubiera guardado, aunque sí estaba bien en la base.
+      const misSuc=this.staffBranches.filter(x=>x.staff_id===p.id).map(x=>this.branches.find(b=>b.id===x.branch_id)).filter(Boolean);
+      const br={name:misSuc.length?misSuc.map(b=>b.name).join(' y '):null};
       // ¿ya tiene ficha para poder registrar su cara/huella? El personal NO
       // pasa por "Nuevo cliente" ni compra nada, así que sin esto no había
       // forma de darle de alta para el Face ID.
@@ -4696,7 +4699,7 @@ const Pos={
       <td style="font-weight:700">${esc(p.full_name||'—')}</td>
       <td><span class="tag ${p.role==='admin'?'tag-dark':(p.role==='coach'?'tag-orange':'tag-gray')}">${ROLE_LABEL[p.role]||p.role}</span></td>
       <td style="color:var(--muted)">${esc(p.email||'—')}</td>
-      <td>${br?esc(br.name):'Todas'}</td>
+      <td>${br.name?esc(br.name):'Todas'}</td>
       <td style="color:var(--muted)">${fdate(p.created_at)}</td>
       <td style="text-align:right;white-space:nowrap">
         ${yaTieneFicha?'<span class="tag tag-green" style="margin-right:6px" title="Ya se puede asignar su cara y/o huella en Accesos">Acceso biométrico listo</span>':`<button class="btn-xs btn" style="background:var(--orange);color:#FFF;margin-right:6px" onclick="Pos.enableStaffFacial('${p.id}')" title="Habilita su ficha para poder asignarle cara, huella, o las dos">Dar de alta cara/huella</button>`}
@@ -4722,8 +4725,11 @@ const Pos={
         toast('Ya tiene ficha para acceso biométrico.',true);this.after_staff();return;
       }
     }else{toast('Necesitas internet para dar de alta.',true);return;}
-    const sbr=this.staffBranches.find(x=>x.staff_id===profileId);
-    const bId=sbr?sbr.branch_id:(this.branch?this.branch.id:(this.branches[0]&&this.branches[0].id));
+    // Si trabaja en varias sucursales, la ficha nueva se crea en la que
+    // estás parado ahora mismo (más natural que agarrar la primera al azar).
+    const misIds=this.staffBranches.filter(x=>x.staff_id===profileId).map(x=>x.branch_id);
+    const aqui=this.branch?this.branch.id:null;
+    const bId=(aqui&&misIds.includes(aqui))?aqui:(misIds[0]||aqui||(this.branches[0]&&this.branches[0].id));
     const payload={id:uuid(),full_name:p.full_name||p.email||'Personal',email:p.email||null,
       profile_id:profileId,branch_id:bId||null,suspended:false,created_at:new Date().toISOString()};
     const r=await Q.insert('customers',payload);
