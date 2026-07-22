@@ -912,19 +912,24 @@ const Pos={
   },
 
   async shiftTotals(){
-    let sales=[];let movs=[];
+    let sales=[];let movs=[];let canceladas=[];
     // El admin ya no abre turno: sus tarjetas de Inicio muestran las ventas
     // de HOY de la sucursal seleccionada (de todos los turnos), en vez de
     // las de un turno propio que no existe.
     const noShift=!this.shift;
     try{
-      // is('cancelled_at',null): una venta cancelada no entra al corte ni a
-      // las tarjetas de Inicio — si no, la caja pediría un dinero que se devolvió.
-      let q=sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy').is('cancelled_at',null).order('created_at',{ascending:false});
+      // Se traen TODAS (incluidas las canceladas) en una sola consulta y se
+      // separan aquí: las canceladas NO cuentan para la caja (el dinero se
+      // devolvió), pero sí hay que poderlas mostrar en el corte — si no
+      // aparecen por ningún lado, el corte parece que "no cuadra" y nadie
+      // sabe por qué faltan ventas que sí se hicieron.
+      let q=sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy,cancelled_at,cancel_reason').order('created_at',{ascending:false});
       if(noShift){q=q.gte('created_at',localDayStart(todayISO()));if(this.branch)q=q.eq('branch_id',this.branch.id);}
       else q=q.eq('shift_id',this.shift.id);
       const {data:sv}=await q;
-      sales=sv||[];cset('shift_sales',sales);
+      const todas=sv||[];
+      canceladas=todas.filter(x=>x.cancelled_at);
+      sales=todas.filter(x=>!x.cancelled_at);cset('shift_sales',sales);
     }catch(e){sales=cget('shift_sales')||[];}
     try{
       if(noShift)movs=[];
@@ -938,7 +943,8 @@ const Pos={
     const movOut=movs.filter(m=>m.type==='out').reduce((s,x)=>s+Number(x.amount),0);
     const cash=by('cash'),card=by('card'),transfer=by('transfer');
     const courtesies=sales.filter(x=>x.is_courtesy).length;
-    return{sales,movs,cash,card,transfer,movIn,movOut,courtesies,
+    const cancelado=canceladas.reduce((s,x)=>s+Number(x.total||0),0);
+    return{sales,movs,cash,card,transfer,movIn,movOut,courtesies,canceladas,cancelado,
       total:cash+card+transfer,
       expected:(this.shift?Number(this.shift.opening_cash):0)+cash+movIn-movOut};
   },
@@ -965,6 +971,7 @@ const Pos={
       <div class="row-line"><span class="k">Tarjeta</span><span class="v">${money(t.card)}</span></div>
       <div class="row-line"><span class="k">Transferencia</span><span class="v">${money(t.transfer)}</span></div>
       <div class="row-line"><span class="k">Órdenes del turno</span><span class="v">${t.sales.length}</span></div>
+      ${t.canceladas.length?`<div class="row-line"><span class="k" style="color:var(--red)">Canceladas (no cuentan)</span><span class="v" style="color:var(--red)">${t.canceladas.length} · −${money(t.cancelado)}</span></div>`:''}
       <div class="field" style="margin-top:18px"><label>Efectivo contado (lo que hay físicamente)</label>
         <input class="inp" type="number" id="cs-counted" placeholder="0.00" oninput="Pos.diffLive(${t.expected})"></div>
       <div id="cs-diff" style="font-size:14px;font-weight:700;margin-bottom:16px;min-height:20px;"></div>
@@ -1011,15 +1018,27 @@ const Pos={
       +(this.branch?this.branch.name+'\n':'')
       +new Date().toLocaleString('es-MX')+'\nCajero: '+this.profileName
       +'\n────────────────'
-      +'\nÓrdenes: '+t.sales.length
+      +'\nÓrdenes cobradas: '+t.sales.length
       +(t.courtesies?'\nCortesías otorgadas: '+t.courtesies:'')
       +'\nEfectivo: '+money(t.cash)+'\nTarjeta: '+money(t.card)+'\nTransferencia: '+money(t.transfer)
       +'\nTotal ventas: '+money(t.total)
+      +(t.canceladas.length?'\n\nVentas canceladas: '+t.canceladas.length+' · −'+money(t.cancelado)
+        +' (ya NO cuentan arriba)'
+        +t.canceladas.map(v=>'\n   · '+money(v.total)+(v.cancel_reason?' — '+v.cancel_reason:'')).join(''):'')
       +'\n────────────────'
-      +'\nFondo: '+money(this.shift.opening_cash)
-      +'\nEsperado en caja: '+money(expected)
-      +'\nContado: '+money(counted)
-      +'\nDiferencia: '+money(counted-expected);
+      +'\nCÓMO SE LLEGA A LO ESPERADO:'
+      +'\n  Fondo inicial:        '+money(this.shift.opening_cash)
+      +'\n  + Ventas en efectivo: '+money(t.cash)
+      +(t.movIn?'\n  + Efectivo metido:    '+money(t.movIn):'')
+      +(t.movOut?'\n  − Efectivo retirado:  '+money(t.movOut):'')
+      +(t.movs.length?t.movs.map(m=>'\n     · '+(m.type==='in'?'metió ':'retiró ')+money(m.amount)+(m.reason?' — '+m.reason:'')).join(''):'')
+      +'\n  = Esperado en caja:   '+money(expected)
+      +'\n────────────────'
+      +'\nContado (físico): '+money(counted)
+      +'\nDiferencia: '+money(counted-expected)
+      +(counted-expected===0?' (cuadró ✓)':(counted>expected?' (sobra)':' (falta)'))
+      +'\n\nNota: el fondo NO está incluido en "Total ventas".'
+      +'\nEl efectivo de ventas fue '+money(t.cash)+'; en la caja debe haber ese dinero MÁS el fondo, menos lo retirado.';
     this._corte=resumen;
     // SEGURIDAD: el turno YA quedó cerrado en la base arriba (status:'closed').
     // La sesión se invalida de inmediato aquí mismo — sin esperar a que el
@@ -4299,8 +4318,17 @@ const Pos={
     }catch(e){}
     let MV=[];
     try{
-      const {data}=await sb.from('cash_movements').select('type,amount,created_at').gte('created_at',from.toISOString());
+      const {data}=await sb.from('cash_movements').select('type,amount,created_at,shift_id').gte('created_at',from.toISOString());
       MV=data||[];
+      // cash_movements no guarda sucursal (cuelga del turno), así que se filtra
+      // por los turnos de ESTA sucursal. Sin esto, "efectivo metido/retirado"
+      // sumaba el de las dos sucursales aunque arriba dijera solo una.
+      if(bId){
+        const desdeTurnos=new Date(from.getTime()-864e5).toISOString();
+        const {data:shb}=await sb.from('cash_shifts').select('id').eq('branch_id',bId).gte('opened_at',desdeTurnos);
+        const ids=new Set((shb||[]).map(x=>x.id));
+        MV=MV.filter(m=>!m.shift_id||ids.has(m.shift_id));
+      }
     }catch(e){}
     this._repSales=S;this._repShifts=SH;
     // ── Series diarias por métrica → mini-gráfica en cada tarjeta ──
@@ -4412,7 +4440,10 @@ const Pos={
     // por empleado
     const byStaff={};
     S.forEach(s=>{const k=s.sold_by||s.staff_id;if(!k)return;byStaff[k]=byStaff[k]||{n:0,t:0,m:0};byStaff[k].n++;byStaff[k].t+=Number(s.total||0);});
-    this.subs.filter(s=>s.start_date>=dISO(from)&&s.sold_by).forEach(s=>{byStaff[s.sold_by]=byStaff[s.sold_by]||{n:0,t:0,m:0};byStaff[s.sold_by].m++;});
+    // OJO: filtrar por sucursal igual que todo lo demás del reporte. Sin esto,
+    // estando en Tres Cantos salían empleados de Gómez Morín mezclados en
+    // "Ventas por empleado" (las ventas sí filtraban, las membresías no).
+    this.subs.filter(s=>s.start_date>=dISO(from)&&s.sold_by&&(!bId||s.branch_id===bId)).forEach(s=>{byStaff[s.sold_by]=byStaff[s.sold_by]||{n:0,t:0,m:0};byStaff[s.sold_by].m++;});
     const staffRows=Object.entries(byStaff).sort((a,b)=>b[1].t-a[1].t);
     $('r-staff').innerHTML=staffRows.length?`<table><thead><tr><th>Empleado</th><th>Órdenes</th><th>Membresías</th><th>Total</th></tr></thead><tbody>${
       staffRows.map(([id,v])=>`<tr><td style="font-weight:700">${esc(this.profName(id))}</td><td>${v.n}</td><td>${v.m}</td><td style="font-weight:800;color:var(--orange)">${money(v.t)}</td></tr>`).join('')
