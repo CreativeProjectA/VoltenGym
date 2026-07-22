@@ -1952,6 +1952,17 @@ const Pos={
     if(r.error){toast('No se pudo cobrar: '+r.error.message,true);this._checkingOut=false;if(bc){bc.disabled=false;bc.textContent='Cobrar '+money(t.total);}return;}
     if(r.queued)qd=true;
     // 2) partidas + efectos
+    // Precio REAL de cada renglón ya con el descuento de la promoción repartido.
+    // Antes la membresía guardaba el precio de LISTA, así que el "Historial de
+    // pagos" del cliente decía $700 mientras su ticket decía $600 y nadie
+    // entendía cuál era el bueno. Ahora guarda lo que de verdad se cobró.
+    const promoAplicada=s.promoId?this.promos.find(x=>x.id===s.promoId):null;
+    const entraEnPromo=(it)=>!promoAplicada?false:(promoAplicada.applies_to==='all'||!promoAplicada.applies_to||(promoAplicada.applies_to==='plans'&&it.kind==='plan')||(promoAplicada.applies_to==='products'&&it.kind==='product'));
+    const totalConPromo=s.cart.filter(entraEnPromo).reduce((a,x)=>a+x.price*x.qty,0);
+    const precioReal=(it)=>{
+      if(!promoAplicada||!entraEnPromo(it)||!totalConPromo)return it.price;
+      return Math.round(it.price*Math.max(0,1-(t.discount/totalConPromo))*100)/100;
+    };
     for(const it of s.cart){
       let productId=it.id;
       if(it.kind==='plan'&&it.courtesy&&c){
@@ -1966,7 +1977,7 @@ const Pos={
       }else if(it.kind==='plan'){
         const plan=this.plans.find(x=>x.id===it.id);
         productId=await this.ensureMembershipProduct(plan,put);
-        const rs=await this.sellMembership(c,plan,it.qty,it.price,s.method,put);
+        const rs=await this.sellMembership(c,plan,it.qty,precioReal(it),s.method,put);
         if(rs&&rs.error){toast('Venta cobrada pero la membresía falló: '+rs.error.message+' — ¿ya corriste pos_migration2.sql?',true);}
         else if(c&&c.profile_id){this.sendPush(c.profile_id,'Membresía activada ✓',(plan?plan.name:'Tu membresía')+' ya está activa');}
         // Al pagar su membresía, si aún no tiene cuenta de la app, se le crea
@@ -2395,6 +2406,7 @@ const Pos={
           <div style="padding-bottom:16px;">
             <div style="font-size:13px;font-weight:700">${esc(this.planName(s.plan_id))} · ${money(s.price_paid)}</div>
             <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:1px">${fdate(s.start_date)} · ${PAY_LABEL[s.payment_method]||s.payment_method||''}</div>
+            ${this.notaDescuento(s)}
           </div>
         </div>`).join('')
       }</div>`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin pagos registrados todavía.</div>'}
@@ -3297,6 +3309,17 @@ const Pos={
       });
     }catch(e){this.accInside=[];}
     this.renderAccess();
+  },
+  // Si se pagó menos que el precio de lista del plan, decirlo con letras en vez
+  // de dejar dos números distintos (ticket vs historial) sin explicación.
+  notaDescuento(s){
+    const plan=this.plans.find(p=>p.id===s.plan_id);
+    if(!plan||s.price_paid==null)return '';
+    const lista=Number(plan.price)||0,pagado=Number(s.price_paid);
+    if(!lista||pagado>=lista)return '';
+    const desc=lista-pagado;
+    const pct=Math.round(desc/lista*100);
+    return `<div style="font-size:11.5px;color:#16A34A;font-weight:700;margin-top:2px">Precio de lista ${money(lista)} · descuento de ${money(desc)}${pct?' ('+pct+'%)':''}</div>`;
   },
   accName(ci){
     if(ci.customer_id){const c=this.customers.find(x=>x.id===ci.customer_id);if(c)return c.full_name;}
