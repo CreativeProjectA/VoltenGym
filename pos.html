@@ -805,6 +805,13 @@ const Pos={
       .map(x=>(this.branches.find(b=>b.id===x.branch_id)||{}).name).filter(Boolean);
     return suyas.join(' y ')||'todas las sucursales';
   },
+  // ¿Este empleado pertenece a la sucursal actual? Sin sucursales marcadas
+  // en Personal = trabaja en todas (admin, técnico) y cuenta como propio.
+  staffDeAqui(profileId){
+    const b=this.branch?this.branch.id:null;if(!b)return true;
+    const suyas=(this.staffBranches||[]).filter(x=>x.staff_id===profileId).map(x=>x.branch_id);
+    return !suyas.length||suyas.includes(b);
+  },
   // Si la ficha es de un empleado, se marca con su puesto para no confundirlo
   // con un cliente que se llame parecido.
   rolTag(c){
@@ -3325,7 +3332,11 @@ const Pos={
       }
     }else{
       const q=code.toLowerCase();
-      const matches=this.customers.filter(c=>(c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q));
+      // REGLA DE LA CASA: en Accesos cada sucursal ve SOLO a su gente. Un
+      // cliente o empleado de Gómez no aparece escaneando en Tres Cantos ni
+      // al revés — mezclarlos causó dos sustos reales ("Daniel salía en TC").
+      const b=this.branch?this.branch.id:null;
+      const matches=this.customers.filter(c=>((c.full_name||'').toLowerCase().includes(q)||(c.phone||'').includes(q))&&(!b||c.branch_id===b));
       if(matches.length===1)cust=matches[0];
       else if(matches.length>1){
         $('scan-picker').innerHTML='<div class="panel"><div class="psub" style="margin-bottom:8px">Hay varias personas con ese nombre — fíjate en el teléfono y la sucursal</div>'+matches.slice(0,6).map(c=>`
@@ -3342,7 +3353,9 @@ const Pos={
       // Con varios empleados de nombre parecido antes se tomaba al PRIMERO sin
       // preguntar, y quedaba registrada la entrada de quien no era.
       const q=code.toLowerCase();
-      const staffs=this.appProfiles.filter(x=>x.role&&x.role!=='member'&&(x.full_name||'').toLowerCase().includes(q));
+      // Personal: SOLO el de esta sucursal (sin sucursal marcada = todas,
+      // como el admin o el técnico, que sí trabajan en ambas).
+      const staffs=this.appProfiles.filter(x=>x.role&&x.role!=='member'&&(x.full_name||'').toLowerCase().includes(q)&&this.staffDeAqui(x.id));
       if(staffs.length===1){this.doStaffCheckin(staffs[0]);return;}
       // Antes de rendirse: buscarlo en el servidor. Puede ser un cliente que
       // no está cargado en esta PC (son miles) y sí existe.
