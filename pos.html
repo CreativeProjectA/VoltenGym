@@ -3100,7 +3100,7 @@ const Pos={
       let q=sb.from('checkins').select('id,created_at,customer_id,member_id').eq('granted',true)
         .is('checked_out_at',null).lt('created_at',localDayStart(todayISO())).order('created_at',{ascending:false}).limit(200);
       if(bId)q=q.eq('branch_id',bId);
-      const {data}=await q;
+      const {data}=await withTimeout(q);
       this._orphans=data||[];
       if(!this._orphans.length){el.innerHTML='';return;}
       const n=this._orphans.length;
@@ -3138,7 +3138,7 @@ const Pos={
     try{
       let q=sb.from('device_enrollments').select('*').is('assigned_to',null).order('first_seen_at',{ascending:false}).limit(10);
       if(bId)q=q.eq('branch_id',bId);
-      const {data}=await q;
+      const {data}=await withTimeout(q);
       if(!data||!data.length){el.innerHTML='';return;}
       el.innerHTML=`<div class="panel" style="background:#FFF7ED;border:1px solid #FED7AA;margin-bottom:16px;">
         <h2 style="font-size:15px">Registros nuevos del aparato — sin asignar (${data.length})</h2>
@@ -3233,12 +3233,17 @@ const Pos={
     try{
       let q=sb.from('checkins').select('*').gte('created_at',localDayStart(this.accFrom)).lte('created_at',localDayEnd(this.accTo)).order('created_at',{ascending:false}).limit(2000);
       if(bId)q=q.eq('branch_id',bId);
-      const {data}=await q;this.accHist=data||[];cset('acc_hist',this.accHist);
+      // withTimeout: sin esto, un tropiezo de red dejaba este panel pegado en
+      // "Cargando..." PARA SIEMPRE (la petición nunca respondía ni fallaba,
+      // así que ni el try ni el catch se disparaban — nada podía sacarlo de
+      // ahí salvo recargar toda la página). Con el límite, a los 10s se cae
+      // al catch y muestra lo último que había en caché.
+      const {data}=await withTimeout(q);this.accHist=data||[];cset('acc_hist',this.accHist);
     }catch(e){this.accHist=cget('acc_hist')||[];}
     try{
       let q2=sb.from('checkins').select('*').gte('created_at',localDayStart(todayISO())).eq('granted',true).is('checked_out_at',null).order('created_at',{ascending:false});
       if(bId)q2=q2.eq('branch_id',bId);
-      const {data:d2}=await q2;
+      const {data:d2}=await withTimeout(q2);
       // Sin lector de salida (el torniquete deja salir libre, sin escanear),
       // el sistema NO sabe la hora exacta en que alguien se fue. Para que
       // "adentro ahora" no acumule gente que ya se fue hace rato:
@@ -4676,7 +4681,12 @@ const Pos={
     const ids=this.appProfiles.filter(p=>p.role&&p.role!=='member').map(p=>p.id);
     if(!ids.length)return;
     try{
-      const {data}=await sb.from('customers').select('id,profile_id').in('profile_id',ids);
+      // withTimeout: sin límite, un tropiezo de red dejaba esta consulta
+      // colgada para siempre — after_staff() nunca llegaba a repintar la
+      // tabla, así que alguien que YA tenía ficha (ej. Óscar) se quedaba
+      // viendo la tabla vieja: a veces con su ficha, a veces sin ella, según
+      // en qué momento se hubiera trabado la última vez.
+      const {data}=await withTimeout(sb.from('customers').select('id,profile_id').in('profile_id',ids));
       if(data)this.staffFichas=new Set(data.map(c=>c.profile_id));
     }catch(e){}
   },
