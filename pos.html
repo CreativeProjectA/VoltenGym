@@ -1822,8 +1822,11 @@ const Pos={
       <h3>Cancelar esta membresía</h3>
       <p style="font-size:13.5px;color:#1F2937;font-weight:500;line-height:1.55;margin-bottom:14px">
         Deja de ser válida de inmediato y el cliente ya no va a poder entrar con ella. No se borra: queda marcada como cancelada.
-        Si además hay que devolverle dinero, eso se hace a mano.
       </p>
+      <div style="background:#FEF3C7;color:#92400E;border-radius:12px;padding:10px 14px;font-size:12.5px;font-weight:600;margin-bottom:14px;line-height:1.5">
+        OJO: esto NO quita el cobro del corte. Si se cobró mal y se le devolvió el dinero,
+        cancela también la VENTA (en esta misma ficha, abajo en Historial de tickets → Cancelar) para que la caja cuadre.
+      </div>
       <div class="field"><label>¿Por qué se cancela?</label>
         <input class="inp" id="csub-reason" placeholder="Ej. se vendió el plan equivocado"></div>
       <button class="btn btn-primary btn-block" style="background:var(--red)" onclick="Pos.doCancelSub('${subId}','${custId}')">Sí, cancelar la membresía</button>
