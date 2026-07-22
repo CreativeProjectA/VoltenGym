@@ -1000,20 +1000,14 @@ const Pos={
     const r=await Q.update('cash_shifts',{id:this.shift.id},{status:'closed',closed_at:new Date().toISOString(),expected_cash:expected,counted_cash:counted});
     if(r.error){toast('Error: '+r.error.message,true);return;}
     cset('shift_'+(this.branch?this.branch.id:null)+'_'+this.user.id,null);
-    // Cierre automático de accesos: quien entró y no marcó su salida (se le
-    // olvidó escanear, o fue el último de la huella/facial) queda registrado
-    // como salido a la hora de cerrar el gym en esta sucursal.
-    if(navigator.onLine){
-      try{
-        const bId=this.branch?this.branch.id:null;
-        let q=sb.from('checkins').select('id').eq('granted',true).is('checked_out_at',null).gte('created_at',localDayStart(todayISO()));
-        if(bId)q=q.eq('branch_id',bId);
-        const {data:openOnes}=await q;
-        if(openOnes&&openOnes.length){
-          await sb.from('checkins').update({checked_out_at:new Date().toISOString()}).in('id',openOnes.map(x=>x.id));
-        }
-      }catch(e){}
-    }
+    // OJO: aquí ANTES se cerraban automáticamente todos los accesos abiertos
+    // de la sucursal, pensando que cerrar turno = cerrar el gym. Es falso: en
+    // un día hay varios turnos (cambio de cajera a media tarde) y la gente
+    // sigue entrenando. El 22-jul esto sacó "de mentiras" a 11 personas en
+    // Gómez y 7 en Tres Cantos justo al cambio de turno, y la cajera que
+    // entraba veía el gym vacío. Se quitó: las entradas que de verdad se
+    // quedan sin salida se cierran al día siguiente desde el aviso de
+    // "entradas sin salida" (loadOrphanEntries), que es donde corresponde.
     const resumen='CORTE DE CAJA — VOLTEN GYM\n'
       +(this.branch?this.branch.name+'\n':'')
       +new Date().toLocaleString('es-MX')+'\nCajero: '+this.profileName
@@ -4503,7 +4497,7 @@ const Pos={
       <div style="margin-bottom:16px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px 16px;">
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#92400E;margin-bottom:8px">Movimientos que NO son venta</div>
         <div style="font-size:12.5px;color:#78350F;font-weight:500;line-height:1.7">
-          ${CAN.map(v=>'· <b>Cancelada</b> '+money(v.total)+' — '+esc(v.concept||'')+(v.cancel_reason?' <i>('+esc(v.cancel_reason)+')</i>':'')+' · '+fdate(v.cancelled_at)).join('<br>')}
+          ${CAN.map(v=>'· <b>Cancelada</b> '+money(v.total)+' — '+esc(v.concept||'')+(v.cancel_reason?' <i>('+esc(v.cancel_reason)+')</i>':'')+' · '+fdate(v.cancelled_at)+(v.cancelled_by&&v.cancelled_by!==v.sold_by?' · la canceló '+esc(this.profName(v.cancelled_by)):'')).join('<br>')}
           ${CAN.length&&MV.length?'<br>':''}
           ${MV.map(m=>'· <b>'+(m.type==='out'?'Retiró':'Metió')+'</b> '+money(m.amount)+(m.reason?' — <i>'+esc(m.reason)+'</i>':'')+' · '+fdate(m.created_at)+' '+ftime(m.created_at)).join('<br>')}
         </div>
