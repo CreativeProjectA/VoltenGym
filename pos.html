@@ -2380,6 +2380,11 @@ const Pos={
           </div>
           <p style="font-size:11px;color:var(--muted);font-weight:500;margin-top:8px">"Reenviar acceso" genera una contraseña NUEVA (no se puede recuperar la anterior) y te la muestra para mandarla por WhatsApp — útil si el cliente dice que no le llegó o la perdió.</p>`
         :`
+          ${c.email?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#FFF;border-radius:12px;padding:10px 12px;margin-bottom:10px;">
+            <div style="font-size:13px;font-weight:600;line-height:1.45">Crearle su cuenta ahora<div style="font-size:11.5px;color:var(--muted);font-weight:500">Se le manda a ${esc(c.email)} y te muestro la contraseña para pasársela por WhatsApp</div></div>
+            <button class="btn-xs btn" id="crear-cta-btn" style="background:var(--orange-soft);color:var(--orange-dark);flex-shrink:0" onclick="Pos.crearCuentaApp('${c.id}')">Crear cuenta</button>
+          </div>`:`<div style="background:#FEF3C7;color:#92400E;border-radius:12px;padding:10px 12px;font-size:12.5px;font-weight:600;margin-bottom:10px;line-height:1.5">Para crearle su cuenta primero necesita un correo — agrégaselo en "Editar datos".</div>`}
+          <div style="font-size:11.5px;color:var(--muted);font-weight:600;margin-bottom:6px">O si el cliente YA se registró solo en la app, vincúlala aquí:</div>
           <input class="inp" id="link-q" placeholder="Escanea el QR del cliente aquí, o busca por nombre/correo..." oninput="Pos.linkSearch('${c.id}',this.value)" onkeydown="if(event.key==='Enter')Pos.linkSearch('${c.id}',this.value,true)">
           <div id="link-res" style="margin-top:8px;font-size:13px;color:var(--muted);font-weight:500">El cliente abre su app → Perfil → "Mi código QR" y lo escaneas con el lector USB, o búscalo por correo.</div>
         `}
@@ -2534,6 +2539,47 @@ const Pos={
     if(r.error){toast('Error: '+r.error.message,true);return;}
     c.profile_id=null;cset('customers',this.customers);
     toast('Cuenta desvinculada');this.openCustomer(custId);
+  },
+  // Crear la cuenta de la app a un cliente de ANTES. Hasta ahora la cuenta solo
+  // nacía sola al cobrarle una membresía, así que los clientes viejos (que ya
+  // tenían su membresía pagada de antes) se quedaban sin app y no había forma
+  // de dársela desde el POS: había que esperar a que ellos se registraran.
+  async crearCuentaApp(custId){
+    const c=this.customers.find(x=>x.id===custId);if(!c)return;
+    if(c.profile_id){toast('Este cliente ya tiene su cuenta vinculada.',true);return;}
+    if(!c.email){toast('Primero agrégale un correo en "Editar datos".',true);return;}
+    if(!navigator.onLine){toast('Necesitas internet para crear la cuenta.',true);return;}
+    const btn=$('crear-cta-btn');if(btn){btn.disabled=true;btn.textContent='Creando...';}
+    try{
+      const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),15000));
+      const {data,error}=await Promise.race([
+        sb.functions.invoke('create-member-account',{
+          body:{customer_id:c.id,full_name:c.full_name,email:c.email,branch_id:c.branch_id,coach_id:c.coach_id||null,coach_until:c.coach_until||null},
+        }),
+        timeout,
+      ]);
+      if(error||!data||!data.ok){
+        toast('No se pudo crear: '+((data&&data.error)||(error&&error.message)||'revisa que el correo no esté ya usado por otra cuenta'),true);
+        if(btn){btn.disabled=false;btn.textContent='Crear cuenta';}return;
+      }
+      c.profile_id=data.profile_id;cset('customers',this.customers);
+      // sus membresías pasan a la cuenta para que las vea en su teléfono
+      try{await sb.from('subscriptions').update({member_id:data.profile_id}).eq('customer_id',custId).is('member_id',null);}catch(e){}
+      this.subs.forEach(s=>{if(s.customer_id===custId&&!s.member_id)s.member_id=data.profile_id;});cset('subs',this.subs);
+      openModal(`
+        <h3>Cuenta de la app creada ✓</h3><p class="msub">${esc(c.full_name)}</p>
+        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:16px;padding:18px 20px;text-align:left;">
+          <div style="font-size:14px;font-weight:600;color:var(--ink);">Usuario: <b>${esc(data.email)}</b></div>
+          <div style="font-size:14px;font-weight:600;color:var(--ink);margin-top:2px;">Contraseña: <b style="font-family:monospace">${esc(data.password)}</b></div>
+          <p style="font-size:12px;color:var(--muted);margin-top:8px">${data.emailSent?'✓ También se le mandó por correo.':'Dale estos datos al cliente — él puede cambiar su contraseña luego en Perfil.'}</p>
+          ${c.phone?`<a class="btn btn-sm" style="background:#DCFCE7;color:#16A34A;text-decoration:none;margin-top:10px;display:inline-block" target="_blank" href="${waLink(c.phone,'¡Hola '+(c.full_name||'').split(' ')[0]+'! Ya puedes usar la app de Volten Gym. Usuario: '+data.email+' · Contraseña: '+data.password)}">Enviar por WhatsApp</a>`:''}
+        </div>
+        <button class="btn btn-primary btn-block" style="margin-top:14px" onclick="closeModal();Pos.openCustomer('${custId}')">Listo</button>
+      `);
+    }catch(e){
+      toast('No se pudo conectar — inténtalo de nuevo.',true);
+      if(btn){btn.disabled=false;btn.textContent='Crear cuenta';}
+    }
   },
   async resendCredentials(custId){
     const c=this.customers.find(x=>x.id===custId);if(!c||!c.profile_id)return;
@@ -4466,10 +4512,60 @@ const Pos={
       staffRows.map(([id,v])=>`<tr><td style="font-weight:700">${esc(this.profName(id))}</td><td>${v.n}</td><td>${v.m}</td><td style="font-weight:800;color:var(--orange)">${money(v.t)}</td></tr>`).join('')
     }</tbody></table>`:'<div class="stub" style="padding:26px"><p>Sin ventas en el período.</p></div>';
     // turnos
-    $('r-shifts').innerHTML=SH.length?`<table><thead><tr><th>Abrió</th><th>Empleado</th><th>Cerró</th><th>Esperado</th><th>Contado</th><th>Diferencia</th><th>Fondo</th></tr></thead><tbody>${
+    $('r-shifts').innerHTML=SH.length?`<table><thead><tr><th>Abrió</th><th>Empleado</th><th>Cerró</th><th>Esperado</th><th>Contado</th><th>Diferencia</th><th>Fondo</th><th></th></tr></thead><tbody>${
       SH.map(s=>{const d=s.counted_cash!=null&&s.expected_cash!=null?Number(s.counted_cash)-Number(s.expected_cash):null;
-      return `<tr><td>${fdate(s.opened_at)} ${ftime(s.opened_at)}</td><td style="font-weight:700">${esc(this.profName(s.staff_id))}</td><td>${s.closed_at?ftime(s.closed_at):'<span class="tag tag-green">Abierto</span>'}</td><td>${s.expected_cash!=null?money(s.expected_cash):'—'}</td><td>${s.counted_cash!=null?money(s.counted_cash):'—'}</td><td>${d==null?'—':(d===0?'<span class="tag tag-green">Cuadró</span>':(d>0?'<span class="tag tag-orange">+'+money(d)+'</span>':'<span class="tag tag-red">'+money(d)+'</span>'))}</td><td>${s.fund_shortage?'<span class="tag tag-red" title="'+esc(s.fund_shortage_note||'')+'">Faltante al abrir</span>':'<span class="tag tag-green">$400 ✓</span>'}</td></tr>`;}).join('')
+      return `<tr><td>${fdate(s.opened_at)} ${ftime(s.opened_at)}</td><td style="font-weight:700">${esc(this.profName(s.staff_id))}</td><td>${s.closed_at?ftime(s.closed_at):'<span class="tag tag-green">Abierto</span>'}</td><td>${s.expected_cash!=null?money(s.expected_cash):'—'}</td><td>${s.counted_cash!=null?money(s.counted_cash):'—'}</td><td>${d==null?'—':(d===0?'<span class="tag tag-green">Cuadró</span>':(d>0?'<span class="tag tag-orange">+'+money(d)+'</span>':'<span class="tag tag-red">'+money(d)+'</span>'))}</td><td>${s.fund_shortage?'<span class="tag tag-red" title="'+esc(s.fund_shortage_note||'')+'">Faltante al abrir</span>':'<span class="tag tag-green">$400 ✓</span>'}</td><td style="text-align:right"><button class="btn-xs btn btn-ghost" onclick="Pos.verDetalleTurno('${s.id}')">Ver detalle</button></td></tr>`;}).join('')
     }</tbody></table>`:'<div class="stub" style="padding:20px"><p>Sin turnos registrados.</p></div>';
+  },
+  // Detalle de un turno YA cerrado: venta por venta, con lo cancelado y los
+  // movimientos de efectivo, y la misma cuenta del corte. Sirve para revisar
+  // un corte viejo sin tener que pedirle el papelito a nadie.
+  async verDetalleTurno(shiftId){
+    openModal('<h3>Detalle del turno</h3><p class="msub">Cargando...</p>');
+    let sh=null,V=[],MV=[];
+    try{
+      const {data:d0}=await withTimeout(sb.from('cash_shifts').select('*').eq('id',shiftId).maybeSingle());sh=d0;
+      const {data:d1}=await withTimeout(sb.from('sales').select('*').eq('shift_id',shiftId).order('created_at',{ascending:true}));V=d1||[];
+      const {data:d2}=await withTimeout(sb.from('cash_movements').select('*').eq('shift_id',shiftId).order('created_at',{ascending:true}));MV=d2||[];
+    }catch(e){openModal('<h3>Detalle del turno</h3><p class="msub">Sin conexión — inténtalo de nuevo.</p><button class="btn btn-ghost btn-block" onclick="closeModal()">Cerrar</button>');return;}
+    if(!sh){openModal('<h3>Detalle del turno</h3><p class="msub">No se encontró.</p><button class="btn btn-ghost btn-block" onclick="closeModal()">Cerrar</button>');return;}
+    const vivas=V.filter(x=>!x.cancelled_at),canc=V.filter(x=>x.cancelled_at);
+    const efec=vivas.filter(x=>x.payment_method==='cash').reduce((a,x)=>a+Number(x.total||0),0);
+    const tarj=vivas.filter(x=>x.payment_method==='card').reduce((a,x)=>a+Number(x.total||0),0);
+    const tran=vivas.filter(x=>x.payment_method==='transfer').reduce((a,x)=>a+Number(x.total||0),0);
+    const movIn=MV.filter(m=>m.type==='in').reduce((a,x)=>a+Number(x.amount||0),0);
+    const movOut=MV.filter(m=>m.type==='out').reduce((a,x)=>a+Number(x.amount||0),0);
+    const esperado=Number(sh.opening_cash||0)+efec+movIn-movOut;
+    const dif=sh.counted_cash!=null?Number(sh.counted_cash)-Number(sh.expected_cash!=null?sh.expected_cash:esperado):null;
+    openModal(`
+      <h3>Detalle del turno</h3>
+      <p class="msub">${esc(this.profName(sh.staff_id))} · ${esc((this.branches.find(b=>b.id===sh.branch_id)||{}).name||'')} · ${fdate(sh.opened_at)} ${ftime(sh.opened_at)} → ${sh.closed_at?ftime(sh.closed_at):'sigue abierto'}</p>
+      <div class="row-line"><span class="k">Órdenes cobradas</span><span class="v">${vivas.length}</span></div>
+      <div class="row-line"><span class="k">Efectivo</span><span class="v">${money(efec)}</span></div>
+      <div class="row-line"><span class="k">Tarjeta</span><span class="v">${money(tarj)}</span></div>
+      <div class="row-line"><span class="k">Transferencia</span><span class="v">${money(tran)}</span></div>
+      <div class="row-line"><span class="k"><b>Total ventas</b></span><span class="v" style="color:var(--orange)">${money(efec+tarj+tran)}</span></div>
+      ${canc.length?`<div class="row-line"><span class="k" style="color:var(--red)">Canceladas (no cuentan)</span><span class="v" style="color:var(--red)">${canc.length} · −${money(canc.reduce((a,x)=>a+Number(x.total||0),0))}</span></div>`:''}
+      <div style="background:var(--gray);border-radius:14px;padding:12px 14px;margin:14px 0;font-size:13px;font-weight:600;line-height:1.85">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px">Cómo se llega a lo esperado</div>
+        Fondo inicial <b style="float:right">${money(sh.opening_cash)}</b><br>
+        + Ventas en efectivo <b style="float:right">${money(efec)}</b><br>
+        ${movIn?'+ Efectivo metido <b style="float:right">'+money(movIn)+'</b><br>':''}
+        ${movOut?'− Efectivo retirado <b style="float:right">'+money(movOut)+'</b><br>':''}
+        <span style="color:var(--orange-dark)">= Esperado en caja <b style="float:right">${money(sh.expected_cash!=null?sh.expected_cash:esperado)}</b></span><br>
+        Contado (físico) <b style="float:right">${sh.counted_cash!=null?money(sh.counted_cash):'—'}</b><br>
+        ${dif==null?'':'Diferencia <b style="float:right;color:'+(dif===0?'#16A34A':'var(--red)')+'">'+money(dif)+(dif===0?' (cuadró)':'')+'</b>'}
+      </div>
+      ${MV.length?`<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px">Movimientos de efectivo</div>
+      <div style="font-size:12.5px;font-weight:600;color:#92400E;background:#FFFBEB;border-radius:12px;padding:10px 12px;margin-bottom:14px;line-height:1.7">
+        ${MV.map(m=>(m.type==='out'?'Retiró ':'Metió ')+money(m.amount)+(m.reason?' — <i>'+esc(m.reason)+'</i>':'')+' · '+ftime(m.created_at)).join('<br>')}
+      </div>`:''}
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px">Venta por venta (${V.length})</div>
+      ${V.length?`<table><thead><tr><th>Hora</th><th>Cliente</th><th>Qué vendió</th><th>Total</th><th>Pago</th></tr></thead><tbody>${
+        V.map(v=>`<tr style="${v.cancelled_at?'opacity:.55':''}"><td>${ftime(v.created_at)}</td><td style="font-weight:700">${esc(this.custName(v.customer_id))}</td><td style="font-size:12.5px">${esc(v.concept||'—')}${v.cancelled_at?'<div style="font-size:11px;color:var(--red);font-weight:700">CANCELADA'+(v.cancel_reason?' · '+esc(v.cancel_reason):'')+'</div>':''}</td><td style="font-weight:800;color:${v.cancelled_at?'var(--muted)':'#16A34A'};${v.cancelled_at?'text-decoration:line-through':''}">${money(v.total)}</td><td>${payTagHtml(v.payment_method)}</td></tr>`).join('')
+      }</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Sin ventas en este turno.</div>'}
+      <button class="btn btn-ghost btn-block" style="margin-top:16px" onclick="closeModal()">Cerrar</button>
+    `);
   },
   _empSales:[],_empSubs:[],
   async runEmpReport(){
