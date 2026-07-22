@@ -4461,19 +4461,32 @@ const Pos={
     if(!emp){box.innerHTML='<span style="color:var(--red);font-weight:600">Primero elige al empleado.</span>';return;}
     box.innerHTML='Cargando...';
     const bId=this.branch?this.branch.id:null;
-    let S=[],SU=[],SH=[];
+    let S=[],SU=[],SH=[],CAN=[],MV=[];
     try{
-      let q=sb.from('sales').select('*').is('cancelled_at',null).eq('sold_by',emp).gte('created_at',localDayStart(from)).lte('created_at',localDayEnd(to)).order('created_at',{ascending:false});
+      // Se traen TODAS (con canceladas) y se separan aquí: el reporte de un
+      // empleado tiene que poder mostrar lo que canceló, no solo lo que cobró.
+      let q=sb.from('sales').select('*').eq('sold_by',emp).gte('created_at',localDayStart(from)).lte('created_at',localDayEnd(to)).order('created_at',{ascending:false});
       if(bId)q=q.eq('branch_id',bId);
-      const {data}=await q;S=data||[];
+      const {data}=await q;const todasV=data||[];
+      CAN=todasV.filter(x=>x.cancelled_at);S=todasV.filter(x=>!x.cancelled_at);
       let q2=sb.from('subscriptions').select('*').eq('sold_by',emp).gte('start_date',from).lte('start_date',to).order('start_date',{ascending:false});
       if(bId)q2=q2.eq('branch_id',bId);
       const {data:d2}=await q2;SU=d2||[];
       let q3=sb.from('cash_shifts').select('*').eq('staff_id',emp).gte('opened_at',localDayStart(from)).lte('opened_at',localDayEnd(to)).order('opened_at',{ascending:false});
       if(bId)q3=q3.eq('branch_id',bId);
       const {data:d3}=await q3;SH=d3||[];
+      // Retiros/entradas de efectivo de SUS turnos: sin esto, un retiro de la
+      // caja (devolución a un cliente) no aparecía por ningún lado y el total
+      // del empleado no cuadraba con el corte.
+      if(SH.length){
+        const {data:d4}=await sb.from('cash_movements').select('*').in('shift_id',SH.map(x=>x.id)).order('created_at',{ascending:false});
+        MV=d4||[];
+      }
     }catch(e){box.innerHTML='Sin conexión — inténtalo con internet.';return;}
-    this._empSales=S;this._empSubs=SU;this._empShifts=SH;
+    this._empSales=S;this._empSubs=SU;this._empShifts=SH;this._empCanc=CAN;this._empMovs=MV;
+    const cancTotal=CAN.reduce((a,x)=>a+Number(x.total||0),0);
+    const retirado=MV.filter(m=>m.type==='out').reduce((a,x)=>a+Number(x.amount||0),0);
+    const metido=MV.filter(m=>m.type==='in').reduce((a,x)=>a+Number(x.amount||0),0);
     const name=this.profName(emp);
     const total=S.reduce((a,x)=>a+Number(x.total||0),0);
     const by=(m)=>S.filter(x=>x.payment_method===m).reduce((a,x)=>a+Number(x.total||0),0);
@@ -4483,7 +4496,18 @@ const Pos={
         <div class="card"><div class="lbl">Órdenes</div><div class="val">${S.length}</div><div class="foot">ventas cobradas</div></div>
         <div class="card"><div class="lbl">Membresías</div><div class="val">${SU.length}</div><div class="foot">vendidas o renovadas</div></div>
         <div class="card"><div class="lbl">Desglose</div><div style="margin-top:12px;font-size:13.5px;font-weight:600;line-height:1.9;">Efectivo <b>${money(by('cash'))}</b><br>Tarjeta <b>${money(by('card'))}</b><br>Transf. <b>${money(by('transfer'))}</b></div></div>
+        ${CAN.length?`<div class="card" style="background:#FEF2F2"><div class="lbl" style="color:#B91C1C">Ventas canceladas</div><div class="val" style="color:#DC2626">${CAN.length}</div><div class="foot">−${money(cancTotal)} · no cuentan en el total</div></div>`:''}
+        ${(retirado||metido)?`<div class="card" style="background:#FEF3C7"><div class="lbl" style="color:#92400E">Efectivo de caja</div><div class="val" style="color:#B45309">${retirado?'−'+money(retirado):'+'+money(metido)}</div><div class="foot">${retirado?'retirado':''}${retirado&&metido?' · ':''}${metido?'metido '+money(metido):''}</div></div>`:''}
       </div>
+      ${(CAN.length||MV.length)?`
+      <div style="margin-bottom:16px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px 16px;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#92400E;margin-bottom:8px">Movimientos que NO son venta</div>
+        <div style="font-size:12.5px;color:#78350F;font-weight:500;line-height:1.7">
+          ${CAN.map(v=>'· <b>Cancelada</b> '+money(v.total)+' — '+esc(v.concept||'')+(v.cancel_reason?' <i>('+esc(v.cancel_reason)+')</i>':'')+' · '+fdate(v.cancelled_at)).join('<br>')}
+          ${CAN.length&&MV.length?'<br>':''}
+          ${MV.map(m=>'· <b>'+(m.type==='out'?'Retiró':'Metió')+'</b> '+money(m.amount)+(m.reason?' — <i>'+esc(m.reason)+'</i>':'')+' · '+fdate(m.created_at)+' '+ftime(m.created_at)).join('<br>')}
+        </div>
+      </div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
         <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Membresías que vendió</div>
         ${SU.length?`<table><thead><tr><th>Cliente</th><th>Plan</th><th>Cobró</th><th>Fecha</th></tr></thead><tbody>${SU.map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td>${esc(this.planName(s.plan_id))}</td><td style="font-weight:800;color:var(--orange)">${s.price_paid!=null?money(s.price_paid):'—'}</td><td style="color:var(--muted)">${fdate(s.start_date)}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;font-weight:500">Ninguna en este período.</div>'}</div>
