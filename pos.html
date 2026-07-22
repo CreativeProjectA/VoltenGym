@@ -1484,7 +1484,10 @@ const Pos={
 
   /* ═══════ NUEVA VENTA (wizard) ═══════ */
   startSale(customerId,planId){
-    this.sale={step:1,customer:null,quick:false,cart:[],promoId:'',method:null,received:'',tab:'plans',q:''};
+    // endOverride arranca vacío SIEMPRE: si se quedara pegado de la venta
+    // anterior, al siguiente cliente se le pondría por error el vencimiento del
+    // anterior sin que nadie lo note.
+    this.sale={step:1,customer:null,quick:false,cart:[],promoId:'',method:null,received:'',tab:'plans',q:'',endOverride:null};
     if(customerId){
       const c=this.customers.find(x=>x.id===customerId);
       if(c){this.sale.customer=c;this.sale.step=2;}
@@ -1753,10 +1756,22 @@ const Pos={
       const newEnd=new Date(base.getTime()+planDays*864e5);
       const famPlan=s.cart.some(x=>{if(x.kind!=='plan')return false;const p=this.plans.find(y=>y.id===x.id);return p&&p.is_family;});
       const famN=famPlan&&s.customer.family_id?this.customers.filter(x=>x.family_id===s.customer.family_id).length:0;
+      const venceAuto=dISO(newEnd);
+      const vence=s.endOverride||venceAuto;
+      const cambiada=s.endOverride&&s.endOverride!==venceAuto;
       accHtml=`<div style="background:var(--orange-soft);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:13.5px;font-weight:600;color:var(--orange-dark);line-height:1.5;">
-        ${hasCur?`Este cliente aún tiene vigencia hasta el <b>${fdate(cur.end_date)}</b>. Los días NO se pierden, se suman: comprará <b>${planDays} día${planDays===1?'':'s'}</b> y su nueva vigencia será hasta el <b>${fdate(dISO(newEnd))}</b>.`
-        :`Su membresía quedará vigente <b>${planDays} día${planDays===1?'':'s'}</b>: hasta el <b>${fdate(dISO(newEnd))}</b>.`}
+        ${hasCur?`Este cliente aún tiene vigencia hasta el <b>${fdate(cur.end_date)}</b>. Los días NO se pierden, se suman: comprará <b>${planDays} día${planDays===1?'':'s'}</b> y su nueva vigencia será hasta el <b>${fdate(vence)}</b>.`
+        :`Su membresía quedará vigente <b>${planDays} día${planDays===1?'':'s'}</b>: hasta el <b>${fdate(vence)}</b>.`}
         ${famN?`<br>Plan familiar: cubre a los <b>${famN} miembros</b> de su familia con un solo pago.`:''}
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(154,52,18,.18);">
+          <label style="display:block;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">¿Vence otro día? Ajústalo aquí</label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input class="inp" type="date" id="sale-end" style="max-width:190px" value="${esc(vence)}" onchange="Pos.sale.endOverride=this.value||null;Pos.go('sale')">
+            ${cambiada?`<button class="btn-xs btn" style="background:#FFF;color:var(--orange-dark)" onclick="Pos.sale.endOverride=null;Pos.go('sale')">Volver a la fecha automática (${fdate(venceAuto)})</button>`:''}
+          </div>
+          <div style="font-size:11.5px;font-weight:500;margin-top:6px;opacity:.85">Úsalo cuando el cliente ya había pagado antes y apenas lo estás dando de alta, para no regalarle días. La fecha en que se cobra no se mueve, solo la de vencimiento.</div>
+          ${cambiada?`<div style="font-size:12px;font-weight:800;margin-top:6px;color:#B45309">Fecha ajustada a mano: vencerá el ${fdate(vence)} en vez del ${fdate(venceAuto)}.</div>`:''}
+        </div>
       </div>`;
     }
     return `
@@ -1977,7 +1992,7 @@ const Pos={
       }else if(it.kind==='plan'){
         const plan=this.plans.find(x=>x.id===it.id);
         productId=await this.ensureMembershipProduct(plan,put);
-        const rs=await this.sellMembership(c,plan,it.qty,precioReal(it),s.method,put);
+        const rs=await this.sellMembership(c,plan,it.qty,precioReal(it),s.method,put,s.endOverride);
         if(rs&&rs.error){toast('Venta cobrada pero la membresía falló: '+rs.error.message+' — ¿ya corriste pos_migration2.sql?',true);}
         else if(c&&c.profile_id){this.sendPush(c.profile_id,'Membresía activada ✓',(plan?plan.name:'Tu membresía')+' ya está activa');}
         // Al pagar su membresía, si aún no tiene cuenta de la app, se le crea
@@ -2115,7 +2130,11 @@ const Pos={
     this.products.push(payload);cset('products',this.products);
     return payload.id;
   },
-  async sellMembership(customer,plan,qty,priceEach,method,put){
+  // endOverride: fecha de vencimiento puesta a mano en el paso de cobro. Sirve
+  // para el cliente que pagó otro día y apenas se está capturando — sin esto se
+  // le regalaban los días que pasaron entre que pagó y que lo dieron de alta.
+  // La fecha de INICIO nunca se toca: siempre es el día en que se registra.
+  async sellMembership(customer,plan,qty,priceEach,method,put,endOverride){
     if(!customer)return{error:{message:'sin cliente'}};
     // Plan FAMILIAR: la vigencia se aplica a TODOS los miembros de la familia, paga solo este cliente
     let targets=[customer];
@@ -2135,8 +2154,9 @@ const Pos={
       let base=new Date();
       if(cur&&daysLeft(cur.end_date)>=0)base=new Date(cur.end_date+'T12:00:00'); // acumula: arranca donde termina la actual
       const end=new Date(base.getTime()+Number(plan.duration_days)*qty*864e5);
+      const vence=(endOverride&&/^\d{4}-\d{2}-\d{2}$/.test(endOverride))?endOverride:dISO(end);
       const sub={id:uuid(),member_id:m.profile_id||null,customer_id:m.id,plan_id:plan.id,
-        status:'active',start_date:todayISO(),end_date:dISO(end),
+        status:'active',start_date:todayISO(),end_date:vence,
         branch_id:this.branch?this.branch.id:null,sold_by:this.user.id,shift_id:this.shift?this.shift.id:null,
         price_paid:m.id===customer.id?priceEach*qty:0,payment_method:method,family_id:m.family_id||null};
       const r=await put('subscriptions',sub);
