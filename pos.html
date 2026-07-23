@@ -2386,6 +2386,7 @@ const Pos={
         <button class="btn btn-sm btn-ghost" onclick="Pos.editCustomerModal('${c.id}')">Editar datos</button>
         <button class="btn btn-sm ${c.suspended?'btn-dark':'btn-danger'}" onclick="Pos.toggleSuspend('${c.id}')">${c.suspended?'Reactivar acceso':'Suspender acceso'}</button>
         <button class="btn btn-sm btn-ghost" onclick="Pos.changeBranchModal('${c.id}')">Cambiar de sucursal</button>
+        ${this.role==='admin'?`<button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626" onclick="Pos.eliminarCliente('${c.id}')">Eliminar ficha</button>`:''}
       </div>
       ${c.coach_id?`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:14px;padding:12px 16px;margin-bottom:16px;font-size:13px;font-weight:600;color:#9A3412;display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>${c.coach_cancelled?'Coach cancelado — activo':'Coach activo'}${c.coach_until?' hasta el '+fdate(c.coach_until)+(daysLeft(c.coach_until)<0?' <span class="tag tag-red">vencido</span>':''):''}${c.coach_cancelled?' <span class="tag" style="background:#FEE2E2;color:#DC2626">no se renueva</span>':''}</span>${c.coach_cancelled?'':`<button class="btn-xs btn" style="background:#FEE2E2;color:#DC2626;flex-shrink:0" onclick="Pos.cancelCoach('${c.id}')">Cancelar coach</button>`}</div>`:''}
       <div style="background:var(--gray);border-radius:16px;padding:16px 18px;margin-bottom:16px;">
@@ -2764,6 +2765,41 @@ const Pos={
     c.suspended=!c.suspended;cset('customers',this.customers);
     toast(c.suspended?'Acceso suspendido — la puerta lo rechazará':'Acceso reactivado ✓');
     this.openCustomer(id);if(this.nav==='customers')this.renderCustTable();
+  },
+  // Borrar una ficha DE VERDAD (no queda ni rastro). SOLO admin, y SOLO si
+  // nunca tuvo actividad real. Es para el caso de "la creé por error, está
+  // vacía, duplicada" — no para deshacerse de un cliente con historial: eso
+  // dañaría los reportes y cortes de caja de días pasados. Para un cliente
+  // real que ya no quieren que entre, la herramienta correcta es "Suspender
+  // acceso" (arriba), que ya existe y no borra nada.
+  async eliminarCliente(id){
+    if(this.role!=='admin'){toast('Solo el administrador puede eliminar fichas.',true);return;}
+    const c=this.customers.find(x=>x.id===id);if(!c)return;
+    if(!navigator.onLine){toast('Necesitas internet para eliminar una ficha.',true);return;}
+    let uso;
+    try{
+      const [su,ve,ac]=await Promise.all([
+        withTimeout(sb.from('subscriptions').select('id',{count:'exact',head:true}).eq('customer_id',id)),
+        withTimeout(sb.from('sales').select('id',{count:'exact',head:true}).eq('customer_id',id)),
+        withTimeout(sb.from('checkins').select('id',{count:'exact',head:true}).eq('customer_id',id)),
+      ]);
+      uso={subs:su.count||0,ventas:ve.count||0,accesos:ac.count||0};
+    }catch(e){toast('No se pudo comprobar si la ficha ya tiene actividad — inténtalo de nuevo.',true);return;}
+    if(uso.subs||uso.ventas||uso.accesos){
+      alert('No se puede eliminar la ficha de "'+(c.full_name||'')+'".\n\nYa tiene actividad real: '
+        +[uso.subs?uso.subs+' membresía'+(uso.subs===1?'':'s'):null,uso.ventas?uso.ventas+' venta'+(uso.ventas===1?'':'s'):null,uso.accesos?uso.accesos+' acceso'+(uso.accesos===1?'':'s'):null].filter(Boolean).join(', ')
+        +'.\n\nBorrarla dañaría los reportes y cortes de caja de esos días.\n\nSi ya no quieres que este cliente pueda entrar, usa "Suspender acceso" en vez de eliminar — no borra nada, solo le quita el paso.');
+      return;
+    }
+    if(!confirm('¿Eliminar la ficha de "'+(c.full_name||'')+'" para siempre?\n\nNunca tuvo membresías, ventas ni accesos, así que no afecta a nadie más. No se puede deshacer.'))return;
+    // Por si tiene un registro de cara/huella suelto en el aparato, se libera
+    // primero (si no, quedaría "asignado" a una ficha que ya no existe).
+    try{await sb.from('device_enrollments').update({assigned_to:null}).eq('assigned_to',id);}catch(e){}
+    const r=await sb.from('customers').delete().eq('id',id);
+    if(r.error){toast('No se pudo eliminar: '+r.error.message,true);return;}
+    this.customers=this.customers.filter(x=>x.id!==id);cset('customers',this.customers);
+    closeModal();toast('Ficha eliminada ✓');
+    if(this.nav==='customers')this.renderCustTable();
   },
   // Cancela el coach del cliente: deja de aparecer en su app y en "Mis
   // atletas" del coach. Aquí no hay cobros automáticos, así que cancelar
