@@ -3367,12 +3367,31 @@ const Pos={
     // si hay tres personas con el mismo nombre y se le asigna al que no era,
     // esa persona entra con el acceso de otra. Por eso se muestra el puesto
     // (si es empleado) y su teléfono, correo o número de cuenta.
-    const res=this.customers.filter(c=>(c.full_name||'').toLowerCase().includes(q)).slice(0,6);
-    box.innerHTML=res.length?res.map(c=>`
+    // REGLA POR SUCURSAL: este buscador mostraba fichas de LAS DOS sucursales
+    // sin decir de cuál era cada quien. Así se conectó por error la cara
+    // registrada en el aparato de Gómez a la ficha de un cliente de Tres
+    // Cantos (Josue Sánchez, 22-jul): la persona en recepción no tenía cómo
+    // notar la diferencia, y el cliente quedaba rechazado en la puerta.
+    // Ahora se ofrecen primero los de ESTA sucursal, y los de la otra salen
+    // aparte, marcados, y hay que confirmar aparte para poder elegirlos.
+    const bId=this.viewBr()||(this.branch?this.branch.id:null);
+    const todos=this.customers.filter(c=>(c.full_name||'').toLowerCase().includes(q));
+    const aqui=bId?todos.filter(c=>c.branch_id===bId||this.esPersonal(c)):todos;
+    const alla=bId?todos.filter(c=>c.branch_id&&c.branch_id!==bId&&!this.esPersonal(c)):[];
+    const fila=(c)=>`
       <button class="cust-row" onclick="Pos.confirmAssignEnroll('${c.id}')">
         ${this.custAvatar(c,32)}<div class="cd"><b>${esc(c.full_name)}</b><span>${esc(this.quienEs(c))}</span></div>
         ${this.rolTag(c)}
-      </button>`).join(''):'Sin coincidencias.';
+      </button>`;
+    let html=aqui.length?aqui.slice(0,6).map(fila).join(''):'<div style="padding:6px 0">Sin coincidencias en esta sucursal.</div>';
+    if(alla.length){
+      html+=`<div style="background:#FEF3C7;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12.5px;color:#92400E;font-weight:600;line-height:1.55">
+        Ojo: ${alla.length===1?'hay 1 cliente':'hay '+alla.length+' clientes'} con ese nombre, pero su ficha es de ${esc(alla.map(c=>(this.branches.find(b=>b.id===c.branch_id)||{}).name||'').filter((v,i,a)=>a.indexOf(v)===i).join(', '))}.
+        Si le asignas esta cara aquí, el aparato de esta sucursal lo va a RECHAZAR, porque su membresía no vale aquí.
+        <div style="margin-top:8px">${alla.slice(0,4).map(c=>`<button class="btn-xs btn" style="background:#FFF;color:#92400E;margin:2px 4px 2px 0" onclick="Pos.confirmAssignEnroll('${c.id}')">Asignárselo de todas formas a ${esc((c.full_name||'').split(' ').slice(0,2).join(' '))}</button>`).join('')}</div>
+      </div>`;
+    }
+    box.innerHTML=html;
   },
   async confirmAssignEnroll(custId){
     const kindGuess=this._pendingEnrollKind||'huella';
@@ -3401,6 +3420,18 @@ const Pos={
     // Guardar el tipo CONFIRMADO en la vinculación (device_enrollments), que es
     // de donde el puente saca si fue cara o huella — no la adivinanza del aparato.
     await sb.from('device_enrollments').update({assigned_to:custId,kind:kindGuess}).eq('id',this._pendingEnrollId);
+    // Queda en la bitácora quién conectó qué código con qué ficha. Sin esto,
+    // cuando una cara quedaba asignada a la persona equivocada no había forma
+    // de saber quién ni cuándo lo hizo (pasó el 22-jul y no hubo rastro).
+    try{
+      const c=this.customers.find(x=>x.id===custId);
+      const suc=(this.branches.find(b=>b.id===(this.viewBr()||(this.branch?this.branch.id:null)))||{}).name||'';
+      const otra=c&&c.branch_id&&c.branch_id!==(this.viewBr()||(this.branch?this.branch.id:null))&&!this.esPersonal(c);
+      await sb.from('audit_log').insert({staff_id:this.user.id,staff_name:this.profileName,
+        branch_id:this.viewBr()||(this.branch?this.branch.id:null),action:'biometrico_asignado',
+        details:'Código '+code+' ('+kindGuess+') del aparato de '+suc+' → '+((c&&c.full_name)||custId)
+          +(otra?' — OJO: su ficha es de la OTRA sucursal':'')});
+    }catch(e){}
     closeModal();toast('Vinculado ✓ — ya puede entrar con eso');this.loadPendingEnrollments();
   },
   async discardEnrollment(enrollId){
