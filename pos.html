@@ -3385,10 +3385,21 @@ const Pos={
       </button>`;
     let html=aqui.length?aqui.slice(0,6).map(fila).join(''):'<div style="padding:6px 0">Sin coincidencias en esta sucursal.</div>';
     if(alla.length){
-      html+=`<div style="background:#FEF3C7;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12.5px;color:#92400E;font-weight:600;line-height:1.55">
-        Ojo: ${alla.length===1?'hay 1 cliente':'hay '+alla.length+' clientes'} con ese nombre, pero su ficha es de ${esc(alla.map(c=>(this.branches.find(b=>b.id===c.branch_id)||{}).name||'').filter((v,i,a)=>a.indexOf(v)===i).join(', '))}.
-        Si le asignas esta cara aquí, el aparato de esta sucursal lo va a RECHAZAR, porque su membresía no vale aquí.
-        <div style="margin-top:8px">${alla.slice(0,4).map(c=>`<button class="btn-xs btn" style="background:#FFF;color:#92400E;margin:2px 4px 2px 0" onclick="Pos.confirmAssignEnroll('${c.id}')">Asignárselo de todas formas a ${esc((c.full_name||'').split(' ').slice(0,2).join(' '))}</button>`).join('')}</div>
+      // Cada opción tiene que decir el nombre COMPLETO, el teléfono y de qué
+      // sucursal es. Con el nombre cortado salían dos botones idénticos
+      // ("Julio Cesar" y "Julio Cesar") y no había forma de saber cuál era cuál.
+      const sucNom=(c)=>(this.branches.find(b=>b.id===c.branch_id)||{}).name||'otra sucursal';
+      html+=`<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;padding:11px 13px;margin-top:12px">
+        <div style="font-size:12.5px;color:#92400E;font-weight:700;line-height:1.5;margin-bottom:2px">Estos NO son de esta sucursal</div>
+        <div style="font-size:11.5px;color:#92400E;font-weight:500;line-height:1.5;margin-bottom:8px">Si le pones la cara aquí a uno de ellos, el aparato lo va a rechazar: su membresía no vale en esta sucursal.</div>
+        ${alla.slice(0,5).map(c=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#FFF;border-radius:9px;padding:8px 10px;margin-top:6px">
+            <div style="min-width:0">
+              <div style="font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.full_name||'')}</div>
+              <div style="font-size:11.5px;color:#92400E;font-weight:600">${esc(sucNom(c))}${c.phone?' · Tel. '+esc(c.phone):''}</div>
+            </div>
+            <button class="btn-xs btn" style="background:#FEF3C7;color:#92400E;flex-shrink:0" onclick="Pos.confirmAssignEnroll('${c.id}')">Asignárselo</button>
+          </div>`).join('')}
       </div>`;
     }
     box.innerHTML=html;
