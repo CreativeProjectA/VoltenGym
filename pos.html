@@ -1176,6 +1176,14 @@ const Pos={
     if(!profileId)return;
     try{await sb.functions.invoke('send-push',{body:{profile_id:profileId,title,body:body||''}});}catch(e){}
   },
+  /* ¿este empleado pertenece a la sucursal que se está viendo? Sin sucursal
+     marcada en staffBranches = trabaja en todas, no se filtra. */
+  enEstaSucursal(p){
+    const bId=this.viewBr()||(this.branch?this.branch.id:null);
+    if(!bId)return true;
+    const suyas=(this.staffBranches||[]).filter(x=>x.staff_id===p.id).map(x=>x.branch_id);
+    return !suyas.length||suyas.includes(bId);
+  },
   /* ── QUIÉN NO HA LLEGADO A SU HORA ─────────────────────────────────
      Para el admin y las encargadas: compara el horario configurado de cada
      empleado (Personal → Editar → "Entra a trabajar") contra sus accesos de
@@ -4593,7 +4601,7 @@ const Pos={
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
         <select class="inp" style="max-width:230px;height:44px" id="emp-sel">
           <option value="">Elegir empleado...</option>
-          ${this.appProfiles.filter(p=>['admin','encargado','cajera'].includes(p.role)).map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)}</option>`).join('')}
+          ${this.appProfiles.filter(p=>['admin','encargado','cajera'].includes(p.role)).filter(p=>this.enEstaSucursal(p)).map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)}</option>`).join('')}
         </select>
         <input class="inp" type="date" style="height:44px;width:160px" id="emp-from" value="${dISO(new Date(Date.now()-29*864e5))}">
         <span style="color:var(--muted);font-weight:700">→</span>
@@ -4608,7 +4616,7 @@ const Pos={
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
         <select class="inp" style="max-width:230px;height:44px" id="asis-sel">
           <option value="">Todo el personal</option>
-          ${this.appProfiles.filter(p=>p.role&&p.role!=='member').map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)}</option>`).join('')}
+          ${this.appProfiles.filter(p=>p.role&&p.role!=='member').filter(p=>this.enEstaSucursal(p)).map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)}</option>`).join('')}
         </select>
         <input class="inp" type="date" style="height:44px;width:160px" id="asis-from" value="${dISO(new Date(Date.now()-13*864e5))}">
         <span style="color:var(--muted);font-weight:700">→</span>
@@ -4917,7 +4925,7 @@ const Pos={
     const box=$('asis-report');
     box.innerHTML='Cargando...';
     const bId=this.viewBr();
-    const staff=this.appProfiles.filter(p=>p.role&&p.role!=='member'&&(!who||p.id===who));
+    const staff=this.appProfiles.filter(p=>p.role&&p.role!=='member'&&(!who||p.id===who)).filter(p=>this.enEstaSucursal(p));
     if(!staff.length){box.innerHTML='Sin personal que mostrar.';return;}
     const fichasDe=(pid)=>this.customers.filter(c=>c.profile_id===pid).map(c=>c.id);
     let CH=[];
