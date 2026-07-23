@@ -2766,12 +2766,14 @@ const Pos={
     toast(c.suspended?'Acceso suspendido — la puerta lo rechazará':'Acceso reactivado ✓');
     this.openCustomer(id);if(this.nav==='customers')this.renderCustTable();
   },
-  // Borrar una ficha DE VERDAD (no queda ni rastro). SOLO admin, y SOLO si
-  // nunca tuvo actividad real. Es para el caso de "la creé por error, está
-  // vacía, duplicada" — no para deshacerse de un cliente con historial: eso
-  // dañaría los reportes y cortes de caja de días pasados. Para un cliente
-  // real que ya no quieren que entre, la herramienta correcta es "Suspender
-  // acceso" (arriba), que ya existe y no borra nada.
+  // Borrar una ficha DE VERDAD (no queda ni rastro). SOLO admin. Por decisión
+  // de Eddy (23-jul) el admin puede borrar CUALQUIER ficha, tenga o no
+  // historial. La base rechaza borrar un cliente con ventas/accesos, así que
+  // aquí se borra en CASCADA: primero su historial (accesos, ventas, membresías,
+  // etc.) y al final la ficha. OJO: eso quita esas ventas de los reportes de
+  // esos días (los cortes YA cerrados guardan su total y no cambian). Por eso
+  // se avisa clarito ANTES, con cuántas cosas se van a borrar. Para un cliente
+  // que solo ya no debe entrar, sigue siendo mejor "Suspender acceso".
   async eliminarCliente(id){
     if(this.role!=='admin'){toast('Solo el administrador puede eliminar fichas.',true);return;}
     const c=this.customers.find(x=>x.id===id);if(!c)return;
@@ -2784,21 +2786,36 @@ const Pos={
         withTimeout(sb.from('checkins').select('id',{count:'exact',head:true}).eq('customer_id',id)),
       ]);
       uso={subs:su.count||0,ventas:ve.count||0,accesos:ac.count||0};
-    }catch(e){toast('No se pudo comprobar si la ficha ya tiene actividad — inténtalo de nuevo.',true);return;}
-    if(uso.subs||uso.ventas||uso.accesos){
-      alert('No se puede eliminar la ficha de "'+(c.full_name||'')+'".\n\nYa tiene actividad real: '
-        +[uso.subs?uso.subs+' membresía'+(uso.subs===1?'':'s'):null,uso.ventas?uso.ventas+' venta'+(uso.ventas===1?'':'s'):null,uso.accesos?uso.accesos+' acceso'+(uso.accesos===1?'':'s'):null].filter(Boolean).join(', ')
-        +'.\n\nBorrarla dañaría los reportes y cortes de caja de esos días.\n\nSi ya no quieres que este cliente pueda entrar, usa "Suspender acceso" en vez de eliminar — no borra nada, solo le quita el paso.');
-      return;
-    }
-    if(!confirm('¿Eliminar la ficha de "'+(c.full_name||'')+'" para siempre?\n\nNunca tuvo membresías, ventas ni accesos, así que no afecta a nadie más. No se puede deshacer.'))return;
-    // Por si tiene un registro de cara/huella suelto en el aparato, se libera
-    // primero (si no, quedaría "asignado" a una ficha que ya no existe).
-    try{await sb.from('device_enrollments').update({assigned_to:null}).eq('assigned_to',id);}catch(e){}
+    }catch(e){toast('No se pudo comprobar el historial de la ficha — inténtalo de nuevo.',true);return;}
+    const tieneHist=uso.subs||uso.ventas||uso.accesos;
+    const detalle=[uso.ventas?uso.ventas+' venta'+(uso.ventas===1?'':'s'):null,uso.subs?uso.subs+' membresía'+(uso.subs===1?'':'s'):null,uso.accesos?uso.accesos+' acceso'+(uso.accesos===1?'':'s'):null].filter(Boolean).join(', ');
+    const msg=tieneHist
+      ? '¿Eliminar la ficha de "'+(c.full_name||'')+'" y TODO su historial para siempre?\n\nSe va a borrar también: '+detalle+'.\n\nOJO: esas ventas dejarán de aparecer en los reportes de esos días (los cortes de caja ya cerrados NO cambian). Esto NO se puede deshacer.'
+      : '¿Eliminar la ficha de "'+(c.full_name||'')+'" para siempre?\n\nNunca tuvo actividad, así que no afecta a nadie más. No se puede deshacer.';
+    if(!confirm(msg))return;
+    // Deja constancia de qué se borró y quién, ANTES de borrar (por si acaso).
+    try{await sb.from('audit_log').insert({staff_id:this.user.id,staff_name:this.profileName,branch_id:c.branch_id||null,
+      action:'cliente_eliminado',details:'Ficha "'+(c.full_name||'')+'"'+(tieneHist?' + historial ('+detalle+')':' (sin historial)')});}catch(e){}
+    // CASCADA: primero todo lo que apunta a la ficha, al final la ficha.
+    try{
+      // partidas de sus ventas -> sus ventas
+      const {data:vs}=await sb.from('sales').select('id').eq('customer_id',id);
+      const sids=(vs||[]).map(x=>x.id);
+      for(let i=0;i<sids.length;i+=50){await sb.from('sale_items').delete().in('sale_id',sids.slice(i,i+50));}
+      await sb.from('sales').delete().eq('customer_id',id);
+      await sb.from('checkins').delete().eq('customer_id',id);
+      await sb.from('subscriptions').delete().eq('customer_id',id);
+      await sb.from('device_enrollments').delete().eq('assigned_to',id);
+      // estas dos solo lo REFERENCIAN sueltas: se dejan sin dañar su propia info
+      try{await sb.from('pending_registrations').update({converted_customer_id:null}).eq('converted_customer_id',id);}catch(e){}
+      try{await sb.from('gift_cards').update({sold_to:null}).eq('sold_to',id);}catch(e){}
+    }catch(e){}
     const r=await sb.from('customers').delete().eq('id',id);
-    if(r.error){toast('No se pudo eliminar: '+r.error.message,true);return;}
+    if(r.error){toast('No se pudo eliminar del todo: '+r.error.message+' — puede quedar algo ligado; avísame.',true);return;}
     this.customers=this.customers.filter(x=>x.id!==id);cset('customers',this.customers);
-    closeModal();toast('Ficha eliminada ✓');
+    // que también desaparezca de la memoria de subs para no dejar fantasmas
+    this.subs=(this.subs||[]).filter(s=>s.customer_id!==id);cset('subs',this.subs);
+    closeModal();toast('Ficha eliminada ✓'+(tieneHist?' (con su historial)':''));
     if(this.nav==='customers')this.renderCustTable();
   },
   // Cancela el coach del cliente: deja de aparecer en su app y en "Mis
@@ -3903,6 +3920,7 @@ const Pos={
           ${canEdit?`<td style="text-align:right;white-space:nowrap">
             <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.productModal('${p.id}')">Editar</button>
             ${p.type==='service'?'':`<button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.stockModal('${p.id}')">± Stock</button>`}
+            ${this.role==='admin'?`<button class="btn-xs btn" style="background:#FEE2E2;color:#DC2626" onclick="Pos.eliminarProducto('${p.id}')">Eliminar</button>`:''}
           </td>`:''}</tr>`;}).join('')
       }</tbody></table>`:'<div class="stub"><div class="st">Sin productos</div><p>Agrega proteínas, aguas, ropa, guantes... con "+ Nuevo producto".</p></div>'}
     </div>
@@ -3951,6 +3969,39 @@ const Pos={
   togglePrType(){
     const isSrv=$('pr-type')&&$('pr-type').value==='service';
     const row=$('pr-physical-row'); if(row)row.style.display=isSrv?'none':'';
+  },
+  // Borrar un producto del inventario. SOLO admin (decisión de Eddy, 23-jul).
+  // Igual que las fichas: la base rechaza borrar un producto que ya se vendió,
+  // así que se borra en cascada. OJO: si ese producto salió en ventas viejas,
+  // borrarlo quita esas partidas y cambia lo que muestran los reportes de esos
+  // días (el total cobrado de cada venta se guardó aparte y no cambia). Se
+  // avisa clarito antes. Un producto que ya no vendes pero SÍ vendiste, mejor
+  // marcarlo Inactivo (deja de salir al cobrar, conserva el historial).
+  async eliminarProducto(id){
+    if(this.role!=='admin'){toast('Solo el administrador puede eliminar productos.',true);return;}
+    const p=this.products.find(x=>x.id===id);if(!p)return;
+    if(!navigator.onLine){toast('Necesitas internet para eliminar un producto.',true);return;}
+    let veces=0;
+    try{
+      const r=await withTimeout(sb.from('sale_items').select('id',{count:'exact',head:true}).eq('product_id',id));
+      veces=r.count||0;
+    }catch(e){toast('No se pudo comprobar el historial del producto — inténtalo de nuevo.',true);return;}
+    const msg=veces
+      ? '¿Eliminar "'+(p.name||'')+'" del inventario, aunque ya se vendió '+veces+' vez'+(veces===1?'':'es')+'?\n\nSe va a quitar de esas '+veces+' venta'+(veces===1?'':'s')+', así que esos productos dejarán de aparecer en el detalle de esas ventas y en los reportes de esos días (el total cobrado no cambia). No se puede deshacer.'
+      : '¿Eliminar "'+(p.name||'')+'" del inventario para siempre?\n\nNunca se ha vendido, así que no afecta a nadie. No se puede deshacer.';
+    if(!confirm(msg))return;
+    try{await sb.from('audit_log').insert({staff_id:this.user.id,staff_name:this.profileName,branch_id:this.branch?this.branch.id:null,
+      action:'producto_eliminado',details:'Producto "'+(p.name||'')+'"'+(veces?' (estaba en '+veces+' venta/s)':' (sin ventas)')});}catch(e){}
+    try{
+      await sb.from('sale_items').delete().eq('product_id',id);
+      // stock y movimientos del producto (nombres defensivos: si no existe la tabla, se ignora)
+      try{await sb.from('stock').delete().eq('product_id',id);}catch(e){}
+      try{await sb.from('stock_movements').delete().eq('product_id',id);}catch(e){}
+    }catch(e){}
+    const r=await sb.from('products').delete().eq('id',id);
+    if(r.error){toast('No se pudo eliminar del todo: '+r.error.message,true);return;}
+    this.products=(this.products||[]).filter(x=>x.id!==id);cset('products',this.products);
+    toast('Producto eliminado ✓');this.go('inventory');
   },
   async saveProduct(id){
     const name=$('pr-name').value.trim();
