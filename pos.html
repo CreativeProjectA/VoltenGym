@@ -2447,6 +2447,7 @@ const Pos={
           <td>${s.price_paid!=null?money(s.price_paid):'—'}</td>
           <td>${estado}</td>
           <td style="text-align:right;white-space:nowrap">${cancelada||this.role==='cajera'?'':`
+            <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.cambiarVigencia('${s.id}','${c.id}')">Cambiar fecha</button>
             <button class="btn-xs btn btn-danger" onclick="Pos.cancelSubModal('${s.id}','${c.id}')">Cancelar</button>`}
           </td></tr>`;}).join('')
       }</tbody></table>`:'<div style="font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px">Sin membresías todavía.</div>'}
@@ -3051,6 +3052,48 @@ const Pos={
       }).join('');
   },
 
+  // Cambiar la fecha de VENCIMIENTO de una membresía que ya existe.
+  // Es el hermano del campo que sale al cobrar: aquel sirve al momento de la
+  // venta, este sirve para corregir después (el cliente que pagó otro día y ya
+  // se le capturó, o para abonarle tiempo en vez de devolverle dinero).
+  // La fecha de INICIO nunca se toca — es cuándo empezó a contar, y moverla
+  // hacia atrás dejaría el historial mintiendo.
+  cambiarVigencia(subId,custId){
+    if(this.role==='cajera'){toast('Pídeselo a la encargada o al administrador.',true);return;}
+    const s=this.subs.find(x=>x.id===subId);if(!s)return;
+    openModal(`
+      <h3>Cambiar hasta cuándo vence</h3>
+      <p class="msub">${esc(this.planName(s.plan_id))} · empezó el ${fdate(s.start_date)}</p>
+      <div style="background:var(--gray);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;font-weight:600;line-height:1.6">
+        Hoy vence el <b>${fdate(s.end_date)}</b> (${daysLeft(s.end_date)>=0?'le quedan '+daysLeft(s.end_date)+' día'+(daysLeft(s.end_date)===1?'':'s'):'ya venció'}).
+      </div>
+      <div class="field"><label>Nueva fecha de vencimiento</label>
+        <input class="inp" type="date" id="cv-fecha" value="${esc(s.end_date||'')}"></div>
+      <div class="field"><label>¿Por qué se cambia? (queda en la bitácora)</label>
+        <input class="inp" id="cv-motivo" placeholder="Ej. pagó el lunes y se capturó hasta hoy"></div>
+      <p style="font-size:11.5px;color:var(--muted);font-weight:500;margin-bottom:14px;line-height:1.5">La fecha en que empezó no se mueve — solo cambia hasta cuándo le vale.</p>
+      <button class="btn btn-primary btn-block" onclick="Pos.guardarVigencia('${subId}','${custId}')">Guardar</button>
+      <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" onclick="closeModal()">Cancelar</button>
+    `);
+    setTimeout(()=>{const e=$('cv-fecha');if(e)e.focus();},50);
+  },
+  async guardarVigencia(subId,custId){
+    const s=this.subs.find(x=>x.id===subId);if(!s)return;
+    const nueva=($('cv-fecha')?$('cv-fecha').value:'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(nueva)){toast('Escoge una fecha válida.',true);return;}
+    if(s.start_date&&nueva<s.start_date){toast('No puede vencer antes del día en que empezó ('+fdate(s.start_date)+').',true);return;}
+    if(nueva===s.end_date){closeModal();return;}
+    if(!navigator.onLine){toast('Necesitas internet para cambiar la fecha.',true);return;}
+    const motivo=($('cv-motivo')?$('cv-motivo').value.trim():'');
+    const antes=s.end_date;
+    const r=await Q.update('subscriptions',{id:subId},{end_date:nueva});
+    if(r.error){toast('Error: '+r.error.message,true);return;}
+    s.end_date=nueva;cset('subs',this.subs);
+    try{await sb.from('audit_log').insert({staff_id:this.user.id,staff_name:this.profileName,branch_id:s.branch_id||null,
+      action:'vigencia_cambiada',details:'Membresía de '+this.custName(custId)+': vencía '+fdate(antes)+', ahora '+fdate(nueva)+(motivo?' — '+motivo:'')});}catch(e){}
+    closeModal();toast('Ahora vence el '+fdate(nueva)+' ✓');
+    this.openCustomer(custId);
+  },
   // Borrar un plan del catálogo. SOLO admin, y SOLO si nunca se ha vendido.
   //
   // Por qué el candado: los planes viejos (Mes, Día...) tienen cientos de
