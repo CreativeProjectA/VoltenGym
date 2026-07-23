@@ -997,9 +997,28 @@ const Pos={
     if(!isFinite(counted)||counted<0){toast('El efectivo contado no es un número válido.',true);return;}
     if(counted===0&&Number(expected)>0&&!confirm('Vas a cerrar el turno con $0 en caja, cuando se esperaban '+money(expected)+'.\n\n¿Es correcto? Se registrará como faltante.'))return;
     const t=await this.shiftTotals();
-    const r=await Q.update('cash_shifts',{id:this.shift.id},{status:'closed',closed_at:new Date().toISOString(),expected_cash:expected,counted_cash:counted});
+    const cierre=new Date().toISOString();
+    const r=await Q.update('cash_shifts',{id:this.shift.id},{status:'closed',closed_at:cierre,expected_cash:expected,counted_cash:counted});
     if(r.error){toast('Error: '+r.error.message,true);return;}
     cset('shift_'+(this.branch?this.branch.id:null)+'_'+this.user.id,null);
+    // Cerrar turno cuenta como la SALIDA del propio cajero (pedido de Eddy,
+    // 23-jul): así el reporte de Asistencia compara esta hora contra su
+    // horario y sabe si se fue antes o después. Se cierra SOLO su propio
+    // acceso de hoy (member_id = su cuenta, o su ficha), NUNCA el de los demás
+    // — eso fue justo el bug del 22-jul que sacaba a todo el gym.
+    if(navigator.onLine){
+      try{
+        const bId=this.branch?this.branch.id:null;
+        // sus fichas de cliente (por si el aparato lo registró por customer_id)
+        let fichasIds=[];
+        try{const {data:fs}=await sb.from('customers').select('id').eq('profile_id',this.user.id);fichasIds=(fs||[]).map(x=>x.id);}catch(e){}
+        const orClause='member_id.eq.'+this.user.id+(fichasIds.length?',customer_id.in.('+fichasIds.join(',')+')':'');
+        let q=sb.from('checkins').select('id').eq('granted',true).is('checked_out_at',null).gte('created_at',localDayStart(todayISO())).or(orClause).order('created_at',{ascending:false}).limit(1);
+        if(bId)q=q.eq('branch_id',bId);
+        const {data:mio}=await q;
+        if(mio&&mio[0]){await sb.from('checkins').update({checked_out_at:cierre}).eq('id',mio[0].id);}
+      }catch(e){}
+    }
     // OJO: aquí ANTES se cerraban automáticamente todos los accesos abiertos
     // de la sucursal, pensando que cerrar turno = cerrar el gym. Es falso: en
     // un día hay varios turnos (cambio de cajera a media tarde) y la gente
