@@ -2952,12 +2952,15 @@ const Pos={
           <button class="pick-tab ${brCat==='__all'?'on':''}" onclick="Pos.planBrCat='__all';Pos.go('memberships')">Todas</button>
           ${this.branches.map(b=>`<button class="pick-tab ${brCat===b.id?'on':''}" onclick="Pos.planBrCat='${b.id}';Pos.go('memberships')">${esc(b.name)}</button>`).join('')}
         </div>`:''}
-        <table><thead><tr><th>Plan</th><th>Días</th><th>Precio</th><th>Estado</th></tr></thead><tbody>
+        <table><thead><tr><th>Plan</th><th>Días</th><th>Precio</th><th>Estado</th>${this.role==='admin'?'<th></th>':''}</tr></thead><tbody>
         ${catPlans.map(p=>`<tr ${this.role==='admin'||(this.role==='encargado'&&p.branch_id===(this.branch?this.branch.id:null))?`style="cursor:pointer" onclick="Pos.planModal('${p.id}')"`:''}>
           <td style="font-weight:700">${esc(p.name)}${p.is_family?' <span class="tag tag-gray">familiar</span>':''}${p.branch_id?' <span class="tag tag-orange">'+esc((this.branches.find(b=>b.id===p.branch_id)||{}).name||'')+'</span>':' <span class="tag tag-gray">ambas sucursales</span>'}</td>
           <td>${p.duration_days}</td>
           <td style="font-weight:800;color:var(--orange)">${money(p.price)}</td>
           <td>${p.active!==false?'<span class="tag tag-green">Activo</span>':'<span class="tag tag-gray">Inactivo</span>'}</td>
+          ${this.role==='admin'?`<td style="text-align:right;white-space:nowrap" onclick="event.stopPropagation()">
+            <button class="btn-xs btn" style="background:#FEE2E2;color:#DC2626" title="Borrar del catálogo — solo si nunca se ha vendido" onclick="Pos.borrarPlan('${p.id}')">Borrar</button>
+          </td>`:''}
         </tr>`).join('')}</tbody></table>
       </div>
     </div>
@@ -3048,6 +3051,36 @@ const Pos={
       }).join('');
   },
 
+  // Borrar un plan del catálogo. SOLO admin, y SOLO si nunca se ha vendido.
+  //
+  // Por qué el candado: los planes viejos (Mes, Día...) tienen cientos de
+  // membresías apuntándoles. Borrar uno de esos, en el mejor de los casos
+  // dejaría el historial de esos clientes sin nombre de plan, y en el peor la
+  // base podría arrastrarse las membresías. No se arriesga: si ya se vendió,
+  // se desactiva (deja de salir al cobrar) pero no se borra.
+  async borrarPlan(id){
+    if(this.role!=='admin'){toast('Solo el administrador puede borrar planes.',true);return;}
+    const p=this.plans.find(x=>x.id===id);if(!p)return;
+    if(!navigator.onLine){toast('Necesitas internet para borrar un plan.',true);return;}
+    let usados=null;
+    try{
+      const r=await withTimeout(sb.from('subscriptions').select('id',{count:'exact',head:true}).eq('plan_id',id));
+      usados=r.count;
+    }catch(e){toast('No se pudo comprobar si el plan ya se usó — inténtalo de nuevo.',true);return;}
+    if(usados===null||usados===undefined){toast('No se pudo comprobar si el plan ya se usó — inténtalo de nuevo.',true);return;}
+    if(usados>0){
+      alert('No se puede borrar "'+(p.name||'')+'".\n\nYa hay '+usados+' membresía'+(usados===1?'':'s')+' vendida'+(usados===1?'':'s')+' con este plan, y borrarlo dejaría el historial de esos clientes incompleto.\n\nLo que sí puedes hacer: entrar al plan y marcarlo como INACTIVO. Deja de aparecer al cobrar, pero el historial se conserva.');
+      return;
+    }
+    if(!confirm('¿Borrar el plan "'+(p.name||'')+'" del catálogo?\n\nNunca se ha vendido, así que no afecta a ningún cliente. Desaparece para siempre de la lista.'))return;
+    const r=await sb.from('plans').delete().eq('id',id);
+    if(r.error){toast('No se pudo borrar: '+r.error.message,true);return;}
+    // el "producto" espejo que se crea para poder cobrarlo en el POS
+    try{await sb.from('products').delete().eq('plan_id',id);}catch(e){}
+    this.plans=this.plans.filter(x=>x.id!==id);cset('plans',this.plans);
+    this.products=(this.products||[]).filter(x=>x.plan_id!==id);cset('products',this.products);
+    toast('Plan borrado ✓');this.go('memberships');
+  },
   planModal(id){
     // La encargada también puede editar planes, pero SOLO los de su
     // sucursal (subadministradora) — cada cambio suyo queda en la
