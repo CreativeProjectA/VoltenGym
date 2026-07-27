@@ -2273,6 +2273,16 @@ const Pos={
                  :'Su ficha está en <b>'+esc(b)+'</b> — cambia la sucursal en el selector de arriba para verlo.')+'</p></div>';
         }
       }
+      // Nada en la lista que ya tenemos en memoria (puede estar unos segundos
+      // desactualizada si otra caja acaba de dar de alta a alguien). En vez
+      // de obligar a refrescar la página, se pregunta directo a la base de
+      // datos UNA vez por búsqueda — así aparece sola, sin que nadie note
+      // que hubo que ir a buscarla.
+      if(q&&q.length>=3&&this._custLiveQ!==q){
+        this._custLiveQ=q;
+        this.liveSearchCustomers(q);
+        return '<div class="stub"><div class="st">Buscando…</div><p>Revisando si es un alta muy reciente de otra caja.</p></div>';
+      }
       return '<div class="stub"><div class="st">'+(this.customers.length?'Sin resultados':'Aún no hay clientes')+'</div><p>'+(this.customers.length?'Prueba con otro nombre.':'Da de alta al primero con "+ Nuevo cliente". Si ya usa la app, la búsqueda te deja vincular su cuenta.')+'</p></div>';
     }
     // LOS MÁS NUEVOS PRIMERO. Antes salían por orden alfabético y solo los
@@ -2298,6 +2308,27 @@ const Pos={
         </td></tr>`).join('')}</tbody></table>`;
   },
   renderCustTable(){$('cust-table').innerHTML=this.custTable();},
+  // Se llama cuando el buscador de Clientes no encuentra nada en lo que ya
+  // tenemos en memoria. Pregunta directo a Supabase por si es alguien dado
+  // de alta hace segundos en otra caja (el refresco automático de 60s se
+  // pausa mientras se escribe, para no interrumpir). Si aparece, se agrega
+  // sin duplicar y se vuelve a dibujar — sin que la cajera tenga que hacer
+  // nada.
+  async liveSearchCustomers(q){
+    try{
+      const like='%'+q.replace(/[%,]/g,'')+'%';
+      const {data}=await sb.from('customers').select('*')
+        .or(`full_name.ilike.${like},phone.ilike.${like},email.ilike.${like}`).limit(20);
+      if(data&&data.length){
+        const vistos=new Set(this.customers.map(c=>c.id));
+        const nuevos=data.filter(c=>!vistos.has(c.id));
+        if(nuevos.length){this.customers=this.customers.concat(nuevos);cset('customers',this.customers);}
+      }
+    }catch(e){ /* sin internet: se queda con lo que ya había */ }
+    finally{
+      if(this.nav==='customers'&&this.custQuery.toLowerCase()===q)this.renderCustTable();
+    }
+  },
   async after_customers(){
     try{
       const {data}=await sb.from('customers').select('*').order('full_name');
