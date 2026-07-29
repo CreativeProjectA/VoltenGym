@@ -4137,7 +4137,7 @@ const Pos={
      Cada ajuste queda en el historial de movimientos con su motivo, así que
      después se puede ver qué se ajustó y quién lo hizo. */
   countModal(){
-    const prods=this.products.filter(p=>p.type!=='membership'&&p.type!=='service');
+    const prods=this.products.filter(p=>p.type!=='membership'&&p.type!=='service'&&this.productoEnEstaSucursal(p));
     if(!prods.length){toast('No hay productos con inventario en esta sucursal.',true);return;}
     openModal(`
       <h3>Conteo físico de inventario</h3>
@@ -4191,7 +4191,7 @@ const Pos={
     this.go('inventory');
   },
   stockModal(productId){
-    const prods=this.products.filter(p=>p.type!=='membership');
+    const prods=this.products.filter(p=>p.type!=='membership'&&this.productoEnEstaSucursal(p));
     if(!prods.length){toast('Primero crea un producto.',true);return;}
     openModal(`
       <h3>Movimiento de stock</h3><p class="msub">${esc(this.branch?this.branch.name:'')}</p>
