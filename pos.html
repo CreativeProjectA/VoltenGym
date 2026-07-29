@@ -1329,6 +1329,17 @@ const Pos={
   profName(id){const p=this.appProfiles.find(x=>x.id===id);return p?(p.full_name||p.email):'—';},
   stockOf(pid){const s=this.stock.find(x=>x.product_id===pid&&this.branch&&x.branch_id===this.branch.id);return s?Number(s.qty):0;},
   minOf(pid){const s=this.stock.find(x=>x.product_id===pid&&this.branch&&x.branch_id===this.branch.id);return s?Number(s.min_qty||0):0;},
+  // El catálogo de productos es una sola tabla compartida (mismo producto,
+  // stock distinto por sucursal) — pero un producto solo "pertenece" a esta
+  // sucursal si tiene renglón de stock aquí. Los servicios no tienen stock,
+  // así que esos siempre se ven en todas. Esto evita que en Inventario
+  // aparezcan (y se puedan borrar) productos que en realidad son de la otra
+  // sucursal.
+  productoEnEstaSucursal(p){
+    if(p.type==='service')return true;
+    if(!this.branch)return true;
+    return this.stock.some(s=>s.product_id===p.id&&s.branch_id===this.branch.id);
+  },
   activePromos(){
     const t=todayISO();
     const bId=this.branch?this.branch.id:null;
@@ -3947,7 +3958,7 @@ const Pos={
   invMoves:[],
   view_inventory(){
     const canEdit=this.role!=='cajera';
-    const allProds=this.products.filter(p=>p.type!=='membership');
+    const allProds=this.products.filter(p=>p.type!=='membership'&&this.productoEnEstaSucursal(p));
     const cats=[...new Set(allProds.map(p=>p.category||'Sin categoría'))].sort();
     if(this.invCat&&this.invCat!=='__all'&&!cats.includes(this.invCat))this.invCat='__all';
     const prods=(!this.invCat||this.invCat==='__all')?allProds:allProds.filter(p=>(p.category||'Sin categoría')===this.invCat);
@@ -4039,26 +4050,53 @@ const Pos={
     if(this.role!=='admin'){toast('Solo el administrador puede eliminar productos.',true);return;}
     const p=this.products.find(x=>x.id===id);if(!p)return;
     if(!navigator.onLine){toast('Necesitas internet para eliminar un producto.',true);return;}
+    const bId=this.branch?this.branch.id:null;
+    // El catálogo es una tabla compartida entre sucursales (mismo producto,
+    // stock distinto por sucursal). Antes "Eliminar" borraba el producto
+    // COMPLETO — incluyendo su stock y sus ventas en la OTRA sucursal, que
+    // ni se estaba viendo. Ahora: los servicios (sin stock por sucursal)
+    // siguen borrándose global; los productos con stock solo se quitan de
+    // ESTA sucursal, y el producto entero solo desaparece de verdad cuando
+    // ya no le queda stock en ninguna sucursal.
+    const esServicio=p.type==='service';
     let veces=0;
     try{
-      const r=await withTimeout(sb.from('sale_items').select('id',{count:'exact',head:true}).eq('product_id',id));
+      let q=sb.from('sale_items').select('id,sales!inner(branch_id)',{count:'exact',head:true}).eq('product_id',id);
+      if(!esServicio&&bId)q=q.eq('sales.branch_id',bId);
+      const r=await withTimeout(q);
       veces=r.count||0;
     }catch(e){toast('No se pudo comprobar el historial del producto — inténtalo de nuevo.',true);return;}
+    const alcance=esServicio?'en TODAS las sucursales (es un servicio, no tiene stock por sucursal)':'solo en '+(this.branch?this.branch.name:'esta sucursal');
     const msg=veces
-      ? '¿Eliminar "'+(p.name||'')+'" del inventario, aunque ya se vendió '+veces+' vez'+(veces===1?'':'es')+'?\n\nSe va a quitar de esas '+veces+' venta'+(veces===1?'':'s')+', así que esos productos dejarán de aparecer en el detalle de esas ventas y en los reportes de esos días (el total cobrado no cambia). No se puede deshacer.'
-      : '¿Eliminar "'+(p.name||'')+'" del inventario para siempre?\n\nNunca se ha vendido, así que no afecta a nadie. No se puede deshacer.';
+      ? '¿Eliminar "'+(p.name||'')+'" del inventario ('+alcance+'), aunque ya se vendió '+veces+' vez'+(veces===1?'':'es')+' aquí?\n\nSe va a quitar de esas '+veces+' venta'+(veces===1?'':'s')+', así que esos productos dejarán de aparecer en el detalle de esas ventas y en los reportes de esos días (el total cobrado no cambia). No se puede deshacer.'
+      : '¿Eliminar "'+(p.name||'')+'" del inventario ('+alcance+')?\n\nNunca se ha vendido ahí, así que no afecta a nadie. No se puede deshacer.';
     if(!confirm(msg))return;
-    try{await sb.from('audit_log').insert({staff_id:this.user.id,staff_name:this.profileName,branch_id:this.branch?this.branch.id:null,
-      action:'producto_eliminado',details:'Producto "'+(p.name||'')+'"'+(veces?' (estaba en '+veces+' venta/s)':' (sin ventas)')});}catch(e){}
-    try{
-      await sb.from('sale_items').delete().eq('product_id',id);
-      // stock y movimientos del producto (nombres defensivos: si no existe la tabla, se ignora)
-      try{await sb.from('stock').delete().eq('product_id',id);}catch(e){}
-      try{await sb.from('stock_movements').delete().eq('product_id',id);}catch(e){}
-    }catch(e){}
-    const r=await sb.from('products').delete().eq('id',id);
-    if(r.error){toast('No se pudo eliminar del todo: '+r.error.message,true);return;}
-    this.products=(this.products||[]).filter(x=>x.id!==id);cset('products',this.products);
+    try{await sb.from('audit_log').insert({staff_id:this.user.id,staff_name:this.profileName,branch_id:bId,
+      action:'producto_eliminado',details:'Producto "'+(p.name||'')+'"'+(veces?' (estaba en '+veces+' venta/s)':' (sin ventas)')+(esServicio?' [todas las sucursales]':' [solo esta sucursal]')});}catch(e){}
+    if(esServicio){
+      try{
+        await sb.from('sale_items').delete().eq('product_id',id);
+        try{await sb.from('stock').delete().eq('product_id',id);}catch(e){}
+        try{await sb.from('stock_moves').delete().eq('product_id',id);}catch(e){}
+      }catch(e){}
+      const r=await sb.from('products').delete().eq('id',id);
+      if(r.error){toast('No se pudo eliminar del todo: '+r.error.message,true);return;}
+      this.products=(this.products||[]).filter(x=>x.id!==id);cset('products',this.products);
+    }else{
+      try{
+        const {data:misVentas}=await sb.from('sales').select('id').eq('branch_id',bId);
+        const idsVentas=(misVentas||[]).map(s=>s.id);
+        if(idsVentas.length)await sb.from('sale_items').delete().eq('product_id',id).in('sale_id',idsVentas);
+        await sb.from('stock').delete().eq('product_id',id).eq('branch_id',bId);
+        try{await sb.from('stock_moves').delete().eq('product_id',id).eq('branch_id',bId);}catch(e){}
+      }catch(e){toast('No se pudo eliminar: '+(e.message||e),true);return;}
+      this.stock=(this.stock||[]).filter(x=>!(x.product_id===id&&x.branch_id===bId));cset('stock',this.stock);
+      const quedaEnOtraSucursal=this.stock.some(x=>x.product_id===id);
+      if(!quedaEnOtraSucursal){
+        const r=await sb.from('products').delete().eq('id',id);
+        if(!r.error){this.products=(this.products||[]).filter(x=>x.id!==id);cset('products',this.products);}
+      }
+    }
     toast('Producto eliminado ✓');this.go('inventory');
   },
   async saveProduct(id){
