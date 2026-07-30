@@ -164,6 +164,8 @@
   .cart-item .cq{display:flex;align-items:center;gap:8px;}
   .cart-item .cq button{width:26px;height:26px;border-radius:50%;background:var(--gray);font-size:15px;font-weight:800;color:var(--ink);}
   .cart-item .cq button:hover{background:var(--orange);color:#FFF;transform:scale(1.12);}
+  .cart-item .cq-inp{width:44px;height:26px;text-align:center;font-weight:800;font-size:14px;border:1px solid var(--gray);border-radius:8px;padding:0;-moz-appearance:textfield;}
+  .cart-item .cq-inp::-webkit-outer-spin-button,.cart-item .cq-inp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   .cart-item .cp{font-size:14px;font-weight:800;min-width:70px;text-align:right;}
   .method-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
   .method-card{background:var(--gray);border-radius:16px;padding:16px 12px;text-align:center;border:2px solid transparent;font-size:13.5px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);transition:all .25s cubic-bezier(.34,1.4,.64,1);}
@@ -1521,6 +1523,16 @@ const Pos={
   copyCorte(){navigator.clipboard.writeText(this._corte||'');toast('Corte copiado — pégalo en WhatsApp o correo');},
 
   /* ═══════ NUEVA VENTA (wizard) ═══════ */
+  // Venta rápida de UN producto directo desde Inventario — antes había que
+  // ir hasta "Nueva venta → Venta rápida sin cliente → buscar el producto".
+  // Pedido de Eddy: un clic desde la fila del producto y ya está en el
+  // carrito, listo para ajustar cantidad y cobrar.
+  quickSellProduct(id){
+    const p=this.products.find(x=>x.id===id);if(!p)return;
+    this.sale={step:2,customer:null,quick:true,cart:[{kind:'product',id:p.id,name:p.name,price:Number(p.price),qty:1,service:p.type==='service'}],
+      promoId:'',method:null,received:'',tab:'products',q:'',endOverride:null};
+    this.go('sale');
+  },
   startSale(customerId,planId){
     // endOverride arranca vacío SIEMPRE: si se quedara pegado de la venta
     // anterior, al siguiente cliente se le pondría por error el vencimiento del
@@ -1679,7 +1691,7 @@ const Pos={
       ${s.cart.length?s.cart.map((it,i)=>`
         <div class="cart-item">
           <div class="cn">${esc(it.name)}<div style="font-size:11px;color:var(--muted);font-weight:600">${money(it.price)} c/u</div></div>
-          <div class="cq"><button onclick="Pos.cartQty(${i},-1)">−</button><b>${it.qty}</b><button onclick="Pos.cartQty(${i},1)">＋</button></div>
+          <div class="cq"><button onclick="Pos.cartQty(${i},-1)">−</button><input class="cq-inp" type="number" min="1" value="${it.qty}" onchange="Pos.cartQtySet(${i},this.value)" onclick="this.select()"><button onclick="Pos.cartQty(${i},1)">＋</button></div>
           <div class="cp">${money(it.price*it.qty)}</div>
         </div>`).join(''):'<div style="color:var(--muted);font-size:13px;font-weight:500;padding:14px 0">Toca un artículo para agregarlo.</div>'}
       <div class="row-line" style="margin-top:8px"><span class="k">Subtotal</span><span class="v">${money(t.subtotal)}</span></div>
@@ -1756,6 +1768,15 @@ const Pos={
   cartQty(i,d){
     const it=this.sale.cart[i];if(!it)return;
     it.qty+=d;if(it.qty<=0)this.sale.cart.splice(i,1);
+    this.go('sale');
+  },
+  // Escribir la cantidad directo (ej. "30" de un jalón) en vez de darle
+  // al + treinta veces — pedido de Eddy para ventas grandes de agua/snacks.
+  cartQtySet(i,val){
+    const it=this.sale.cart[i];if(!it)return;
+    const n=Math.floor(Number(val));
+    if(!n||n<=0){this.sale.cart.splice(i,1);}
+    else it.qty=n;
     this.go('sale');
   },
   toPay(){if(!this.sale.cart.length)return;this.sale.step=3;this.go('sale');},
@@ -3977,7 +3998,7 @@ const Pos={
       ${cats.map(c=>`<button class="pick-tab ${this.invCat===c?'on':''}" onclick="Pos.invCat='${esc(c).replace(/'/g,"")}';Pos.go('inventory')">${esc(c)}</button>`).join('')}
     </div>`:''}
     <div class="panel">
-      ${prods.length?`<table><thead><tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Costo</th><th>Stock</th><th>Estado</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${
+      ${prods.length?`<table><thead><tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Costo</th><th>Stock</th><th>Estado</th><th></th></tr></thead><tbody>${
         prods.map(p=>{
           const st=this.stockOf(p.id),mn=this.minOf(p.id);
           return `<tr><td style="font-weight:700">${esc(p.name)}${p.sku?' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+esc(p.sku)+'</span>':''}</td>
@@ -3986,11 +4007,13 @@ const Pos={
           <td style="color:var(--muted)">${p.cost?money(p.cost):'—'}</td>
           <td>${p.type==='service'?'<span class="tag tag-blue">Servicio</span>':'<span class="tag '+(st<=0?'tag-red':(mn&&st<=mn?'tag-orange':'tag-green'))+'">'+st+'</span>'}</td>
           <td>${p.active!==false?'<span class="tag tag-green">Activo</span>':'<span class="tag tag-gray">Inactivo</span>'}</td>
-          ${canEdit?`<td style="text-align:right;white-space:nowrap">
+          <td style="text-align:right;white-space:nowrap">
+            <button class="btn-xs btn" style="background:#16A34A;color:#FFF" onclick="Pos.quickSellProduct('${p.id}')">Vender</button>
+            ${canEdit?`
             <button class="btn-xs btn" style="background:var(--gray)" onclick="Pos.productModal('${p.id}')">Editar</button>
             ${p.type==='service'?'':`<button class="btn-xs btn" style="background:var(--orange-soft);color:var(--orange-dark)" onclick="Pos.stockModal('${p.id}')">± Stock</button>`}
-            ${this.role==='admin'?`<button class="btn-xs btn" style="background:#FEE2E2;color:#DC2626" onclick="Pos.eliminarProducto('${p.id}')">Eliminar</button>`:''}
-          </td>`:''}</tr>`;}).join('')
+            ${this.role==='admin'?`<button class="btn-xs btn" style="background:#FEE2E2;color:#DC2626" onclick="Pos.eliminarProducto('${p.id}')">Eliminar</button>`:''}`:''}
+          </td></tr>`;}).join('')
       }</tbody></table>`:'<div class="stub"><div class="st">Sin productos</div><p>Agrega proteínas, aguas, ropa, guantes... con "+ Nuevo producto".</p></div>'}
     </div>
     <div class="panel">
