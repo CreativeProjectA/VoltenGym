@@ -925,7 +925,7 @@ const Pos={
       // devolvió), pero sí hay que poderlas mostrar en el corte — si no
       // aparecen por ningún lado, el corte parece que "no cuadra" y nadie
       // sabe por qué faltan ventas que sí se hicieron.
-      let q=sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy,cancelled_at,cancel_reason').order('created_at',{ascending:false});
+      let q=sb.from('sales').select('id,total,payment_method,created_at,customer_id,is_courtesy,cancelled_at,cancel_reason,concept').order('created_at',{ascending:false});
       if(noShift){q=q.gte('created_at',localDayStart(todayISO()));if(this.branch)q=q.eq('branch_id',this.branch.id);}
       else q=q.eq('shift_id',this.shift.id);
       const {data:sv}=await q;
@@ -1440,10 +1440,12 @@ const Pos={
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span class="dot" style="background:${c};width:9px;height:9px;border-radius:50%;display:inline-block"></span><span style="font-size:13px;font-weight:600;color:#374151">${lbl}</span></div>
         <div style="font-size:30px;font-weight:700;letter-spacing:-0.035em">${n}</div>
       </div>`).join('');
-    // últimas ventas
+    // últimas ventas — antes solo salía el cliente y el total, sin decir QUÉ
+    // se vendió; con "Vender" (venta rápida sin cliente) usado más seguido,
+    // eso ya no alcanzaba para saber de un vistazo qué fue cada venta.
     if(t.sales.length){
-      $('d-last-sales').innerHTML='<table><thead><tr><th>Cliente</th><th>Total</th><th>Pago</th><th>Hora</th></tr></thead><tbody>'+
-        t.sales.slice(0,6).map(s=>`<tr><td style="font-weight:700">${esc(this.custName(s.customer_id))}</td><td style="color:#16A34A;font-weight:700">${money(s.total)}</td><td>${payTagHtml(s.payment_method)}</td><td>${ftime(s.created_at)}</td></tr>`).join('')+'</tbody></table>';
+      $('d-last-sales').innerHTML='<table><thead><tr><th>Cliente</th><th>Qué vendió</th><th>Total</th><th>Pago</th><th>Hora</th></tr></thead><tbody>'+
+        t.sales.slice(0,6).map(s=>`<tr><td style="font-weight:700">${s.customer_id?esc(this.custName(s.customer_id)):'<span style="color:var(--muted)">Venta rápida</span>'}</td><td style="font-size:12.5px;color:var(--muted)">${esc(s.concept||'—')}</td><td style="color:#16A34A;font-weight:700">${money(s.total)}</td><td>${payTagHtml(s.payment_method)}</td><td>${ftime(s.created_at)}</td></tr>`).join('')+'</tbody></table>';
     }
     // por vencer — solo clientes de la sucursal visible
     const t7=new Date(Date.now()+7*864e5);
@@ -3994,12 +3996,12 @@ const Pos={
     <div class="topbar">
       <div><h1>Inventario</h1><div class="sub">Productos y stock de ${esc(this.branch?this.branch.name:'la sucursal')}</div></div>
       <div style="display:flex;gap:12px;align-items:center;">${this.branchSelector()}
-      <button class="btn btn-primary" style="background:#16A34A" onclick="Pos.sale.quick=true;Pos.sale.customer=null;Pos.sale.tab='products';Pos.sale.step=2;Pos.go('sale')">Vender</button>
+      <button class="btn btn-primary" onclick="Pos.sale.quick=true;Pos.sale.customer=null;Pos.sale.tab='products';Pos.sale.step=2;Pos.go('sale')">Vender</button>
       ${canEdit?`<button class="btn btn-ghost" onclick="Pos.countModal()">Conteo físico</button>
       <button class="btn btn-ghost" onclick="Pos.stockModal()">＋ Entrada de stock</button>
       <button class="btn btn-primary" onclick="Pos.productModal()">+ Nuevo producto</button>`:''}</div>
     </div>
-    ${low.length?`<div class="panel" style="background:#FEF3C7;box-shadow:none;"><b style="font-size:14px">⚠ Stock bajo:</b> <span style="font-size:14px;font-weight:600">${low.map(p=>esc(p.name)+' ('+this.stockOf(p.id)+')').join(' · ')}</span></div>`:''}
+    ${low.length?`<div class="panel" style="background:var(--orange-soft);box-shadow:none;"><b style="font-size:14px;color:var(--orange-dark)">⚠ Stock bajo:</b> <span style="font-size:14px;font-weight:600;color:var(--orange-dark)">${low.map(p=>esc(p.name)+' ('+this.stockOf(p.id)+')').join(' · ')}</span></div>`:''}
     ${cats.length>1?`<div class="pick-tabs" style="margin-bottom:14px;flex-wrap:wrap">
       <button class="pick-tab ${!this.invCat||this.invCat==='__all'?'on':''}" onclick="Pos.invCat='__all';Pos.go('inventory')">Todas</button>
       ${cats.map(c=>`<button class="pick-tab ${this.invCat===c?'on':''}" onclick="Pos.invCat='${esc(c).replace(/'/g,"")}';Pos.go('inventory')">${esc(c)}</button>`).join('')}
