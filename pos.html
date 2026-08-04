@@ -1331,15 +1331,17 @@ const Pos={
   profName(id){const p=this.appProfiles.find(x=>x.id===id);return p?(p.full_name||p.email):'—';},
   stockOf(pid){const s=this.stock.find(x=>x.product_id===pid&&this.branch&&x.branch_id===this.branch.id);return s?Number(s.qty):0;},
   minOf(pid){const s=this.stock.find(x=>x.product_id===pid&&this.branch&&x.branch_id===this.branch.id);return s?Number(s.min_qty||0):0;},
-  // El catálogo de productos es una sola tabla compartida (mismo producto,
-  // stock distinto por sucursal) — pero un producto solo "pertenece" a esta
-  // sucursal si tiene renglón de stock aquí. Los servicios no tienen stock,
-  // así que esos siempre se ven en todas. Esto evita que en Inventario
-  // aparezcan (y se puedan borrar) productos que en realidad son de la otra
-  // sucursal.
+  // Cada producto de tienda tiene su PROPIA ficha por sucursal (columna
+  // branch_id) — ya no es una tabla compartida entre las dos, precisamente
+  // para que un cambio de precio en una sucursal nunca se refleje en la
+  // otra (migración 27/28). Los servicios no llevan sucursal, así que esos
+  // siempre se ven en todas. Si algún producto viejo se quedara sin
+  // branch_id por algún motivo, se cae al criterio anterior (tiene stock
+  // aquí) para que no desaparezca de la vista de nadie.
   productoEnEstaSucursal(p){
     if(p.type==='service')return true;
     if(!this.branch)return true;
+    if(p.branch_id)return p.branch_id===this.branch.id;
     return this.stock.some(s=>s.product_id===p.id&&s.branch_id===this.branch.id);
   },
   activePromos(){
@@ -4144,6 +4146,11 @@ const Pos={
       Object.assign(this.products.find(x=>x.id===id)||{},base);
     }else{
       base.id=uuid();
+      // Producto nuevo: se etiqueta con la sucursal donde se creó (si es
+      // un servicio, sin sucursal — los servicios se ven en todas). Así
+      // desde que nace queda separado y nunca se puede volver a mezclar
+      // con la otra sucursal.
+      if(!isSrv)base.branch_id=bId;
       const r=await Q.insert('products',base);
       if(r.error){toast('Error: '+r.error.message,true);return;}
       this.products.push(base);id=base.id;
