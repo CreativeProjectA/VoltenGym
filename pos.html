@@ -624,11 +624,19 @@ const Pos={
     }
     $('login').style.display='none';
     await this.checkShiftGate();
-    // Refresco automático: cada 60s recarga los catálogos (planes, precios,
-    // promos, clientes...) para que un cambio hecho desde otra sesión (ej.
-    // el admin sube un precio) aparezca solo, sin cerrar sesión. Se salta
-    // el refresco si hay un modal abierto, una venta en curso o se está
-    // escribiendo en algún campo, para no interrumpir a la cajera.
+    // Refresco automático: recarga los catálogos (planes, precios, promos,
+    // clientes...) para que un cambio hecho desde otra sesión (ej. el admin
+    // sube un precio) aparezca solo, sin cerrar sesión. Se salta el refresco
+    // si hay un modal abierto, una venta en curso o se está escribiendo en
+    // algún campo, para no interrumpir a la cajera.
+    // Antes esto corría cada 60s — pero loadCore() trae la tabla COMPLETA de
+    // clientes (~1.6 MB) más productos/stock/planes cada vez. Con eso cada
+    // 60s, en varias pantallas abiertas todo el día en las dos sucursales, el
+    // proyecto se pasó del límite gratis de Supabase (5 GB/mes) y el sistema
+    // se puso lento para todos. Nadie necesita ver un cambio de precio en
+    // menos de 5 minutos, así que se alarga el intervalo — mismo
+    // comportamiento, mucho menos gasto de datos.
+    const REFRESH_MS=5*60000;
     if(!this._autoRefresh)this._autoRefresh=setInterval(async()=>{
       if(!navigator.onLine||document.hidden)return;
       if($('modal-root')&&$('modal-root').style.display==='flex')return;
@@ -641,7 +649,7 @@ const Pos={
       // un cliente dado de alta, un precio cambiado...). Si nada cambió, no se
       // toca la pantalla.
       if(this.firmaDatos()!==antes&&$('shell').style.display!=='none')this.go(this.nav||'dashboard');
-    },60000);
+    },REFRESH_MS);
     // Cierre de sesión automático por inactividad (20 min sin tocar nada) —
     // evita que la sesión de una cajera se quede abierta y la siguiente
     // persona entre "gratis" con su cuenta. Si hay turno abierto, logout()
