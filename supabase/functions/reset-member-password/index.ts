@@ -46,6 +46,19 @@ Deno.serve(async (req) => {
     const { profile_id } = await req.json();
     if (!profile_id) return new Response(JSON.stringify({ error: 'Falta profile_id.' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
+    // CANDADO: si la cuenta a la que le van a resetear la contraseña es de
+    // PERSONAL (admin/encargado/cajera/contador) y no de un cliente, se
+    // niega. Pasó de verdad: alguien reseteó "la contraseña de un cliente"
+    // sin saber que esa cuenta era compartida con el acceso de trabajo de
+    // un encargado (la misma persona es cliente Y personal), y sin querer
+    // le tumbó el acceso al POS sin avisarle.
+    const targetRes = await fetch(SB_URL + '/rest/v1/profiles?id=eq.' + profile_id + '&select=role,full_name', { headers: { apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY } });
+    const targetRows = await targetRes.json();
+    const targetRole = targetRows && targetRows[0] ? targetRows[0].role : null;
+    if (targetRole && targetRole !== 'member') {
+      return new Response(JSON.stringify({ error: 'Esta cuenta es de PERSONAL (' + targetRole + '), no de un cliente — no se puede resetear por aquí para no tumbar su acceso al POS por accidente. Si de verdad necesita una contraseña nueva, pídele a Armando que la cambie directo.' }), { status: 403, headers: { ...CORS, 'Content-Type': 'application/json' } });
+    }
+
     const password = randomPassword();
     const updRes = await fetch(SB_URL + '/auth/v1/admin/users/' + profile_id, {
       method: 'PUT',
