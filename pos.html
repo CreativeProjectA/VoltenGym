@@ -1564,6 +1564,21 @@ const Pos={
   },
   after_sale(){const i=$('sale-cust-q');if(i)i.focus();},
 
+  // Arranca una venta rápida sin cliente desde CUALQUIER pantalla (ej. el
+  // botón "Vender" de Inventario). Antes esos botones hacían
+  // "Pos.sale.quick=true" directo, asumiendo que this.sale ya existía —
+  // pero this.sale solo se crea la primera vez que se visita Nueva Venta
+  // (view_sale lo inicializa perezoso). Si alguien entraba a Inventario
+  // sin haber pasado antes por Nueva Venta en esa sesión, this.sale seguía
+  // sin existir, "Pos.sale.quick=true" tronaba (Cannot set properties of
+  // undefined), y el botón no hacía absolutamente nada — sin aviso ni
+  // error visible para quien lo usa. Este helper garantiza que el objeto
+  // exista antes de tocarlo.
+  ventaRapida(){
+    this.sale={step:2,customer:null,quick:true,cart:[],promoId:'',method:null,received:'',tab:'products',q:''};
+    this.go('sale');
+  },
+
   saleStep1(){
     return `
     <div class="panel">
@@ -1574,7 +1589,7 @@ const Pos={
         <input class="inp" id="sale-cust-q" placeholder="Nombre, teléfono o correo..." oninput="Pos.sale.q=this.value;Pos.renderSaleCust()"></div>
         <button class="btn btn-ghost" onclick="Pos.newCustomerModal(true)">+ Nuevo cliente</button>
         ${this.families.length?'<button class="btn btn-ghost" onclick="Pos.familyPicker()">Familias</button>':''}
-        <button class="btn btn-ghost" onclick="Pos.sale.quick=true;Pos.sale.customer=null;Pos.sale.tab='products';Pos.sale.step=2;Pos.go('sale')">Venta rápida sin cliente →</button>
+        <button class="btn btn-ghost" onclick="Pos.ventaRapida()">Venta rápida sin cliente →</button>
       </div>
       <div id="sale-cust-list">${this.saleCustRows()}</div>
     </div>`;
@@ -4006,7 +4021,7 @@ const Pos={
     <div class="topbar">
       <div><h1>Inventario</h1><div class="sub">Productos y stock de ${esc(this.branch?this.branch.name:'la sucursal')}</div></div>
       <div style="display:flex;gap:12px;align-items:center;">${this.branchSelector()}
-      <button class="btn btn-primary" onclick="Pos.sale.quick=true;Pos.sale.customer=null;Pos.sale.tab='products';Pos.sale.step=2;Pos.go('sale')">Vender</button>
+      <button class="btn btn-primary" onclick="Pos.ventaRapida()">Vender</button>
       ${canEdit?`<button class="btn btn-ghost" onclick="Pos.countModal()">Conteo físico</button>
       <button class="btn btn-ghost" onclick="Pos.stockModal()">＋ Entrada de stock</button>
       <button class="btn btn-primary" onclick="Pos.productModal()">+ Nuevo producto</button>`:''}</div>
