@@ -34,6 +34,18 @@ const SB_SERVICE_KEY = process.env.SB_SERVICE_KEY || 'PEGA_AQUI_LA_SERVICE_KEY';
 const BRANCH_ID = process.env.BRANCH_ID || 'PEGA_AQUI_EL_ID_DE_LA_SUCURSAL';
 const PUERTO = Number(process.env.PUERTO_HIKVISION) || 4372;
 
+// ── Datos del APARATO (para poder hablarle de vuelta, no solo escucharlo) ──
+// El aparato NO le pregunta al sistema si debe abrir — reconoce localmente
+// y abre solo. Para que alguien SIN membresía deje de poder pasar, hay que
+// deshabilitarlo directo en la memoria del aparato (no solo en Supabase).
+// Necesita el usuario/contraseña de administrador que se creó al activarlo.
+const HIK_IP = process.env.HIK_IP || '192.168.1.204';
+const HIK_USER = process.env.HIK_USER || 'admin';
+const HIK_PASS = process.env.HIK_PASS || 'PEGA_AQUI_LA_CONTRASEÑA_DEL_APARATO';
+// Cada cuánto revisar membresías vencidas/renovadas y avisarle al aparato
+// (10 min por defecto — no necesita ser instantáneo, es un candado extra).
+const SYNC_MS = Number(process.env.SYNC_HIK_MS) || 10 * 60000;
+
 const H = { apikey: SB_SERVICE_KEY, Authorization: 'Bearer ' + SB_SERVICE_KEY };
 const HJ = Object.assign({}, H, { 'Content-Type': 'application/json' });
 
@@ -169,6 +181,120 @@ async function anotarPendiente(deviceUserId, kind) {
   } catch (_) {}
 }
 
+// ═══════════ HABLARLE DE VUELTA AL APARATO (deshabilitar/habilitar) ═══════
+// El aparato Hikvision NO le pregunta al sistema si debe abrir — reconoce
+// localmente y abre solo, y YA DESPUÉS avisa "esto pasó". Por eso alguien
+// sin membresía puede seguir entrando aunque Supabase diga "denegado": el
+// aparato nunca se enteró de esa decisión.
+//
+// La única forma de que de VERDAD no lo deje pasar es deshabilitarlo en la
+// memoria del propio aparato. Hikvision usa autenticación "Digest" (no
+// basta con usuario/contraseña simple) — este bloque hace ese handshake a
+// mano, porque Node no lo trae de fábrica.
+const crypto = require('crypto');
+const md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
+
+async function hikDigestRequest(method, rutaISAPI, cuerpoObj) {
+  const url = 'http://' + HIK_IP + rutaISAPI;
+  const cuerpo = cuerpoObj ? JSON.stringify(cuerpoObj) : undefined;
+  // 1) Primer intento SIN credenciales, solo para que el aparato conteste
+  //    con el reto (nonce/realm) que hay que usar.
+  const r1 = await fetch(url, { method, body: cuerpo, headers: cuerpo ? { 'Content-Type': 'application/json' } : {} });
+  if (r1.status !== 401) return r1; // algunos firmwares aceptan sin digest
+  const retoHdr = r1.headers.get('www-authenticate') || '';
+  const campo = (nombre) => {
+    const m = retoHdr.match(new RegExp(nombre + '="([^"]*)"'));
+    return m ? m[1] : '';
+  };
+  const realm = campo('realm'), nonce = campo('nonce'), qop = campo('qop') || 'auth', opaque = campo('opaque');
+  const uri = rutaISAPI;
+  const nc = '00000001';
+  const cnonce = crypto.randomBytes(8).toString('hex');
+  const ha1 = md5(HIK_USER + ':' + realm + ':' + HIK_PASS);
+  const ha2 = md5(method + ':' + uri);
+  const response = md5(ha1 + ':' + nonce + ':' + nc + ':' + cnonce + ':' + qop + ':' + ha2);
+  let authHeader = 'Digest username="' + HIK_USER + '", realm="' + realm + '", nonce="' + nonce + '", uri="' + uri +
+    '", qop=' + qop + ', nc=' + nc + ', cnonce="' + cnonce + '", response="' + response + '"';
+  if (opaque) authHeader += ', opaque="' + opaque + '"';
+  const headers2 = { Authorization: authHeader };
+  if (cuerpo) headers2['Content-Type'] = 'application/json';
+  return fetch(url, { method, body: cuerpo, headers: headers2 });
+}
+
+// Prende/apaga el acceso de una persona directo en el aparato. "enable"
+// en false = aunque su cara esté guardada, el aparato ya no le abre.
+// NOTA: esta parte no se pudo probar contra el aparato real desde aquí —
+// si falla, hikvision_log.txt va a decir exactamente qué contestó el
+// aparato (código y mensaje), para ajustarlo sin adivinar de nuevo.
+async function hikSetValid(employeeNo, enable) {
+  try {
+    const resp = await hikDigestRequest('PUT', '/ISAPI/AccessControl/UserInfo/Modify?format=json', {
+      UserInfo: { employeeNo: String(employeeNo), Valid: { enable: !!enable } },
+    });
+    const texto = await resp.text();
+    if (resp.status >= 200 && resp.status < 300) {
+      log('Aparato: ' + (enable ? 'HABILITADO' : 'DESHABILITADO') + ' el código ' + employeeNo + ' — respuesta: ' + texto.slice(0, 200));
+      return true;
+    }
+    log('Aparato: NO se pudo ' + (enable ? 'habilitar' : 'deshabilitar') + ' el código ' + employeeNo + ' — HTTP ' + resp.status + ': ' + texto.slice(0, 300));
+    return false;
+  } catch (e) {
+    log('Aparato: error de conexión al intentar ' + (enable ? 'habilitar' : 'deshabilitar') + ' el código ' + employeeNo + ': ' + e.message);
+    return false;
+  }
+}
+
+// ── SINCRONIZACIÓN: revisa membresías y deshabilita/habilita en el aparato ──
+// Cada SYNC_MS revisa, para cada código YA asignado a un cliente en esta
+// sucursal, si debería poder entrar (misma regla que registerCheckin: staff
+// siempre puede, cliente necesita membresía vigente y no estar suspendido).
+// Solo le avisa al aparato cuando el estado CAMBIÓ desde la última vez, para
+// no estarlo bombardeando de comandos en cada ciclo.
+const STATE_FILE = path.join(__dirname, 'estado_sync_hikvision.json');
+let estadoSync = {};
+try { estadoSync = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8')); } catch (_) {}
+function guardarEstadoSync() { try { fs.writeFileSync(STATE_FILE, JSON.stringify(estadoSync)); } catch (_) {} }
+
+async function deberiaTenerAcceso(customer) {
+  const [prRows, subs] = await Promise.all([
+    customer.profile_id
+      ? fetch(SB_URL + '/rest/v1/profiles?id=eq.' + customer.profile_id + '&select=role', { headers: H }).then((r) => r.json()).catch(() => null)
+      : Promise.resolve(null),
+    fetch(
+      SB_URL + '/rest/v1/subscriptions?customer_id=eq.' + customer.id + '&branch_id=eq.' + BRANCH_ID + '&status=neq.canceled&order=end_date.desc&limit=1',
+      { headers: H }
+    ).then((r) => r.json()).catch(() => null),
+  ]);
+  const esStaff = !!(prRows && prRows[0] && prRows[0].role && prRows[0].role !== 'member');
+  if (esStaff) return !customer.suspended;
+  const sub = subs && subs[0];
+  return !!(sub && new Date(sub.end_date + 'T23:59:59') >= new Date()) && !customer.suspended;
+}
+
+async function syncUsuarios() {
+  try {
+    const r = await fetch(
+      SB_URL + '/rest/v1/device_enrollments?branch_id=eq.' + BRANCH_ID + '&assigned_to=not.is.null&select=device_user_id,assigned_to',
+      { headers: H }
+    );
+    const enrollments = await r.json();
+    if (!enrollments || !enrollments.length) return;
+    for (const e of enrollments) {
+      const cr = await fetch(SB_URL + '/rest/v1/customers?id=eq.' + e.assigned_to + '&select=' + CUST_SEL + '&limit=1', { headers: H });
+      const crs = await cr.json();
+      const customer = crs && crs[0];
+      if (!customer) continue;
+      const debeEntrar = await deberiaTenerAcceso(customer);
+      const previo = estadoSync[e.device_user_id];
+      if (previo === debeEntrar) continue; // sin cambios, no molestamos al aparato
+      const ok = await hikSetValid(e.device_user_id, debeEntrar);
+      if (ok) { estadoSync[e.device_user_id] = debeEntrar; guardarEstadoSync(); }
+    }
+  } catch (err) {
+    log('Error en sincronización de membresías: ' + err.message);
+  }
+}
+
 // ── PROTOCOLO ISAPI de Hikvision ─────────────────────────────────────
 // El aparato manda el evento como multipart/form-data: una parte trae
 // un bloque JSON (normalmente llamado "event_log" o con
@@ -278,5 +404,10 @@ app.listen(PUERTO, () => {
   console.log('VERSIÓN:', VERSION_PUENTE);
   console.log('Falta: configurar en el aparato "Notificación de Eventos" apuntando a esta PC : ' + PUERTO);
 });
+// Primer barrido a los 20s (deja que arranque todo primero) y luego cada
+// SYNC_MS: a quien se le venza la membresía, el aparato deja de abrirle
+// aunque su cara siga guardada; a quien renueve, se le vuelve a habilitar.
+setTimeout(syncUsuarios, 20000);
+setInterval(syncUsuarios, SYNC_MS);
 
-module.exports = { extraerJson, kindFromVerifyMode, procesarEventoHikvision };
+module.exports = { extraerJson, kindFromVerifyMode, procesarEventoHikvision, hikDigestRequest, hikSetValid, deberiaTenerAcceso };
